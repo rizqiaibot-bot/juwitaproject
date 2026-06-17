@@ -1650,7 +1650,9 @@
                 top: 1px;
             }
             .dropdown-menu {
-                position: static;
+                position: static !important;
+                top: auto !important;
+                left: auto !important;
                 opacity: 1;
                 visibility: visible;
                 transform: none;
@@ -1659,14 +1661,16 @@
                 display: none;
                 background: transparent;
                 margin-top: 4px;
-                padding-left: 14px;
+                padding-left: 24px;
                 pointer-events: auto;
                 border-radius: 0;
                 min-width: 0;
                 width: 100%;
             }
             .dropdown {
+                position: static !important;
                 flex-direction: column;
+                display: flex;
             }
             .dropdown.active .dropdown-menu {
                 display: block;
