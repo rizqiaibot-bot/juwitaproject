@@ -1653,9 +1653,10 @@
                 position: static !important;
                 top: auto !important;
                 left: auto !important;
-                opacity: 1;
-                visibility: visible;
-                transform: none;
+                right: auto !important;
+                opacity: 1 !important;
+                visibility: visible !important;
+                transform: none !important;
                 border: none;
                 box-shadow: none;
                 display: none;
@@ -1666,14 +1667,22 @@
                 border-radius: 0;
                 min-width: 0;
                 width: 100%;
+                z-index: auto;
             }
             .dropdown {
                 position: static !important;
                 flex-direction: column;
                 display: flex;
             }
+            .nav-menu-horizontal>li {
+                position: static !important;
+            }
             .dropdown.active .dropdown-menu {
-                display: block;
+                display: block !important;
+                opacity: 1 !important;
+                visibility: visible !important;
+                transform: none !important;
+                pointer-events: auto !important;
             }
             .pos-layout {
                 grid-template-columns: 1fr;
