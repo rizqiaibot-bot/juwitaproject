@@ -1543,68 +1543,6 @@
             font-size: 0.7rem;
         }
 
-        /* ===== USER BADGE IN NAV ===== */
-        .user-badge {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: var(--bg-primary);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-xl);
-            padding: 4px 14px 4px 6px;
-            font-size: 0.78rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            cursor: default;
-        }
-        .user-avatar {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            background: var(--primary-gradient);
-            color: #fff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.8rem;
-            font-weight: 700;
-            flex-shrink: 0;
-        }
-        .user-name {
-            max-width: 100px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        .user-role-tag {
-            font-size: 0.65rem;
-            font-weight: 500;
-            color: var(--primary);
-            background: var(--primary-light);
-            padding: 2px 8px;
-            border-radius: 10px;
-            white-space: nowrap;
-        }
-        .logout-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--danger-light);
-            border: none;
-            width: 34px;
-            height: 34px;
-            border-radius: 50%;
-            cursor: pointer;
-            color: var(--danger);
-            font-size: 0.85rem;
-            transition: var(--transition);
-        }
-        .logout-btn:hover {
-            background: var(--danger);
-            color: #fff;
-            transform: scale(1.05);
-        }
-
         /* ===== MENU CHIPS (ACCOUNT TABLE) ===== */
         .menu-chip {
             display: inline-block;
@@ -1853,16 +1791,6 @@
             #rekapSearch {
                 min-width: 120px !important;
             }
-            .user-badge {
-                padding: 4px 8px 4px 4px;
-                font-size: 0.7rem;
-            }
-            .user-name {
-                max-width: 60px;
-            }
-            .user-role-tag {
-                display: none;
-            }
             .nav-actions {
                 gap: 6px;
             }
@@ -1997,8 +1925,6 @@
             </ul>
 
             <div class="nav-actions">
-                <div class="user-badge" id="userBadge" style="display:none;"></div>
-                <button class="logout-btn" id="logoutBtn" style="display:none;" title="Keluar"><i class="fas fa-right-from-bracket"></i></button>
                 <button class="mobile-toggle" id="mobileToggleBtn" aria-label="Buka Menu">
                     <i class="fas fa-bars"></i>
                 </button>
@@ -2970,19 +2896,6 @@
             document.getElementById("loginError").innerHTML = "";
             document.getElementById("loginUsername").value = "";
             document.getElementById("loginPassword").value = "";
-        }
-
-        function updateUserBadge() {
-            const badge = document.getElementById("userBadge");
-            if (!badge) return;
-            if (currentUser) {
-                badge.innerHTML = `<span class="user-avatar">${currentUser.name.charAt(0)}</span><span class="user-name">${currentUser.name}</span><span class="user-role-tag">${currentUser.roleLabel}</span>`;
-                badge.style.display = "flex";
-                document.getElementById("logoutBtn").style.display = "flex";
-            } else {
-                badge.style.display = "none";
-                document.getElementById("logoutBtn").style.display = "none";
-            }
         }
 
         function renderAccountCards() {
@@ -4502,7 +4415,6 @@
                     const matched = userAccounts.find(a => a.username === parsed.username && a.password === (userAccounts.find(x => x.username === parsed.username)?.password));
                     if (matched) {
                         currentUser = { username: matched.username, name: matched.name, role: matched.role, roleLabel: matched.roleLabel, menus: [...matched.menus] };
-                        updateUserBadge();
                         filterMenuByRole();
                         document.getElementById("loginOverlay").classList.remove("active");
                     } else {
@@ -4522,7 +4434,6 @@
                 if (user) {
                     err.innerHTML = "";
                     document.getElementById("loginOverlay").classList.remove("active");
-                    updateUserBadge();
                     filterMenuByRole();
                     const firstMenu = currentUser.menus[0] || "pos";
                     showPage(firstMenu);
@@ -4533,11 +4444,6 @@
 
             document.getElementById("loginPassword").addEventListener("keypress", function(e) {
                 if (e.key === "Enter") document.getElementById("loginBtn").click();
-            });
-
-            document.getElementById("logoutBtn").addEventListener("click", function() {
-                doLogout();
-                showPage("pos");
             });
 
             // --- DEFAULT PAGE ---
