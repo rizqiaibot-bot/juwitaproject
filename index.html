@@ -1649,40 +1649,49 @@
                 align-self: center;
                 top: 1px;
             }
-            .dropdown-menu {
+            #navMenu .dropdown-menu {
                 position: static !important;
                 top: auto !important;
                 left: auto !important;
                 right: auto !important;
+                bottom: auto !important;
                 opacity: 1 !important;
                 visibility: visible !important;
                 transform: none !important;
-                border: none;
-                box-shadow: none;
+                transition: none !important;
                 display: none;
-                background: transparent;
-                margin-top: 4px;
-                padding-left: 24px;
-                pointer-events: auto;
-                border-radius: 0;
-                min-width: 0;
-                width: 100%;
-                z-index: auto;
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                border: none !important;
+                box-shadow: none !important;
+                background: transparent !important;
+                margin: 4px 0 0 0 !important;
+                padding: 0 0 0 24px !important;
+                border-radius: 0 !important;
+                z-index: auto !important;
+                pointer-events: auto !important;
+                float: none !important;
             }
-            .dropdown {
+            #navMenu .dropdown {
                 position: static !important;
-                flex-direction: column;
-                display: flex;
+                display: flex !important;
+                flex-direction: column !important;
+                float: none !important;
             }
-            .nav-menu-horizontal>li {
+            #navMenu>li {
                 position: static !important;
             }
-            .dropdown.active .dropdown-menu {
+            #navMenu .dropdown.active .dropdown-menu {
                 display: block !important;
                 opacity: 1 !important;
                 visibility: visible !important;
                 transform: none !important;
                 pointer-events: auto !important;
+            }
+            .dropdown-menu li a {
+                white-space: normal;
+                padding: 8px 12px;
             }
             .pos-layout {
                 grid-template-columns: 1fr;
