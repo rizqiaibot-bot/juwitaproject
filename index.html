@@ -232,13 +232,13 @@
             position: relative;
         }
         .dropdown>a .fa-chevron-down {
-            font-size: 0.6rem;
-            margin-left: 4px;
+            font-size: 0.65rem;
+            margin-left: 5px;
             transition: transform 0.25s ease;
-            display: inline-flex;
-            align-items: center;
-            vertical-align: middle;
-            line-height: 1;
+            align-self: center;
+            flex-shrink: 0;
+            position: relative;
+            top: 1px;
         }
         .dropdown.active>a .fa-chevron-down {
             transform: rotate(180deg);
@@ -1647,6 +1647,7 @@
             .dropdown>a .fa-chevron-down {
                 flex-shrink: 0;
                 align-self: center;
+                top: 1px;
             }
             .dropdown-menu {
                 position: static;
