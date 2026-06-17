@@ -235,6 +235,10 @@
             font-size: 0.6rem;
             margin-left: 4px;
             transition: transform 0.25s ease;
+            display: inline-flex;
+            align-items: center;
+            vertical-align: middle;
+            line-height: 1;
         }
         .dropdown.active>a .fa-chevron-down {
             transform: rotate(180deg);
@@ -1638,6 +1642,11 @@
                 border-radius: var(--radius-sm);
                 padding: 10px 14px;
                 white-space: normal;
+                align-items: center;
+            }
+            .dropdown>a .fa-chevron-down {
+                flex-shrink: 0;
+                align-self: center;
             }
             .dropdown-menu {
                 position: static;
