@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="id" data-theme="light">
+<html lang="id">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
@@ -60,41 +60,17 @@
             --font-sans: 'Outfit', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
         }
 
-        [data-theme="dark"] {
-            --bg-primary: #070a13;
-            --bg-card: #0e1322;
-            --bg-nav: rgba(14, 19, 34, 0.85);
-            --border-color: #1e293b;
-            --border-hover: #334155;
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --primary: #6366f1;
-            --primary-light: rgba(99, 102, 241, 0.15);
-            --primary-gradient: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
-            --accent: #38bdf8;
-            --accent-light: rgba(56, 189, 248, 0.15);
-            --success: #34d399;
-            --success-light: rgba(52, 211, 153, 0.1);
-            --success-text: #34d399;
-            --danger: #f87171;
-            --danger-light: rgba(248, 113, 113, 0.1);
-            --danger-text: #f87171;
-            --warning: #fbbf24;
-            --warning-light: rgba(251, 191, 36, 0.1);
-            --warning-text: #fbbf24;
-            --purple: #a78bfa;
-            --purple-light: rgba(167, 139, 250, 0.1);
-            --card-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.3);
-            --hover-shadow: 0 20px 35px -5px rgba(99, 102, 241, 0.2);
-        }
-
         /* ===== RESET ===== */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
             font-family: var(--font-sans);
+        }
+
+        html {
+            overflow-x: hidden;
+            max-width: 100vw;
         }
 
         body {
@@ -105,6 +81,7 @@
             overflow-x: hidden;
             display: flex;
             flex-direction: column;
+            max-width: 100vw;
         }
 
         ::-webkit-scrollbar {
@@ -133,6 +110,8 @@
             top: 0;
             z-index: 100;
             transition: var(--transition);
+            overflow-x: hidden;
+            max-width: 100vw;
         }
         .nav-container {
             max-width: 1600px;
@@ -143,6 +122,7 @@
             min-height: 72px;
             gap: 12px;
             flex-wrap: wrap;
+            overflow: hidden;
         }
         .logo-area {
             display: flex;
@@ -175,9 +155,6 @@
             color: #000000;
             letter-spacing: 0.3px;
             text-transform: uppercase;
-        }
-        [data-theme="dark"] .logo-text p {
-            color: #94a3b8;
         }
 
         /* ===== HORIZONTAL MENU ===== */
@@ -321,23 +298,6 @@
             gap: 12px;
             flex-shrink: 0;
         }
-        .theme-toggle {
-            background: var(--border-color);
-            border: none;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            color: var(--text-primary);
-            transition: var(--transition);
-        }
-        .theme-toggle:hover {
-            transform: scale(1.05);
-            background: var(--border-hover);
-        }
         .mobile-toggle {
             display: none;
             background: transparent;
@@ -354,10 +314,12 @@
             margin: 0 auto;
             padding: 32px 24px;
             flex: 1;
+            overflow-x: hidden;
         }
         .page-content {
             display: none;
             animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            max-width: 100%;
         }
         .page-content.active-page {
             display: block;
@@ -652,6 +614,7 @@
             display: grid;
             grid-template-columns: 80px 1.5fr 1fr;
             gap: 16px;
+            min-width: 0;
         }
         .pos-left-panel {
             display: flex;
@@ -1733,6 +1696,7 @@
             }
             .nav-menu-horizontal.active {
                 display: flex;
+                max-width: 100vw;
             }
             .nav-menu-horizontal>li>a {
                 border-radius: var(--radius-sm);
@@ -1758,16 +1722,24 @@
             }
             .pos-layout {
                 grid-template-columns: 1fr;
+                min-width: 0;
+                gap: 12px;
+            }
+            .product-section {
+                min-width: 0;
+                max-width: 100%;
             }
             .pos-left-panel {
                 position: static;
                 max-height: none;
+                max-width: 100%;
             }
             .pos-left-panel .panel-card {
                 flex-direction: row;
                 justify-content: center;
                 padding: 6px;
                 min-height: auto;
+                max-width: 100%;
             }
             .pos-side-btn {
                 padding: 8px 6px;
@@ -1779,6 +1751,7 @@
             .cart-section {
                 position: static;
                 max-height: none;
+                max-width: 100%;
             }
             .form-grid {
                 grid-template-columns: 1fr;
@@ -1901,6 +1874,16 @@
                 padding: 8px 10px;
                 font-size: 0.68rem;
             }
+            .product-section {
+                max-width: 100%;
+                min-width: 0;
+            }
+            .cart-section {
+                max-width: 100%;
+            }
+            .page-content {
+                max-width: 100%;
+            }
         }
     </style>
 </head>
@@ -2016,9 +1999,6 @@
             <div class="nav-actions">
                 <div class="user-badge" id="userBadge" style="display:none;"></div>
                 <button class="logout-btn" id="logoutBtn" style="display:none;" title="Keluar"><i class="fas fa-right-from-bracket"></i></button>
-                <button class="theme-toggle" id="themeToggleBtn" title="Ubah Tema">
-                    <i class="fas fa-moon"></i>
-                </button>
                 <button class="mobile-toggle" id="mobileToggleBtn" aria-label="Buka Menu">
                     <i class="fas fa-bars"></i>
                 </button>
@@ -4335,17 +4315,6 @@
             // Supplier dropdown
             const supSel = document.getElementById("newProdSupplier");
             if (supSel) supSel.innerHTML = suppliers.map(s => `<option value="${s}">${s}</option>`).join('');
-
-            // --- THEME ---
-            const theme = localStorage.getItem("theme") || "light";
-            document.documentElement.setAttribute("data-theme", theme);
-            document.getElementById("themeToggleBtn").addEventListener("click", function() {
-                const newTheme = document.documentElement.getAttribute("data-theme") === "dark" ? "light" :
-                "dark";
-                document.documentElement.setAttribute("data-theme", newTheme);
-                localStorage.setItem("theme", newTheme);
-                showToast(`Mode ${newTheme === "dark" ? "gelap" : "terang"}`);
-            });
 
             // --- MOBILE TOGGLE ---
             document.getElementById("mobileToggleBtn").addEventListener("click", function(e) {
