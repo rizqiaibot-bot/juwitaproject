@@ -1878,7 +1878,6 @@
                     <ul class="dropdown-menu">
                         <li data-page="daftar-produk"><a href="#"><i class="fas fa-list"></i> Daftar Produk</a></li>
                         <li data-page="tambah-produk"><a href="#"><i class="fas fa-plus-circle"></i> Tambah Produk</a></li>
-                        <li data-page="cetak-barcode"><a href="#"><i class="fas fa-barcode"></i> Cetak Barcode</a></li>
                     </ul>
                 </li>
 
@@ -2466,20 +2465,6 @@
         </div>
 
         <!-- ===== PLACEHOLDER HALAMAN LAINNYA ===== -->
-        <div id="page-cetak-barcode" class="page-content">
-            <div class="page-header"><h1>Cetak Barcode</h1></div>
-            <div class="form-card" style="text-align:center;">
-                <i class="fas fa-barcode" style="font-size:4rem;color:var(--primary);margin-bottom:20px;"></i>
-                <h3>Mesin Cetak Barcode SKU</h3>
-                <p style="color:var(--text-secondary);margin:10px 0 20px;">Pilih produk dan klik Generate.</p>
-                <div class="form-group" style="text-align:left;">
-                    <label>Pilih Produk</label>
-                    <select id="barcodeProduct" class="form-control"></select>
-                </div>
-                <button class="checkout-btn" onclick="generateBarcode()" style="width:auto;padding:10px 28px;">Cetak Barcode</button>
-            </div>
-        </div>
-
         <div id="page-monitor-stok" class="page-content">
             <div class="page-header"><h1>Monitor Stok</h1><div class="page-header-desc">Pantau ketersediaan stok semua produk secara real-time</div></div>
             <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>KATEGORI</th><th>STOK AKHIR</th><th>MIN STOK</th><th>MAKS STOK</th><th>STATUS</th></tr></thead><tbody id="stokTableBody"></tbody></table></div>
@@ -4330,14 +4315,6 @@
         }
 
         // ============================================================
-        // GENERATE BARCODE
-        // ============================================================
-        function generateBarcode() {
-            const sel = document.getElementById("barcodeProduct");
-            if (!sel || !sel.value) { showToast("Pilih produk"); return; }
-            showToast(`Barcode untuk ${sel.value} berhasil di-generate!`);
-        }
-
         // ============================================================
         // TOAST
         // ============================================================
@@ -4363,7 +4340,7 @@
             if (currentUser) {
                 const menuMap = {
                     pos: "pos", penjualan: "penjualan",
-                    "daftar-produk": "katalog", "tambah-produk": "katalog", "cetak-barcode": "katalog",
+                    "daftar-produk": "katalog", "tambah-produk": "katalog",
                     "monitor-stok": "persediaan", "stock-opname": "persediaan", "mutasi-stok": "persediaan", "kartu-stok": "persediaan", "barang-rusak": "persediaan",
                     "data-pembelian": "pembelian", "tambah-pembelian": "pembelian", "riwayat-pembelian": "pembelian", "retur-pembelian": "pembelian", "data-supplier": "pembelian",
                     penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "rak-lokasi": "gudang", "opname-gudang": "gudang",
@@ -4414,12 +4391,6 @@
             renderPricingTables();
             renderPickingTable();
             renderRekapKehadiran();
-
-            // Barcode product dropdown
-            const barcodeSel = document.getElementById("barcodeProduct");
-            if (barcodeSel) {
-                barcodeSel.innerHTML = products.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
-            }
 
             // Markup category
             const mcat = document.getElementById("markupCategory");
@@ -4742,7 +4713,6 @@
         window.closeClosingModal = closeClosingModal;
         window.toggleSplit = toggleSplit;
         window.updateSplit = updateSplit;
-        window.generateBarcode = generateBarcode;
         window.renderPickingTable = renderPickingTable;
         window.openAddKontrakan = openAddKontrakan;
         window.editKontrakan = editKontrakan;
