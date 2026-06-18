@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="id" data-theme="light">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
@@ -10,9 +10,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
     <!-- Font Awesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-
-    <!-- Supabase SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
         /* ===== CSS VARIABLES ===== */
@@ -63,17 +60,41 @@
             --font-sans: 'Outfit', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
         }
 
+        [data-theme="dark"] {
+            --bg-primary: #070a13;
+            --bg-card: #0e1322;
+            --bg-nav: rgba(14, 19, 34, 0.85);
+            --border-color: #1e293b;
+            --border-hover: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --primary: #6366f1;
+            --primary-light: rgba(99, 102, 241, 0.15);
+            --primary-gradient: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+            --accent: #38bdf8;
+            --accent-light: rgba(56, 189, 248, 0.15);
+            --success: #34d399;
+            --success-light: rgba(52, 211, 153, 0.1);
+            --success-text: #34d399;
+            --danger: #f87171;
+            --danger-light: rgba(248, 113, 113, 0.1);
+            --danger-text: #f87171;
+            --warning: #fbbf24;
+            --warning-light: rgba(251, 191, 36, 0.1);
+            --warning-text: #fbbf24;
+            --purple: #a78bfa;
+            --purple-light: rgba(167, 139, 250, 0.1);
+            --card-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.3);
+            --hover-shadow: 0 20px 35px -5px rgba(99, 102, 241, 0.2);
+        }
+
         /* ===== RESET ===== */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
             font-family: var(--font-sans);
-        }
-
-        html {
-            overflow-x: hidden;
-            max-width: 100vw;
         }
 
         body {
@@ -84,7 +105,6 @@
             overflow-x: hidden;
             display: flex;
             flex-direction: column;
-            max-width: 100vw;
         }
 
         ::-webkit-scrollbar {
@@ -111,9 +131,8 @@
             padding: 0 24px;
             position: sticky;
             top: 0;
-            z-index: 9998;
+            z-index: 100;
             transition: var(--transition);
-            max-width: 100vw;
         }
         .nav-container {
             max-width: 1600px;
@@ -156,6 +175,9 @@
             color: #000000;
             letter-spacing: 0.3px;
             text-transform: uppercase;
+        }
+        [data-theme="dark"] .logo-text p {
+            color: #94a3b8;
         }
 
         /* ===== HORIZONTAL MENU ===== */
@@ -235,13 +257,9 @@
             position: relative;
         }
         .dropdown>a .fa-chevron-down {
-            font-size: 0.65rem;
-            margin-left: auto;
+            font-size: 0.6rem;
+            margin-left: 4px;
             transition: transform 0.25s ease;
-            align-self: center;
-            flex-shrink: 0;
-            position: relative;
-            top: 1px;
         }
         .dropdown.active>a .fa-chevron-down {
             transform: rotate(180deg);
@@ -260,7 +278,7 @@
             visibility: hidden;
             transform: translateY(8px) scale(0.97);
             transition: opacity 0.2s ease, transform 0.25s ease, visibility 0.2s;
-            z-index: 9999;
+            z-index: 1000;
             border: 1px solid var(--border-color);
             pointer-events: none;
         }
@@ -303,6 +321,23 @@
             gap: 12px;
             flex-shrink: 0;
         }
+        .theme-toggle {
+            background: var(--border-color);
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--text-primary);
+            transition: var(--transition);
+        }
+        .theme-toggle:hover {
+            transform: scale(1.05);
+            background: var(--border-hover);
+        }
         .mobile-toggle {
             display: none;
             background: transparent;
@@ -319,12 +354,10 @@
             margin: 0 auto;
             padding: 32px 24px;
             flex: 1;
-            overflow-x: hidden;
         }
         .page-content {
             display: none;
             animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-            max-width: 100%;
         }
         .page-content.active-page {
             display: block;
@@ -498,7 +531,7 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 550px;
+            min-width: 700px;
         }
         th {
             background: var(--bg-primary);
@@ -619,7 +652,6 @@
             display: grid;
             grid-template-columns: 80px 1.5fr 1fr;
             gap: 16px;
-            min-width: 0;
         }
         .pos-left-panel {
             display: flex;
@@ -1136,9 +1168,6 @@
         .form-grid-full {
             grid-column: span 2;
         }
-        .stats-inline-grid {
-            grid-template-columns: repeat(3, 1fr);
-        }
         .form-group {
             display: flex;
             flex-direction: column;
@@ -1193,7 +1222,7 @@
         /* ===== EMPLOYEE GRID ===== */
         .emp-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
             gap: 18px;
         }
         .emp-card {
@@ -1250,7 +1279,7 @@
         /* ===== GRID ASSETS ===== */
         .grid-assets {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
         }
         .asset-card {
@@ -1461,12 +1490,6 @@
             color: var(--text-muted);
         }
 
-        /* ===== KASIR INFO ===== */
-        .kasir-info {
-            flex-shrink: 1;
-            min-width: 0;
-        }
-
         /* ===== LOGIN OVERLAY ===== */
         .login-overlay {
             position: fixed;
@@ -1546,6 +1569,68 @@
             padding: 2px 6px;
             border-radius: 4px;
             font-size: 0.7rem;
+        }
+
+        /* ===== USER BADGE IN NAV ===== */
+        .user-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-xl);
+            padding: 4px 14px 4px 6px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            cursor: default;
+        }
+        .user-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--primary-gradient);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        .user-name {
+            max-width: 100px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .user-role-tag {
+            font-size: 0.65rem;
+            font-weight: 500;
+            color: var(--primary);
+            background: var(--primary-light);
+            padding: 2px 8px;
+            border-radius: 10px;
+            white-space: nowrap;
+        }
+        .logout-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--danger-light);
+            border: none;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            cursor: pointer;
+            color: var(--danger);
+            font-size: 0.85rem;
+            transition: var(--transition);
+        }
+        .logout-btn:hover {
+            background: var(--danger);
+            color: #fff;
+            transform: scale(1.05);
         }
 
         /* ===== MENU CHIPS (ACCOUNT TABLE) ===== */
@@ -1639,83 +1724,41 @@
             }
             .nav-menu-horizontal.active {
                 display: flex;
-                max-width: 100vw;
             }
             .nav-menu-horizontal>li>a {
                 border-radius: var(--radius-sm);
                 padding: 10px 14px;
                 white-space: normal;
-                align-items: center;
             }
-            .dropdown>a .fa-chevron-down {
-                flex-shrink: 0;
-                align-self: center;
-                top: 1px;
-            }
-            #navMenu .dropdown-menu {
-                position: static !important;
-                top: auto !important;
-                left: auto !important;
-                right: auto !important;
-                bottom: auto !important;
-                opacity: 1 !important;
-                visibility: visible !important;
-                transform: none !important;
-                transition: none !important;
+            .dropdown-menu {
+                position: static;
+                opacity: 1;
+                visibility: visible;
+                transform: none;
+                border: none;
+                box-shadow: none;
                 display: none;
-                width: 100% !important;
-                min-width: 0 !important;
-                max-width: 100% !important;
-                border: none !important;
-                box-shadow: none !important;
-                background: transparent !important;
-                margin: 4px 0 0 0 !important;
-                padding: 0 0 0 24px !important;
-                border-radius: 0 !important;
-                z-index: auto !important;
-                pointer-events: auto !important;
-                float: none !important;
+                background: transparent;
+                margin-top: 4px;
+                padding-left: 14px;
+                pointer-events: auto;
+                border-radius: 0;
             }
-            #navMenu .dropdown {
-                position: static !important;
-                display: flex !important;
-                flex-direction: column !important;
-                float: none !important;
-            }
-            #navMenu>li {
-                position: static !important;
-            }
-            #navMenu .dropdown.active .dropdown-menu {
-                display: block !important;
-                opacity: 1 !important;
-                visibility: visible !important;
-                transform: none !important;
-                pointer-events: auto !important;
-            }
-            .dropdown-menu li a {
-                white-space: normal;
-                padding: 8px 12px;
+            .dropdown.active .dropdown-menu {
+                display: block;
             }
             .pos-layout {
                 grid-template-columns: 1fr;
-                min-width: 0;
-                gap: 12px;
-            }
-            .product-section {
-                min-width: 0;
-                max-width: 100%;
             }
             .pos-left-panel {
                 position: static;
                 max-height: none;
-                max-width: 100%;
             }
             .pos-left-panel .panel-card {
                 flex-direction: row;
                 justify-content: center;
                 padding: 6px;
                 min-height: auto;
-                max-width: 100%;
             }
             .pos-side-btn {
                 padding: 8px 6px;
@@ -1727,7 +1770,6 @@
             .cart-section {
                 position: static;
                 max-height: none;
-                max-width: 100%;
             }
             .form-grid {
                 grid-template-columns: 1fr;
@@ -1806,49 +1848,6 @@
             }
             .grid-assets {
                 grid-template-columns: 1fr;
-            }
-            .login-card {
-                padding: 24px 20px;
-            }
-            .stats-inline-grid {
-                grid-template-columns: 1fr;
-            }
-            .kasir-info {
-                font-size: 0.75rem;
-            }
-            .payment-btns {
-                flex-wrap: wrap;
-            }
-            .payment-btn {
-                min-width: 80px;
-            }
-            .cash-quick-btns .cash-btn {
-                font-size: 0.6rem;
-                padding: 4px 4px;
-            }
-            #rekapSearch {
-                min-width: 120px !important;
-            }
-            .nav-actions {
-                gap: 6px;
-            }
-            table {
-                min-width: 100%;
-                font-size: 0.72rem;
-            }
-            th, td {
-                padding: 8px 10px;
-                font-size: 0.68rem;
-            }
-            .product-section {
-                max-width: 100%;
-                min-width: 0;
-            }
-            .cart-section {
-                max-width: 100%;
-            }
-            .page-content {
-                max-width: 100%;
             }
         }
     </style>
@@ -1963,6 +1962,11 @@
             </ul>
 
             <div class="nav-actions">
+                <div class="user-badge" id="userBadge" style="display:none;"></div>
+                <button class="logout-btn" id="logoutBtn" style="display:none;" title="Keluar"><i class="fas fa-right-from-bracket"></i></button>
+                <button class="theme-toggle" id="themeToggleBtn" title="Ubah Tema">
+                    <i class="fas fa-moon"></i>
+                </button>
                 <button class="mobile-toggle" id="mobileToggleBtn" aria-label="Buka Menu">
                     <i class="fas fa-bars"></i>
                 </button>
@@ -2073,7 +2077,7 @@
                     <h1>Point of Sale (POS)</h1>
                     <div class="page-header-desc">Kasir cepat untuk penjualan langsung pelanggan offline</div>
                 </div>
-                <div class="kasir-info" style="display:flex;align-items:center;gap:8px;background:var(--bg-primary);padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--border-color);min-width:0;flex-shrink:1;">
+                <div class="kasir-info" style="display:flex;align-items:center;gap:12px;background:var(--bg-primary);padding:8px 16px;border-radius:var(--radius-md);border:1px solid var(--border-color);">
                     <i class="fas fa-user-circle" style="font-size:2rem;color:var(--primary);"></i>
                     <div>
                         <div style="font-weight:700;color:var(--text-primary);line-height:1.2;">Ahmad Hidayat</div>
@@ -2082,7 +2086,7 @@
                 </div>
             </div>
 
-            <div class="stats-row" id="posTodayStats" style="margin-bottom:16px;">
+            <div class="stats-row" id="posTodayStats" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr);">
                 <div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px 18px;border:1px solid var(--border-color);box-shadow:var(--card-shadow);display:flex;align-items:center;gap:12px;">
                     <i class="fas fa-receipt" style="color:var(--primary);font-size:1.2rem;"></i>
                     <h3 id="posTodayCount" style="font-size:1.4rem;font-weight:800;margin:0;line-height:1.1;">0</h3>
@@ -2347,7 +2351,7 @@
 
         <!-- ===== KONTRAKAN MODAL ===== -->
         <div id="kontrakanModal" class="modal-overlay" onclick="if(event.target===this)closeKontrakanModal()">
-            <div class="modal-card" style="max-width:95vw;text-align:left;padding:0;overflow:hidden;">
+            <div class="modal-card" style="max-width:700px;text-align:left;padding:0;overflow:hidden;">
                 <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border-color);">
                     <h2 id="kontrakanModalTitle" style="margin:0;font-size:1.1rem;">Tambah Unit Kontrakan</h2>
                     <button onclick="closeKontrakanModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-muted);">&times;</button>
@@ -2375,7 +2379,7 @@
 
         <!-- ===== PEMBAYARAN MODAL ===== -->
         <div id="pembayaranModal" class="modal-overlay" onclick="if(event.target===this)closePembayaranModal()">
-            <div class="modal-card" style="max-width:95vw;text-align:left;padding:0;overflow:hidden;">
+            <div class="modal-card" style="max-width:600px;text-align:left;padding:0;overflow:hidden;">
                 <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border-color);">
                     <h2 style="margin:0;font-size:1.1rem;">Riwayat Pembayaran</h2>
                     <button onclick="closePembayaranModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-muted);">&times;</button>
@@ -2586,7 +2590,7 @@
                     </div>
                     <div style="position:relative;">
                         <i class="fas fa-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);"></i>
-                        <input type="text" id="rekapSearch" class="form-control" style="padding-left:36px;" placeholder="Cari karyawan..." oninput="renderRekapKehadiran()" />
+                        <input type="text" id="rekapSearch" class="form-control" style="padding-left:36px;min-width:180px;" placeholder="Cari karyawan..." oninput="renderRekapKehadiran()" />
                     </div>
                 </div>
             </div>
@@ -2606,7 +2610,7 @@
 
         <div id="page-laporan-hr" class="page-content">
             <div class="page-header"><h1>Laporan HR</h1><div class="page-header-desc">Rekap data kepegawaian dan absensi</div></div>
-            <div class="form-card"><div class="form-grid stats-inline-grid"><div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px;border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;"><i class="fas fa-users" style="font-size:1.8rem;color:var(--primary);"></i><h3 style="font-size:1.4rem;">12</h3><p style="font-size:0.7rem;color:var(--text-muted);font-weight:600;margin:0;">Total Karyawan</p></div><div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px;border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;"><i class="fas fa-user-check" style="font-size:1.8rem;color:#10b981;"></i><h3 style="font-size:1.4rem;">10</h3><p style="font-size:0.7rem;color:var(--text-muted);font-weight:600;margin:0;">Aktif Hari Ini</p></div><div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px;border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;"><i class="fas fa-user-clock" style="font-size:1.8rem;color:#f59e0b;"></i><h3 style="font-size:1.4rem;">2</h3><p style="font-size:0.7rem;color:var(--text-muted);font-weight:600;margin:0;">Izin/Cuti</p></div></div><button class="checkout-btn" onclick="showToast('Laporan diunduh')"><i class="fas fa-download"></i> Export Laporan</button></div>
+            <div class="form-card"><div class="form-grid" style="grid-template-columns:repeat(3,1fr);"><div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px;border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;"><i class="fas fa-users" style="font-size:1.8rem;color:var(--primary);"></i><h3 style="font-size:1.4rem;">12</h3><p style="font-size:0.7rem;color:var(--text-muted);font-weight:600;margin:0;">Total Karyawan</p></div><div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px;border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;"><i class="fas fa-user-check" style="font-size:1.8rem;color:#10b981;"></i><h3 style="font-size:1.4rem;">10</h3><p style="font-size:0.7rem;color:var(--text-muted);font-weight:600;margin:0;">Aktif Hari Ini</p></div><div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px;border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;"><i class="fas fa-user-clock" style="font-size:1.8rem;color:#f59e0b;"></i><h3 style="font-size:1.4rem;">2</h3><p style="font-size:0.7rem;color:var(--text-muted);font-weight:600;margin:0;">Izin/Cuti</p></div></div><button class="checkout-btn" onclick="showToast('Laporan diunduh')"><i class="fas fa-download"></i> Export Laporan</button></div>
         </div>
 
         <div id="page-pengaturan" class="page-content">
@@ -2709,20 +2713,13 @@
     <!-- ===== JAVASCRIPT ===== -->
     <script>
         // ============================================================
-        // SUPABASE CLIENT
-        // ============================================================
-        const SUPABASE_URL = "https://vivgzxitlikpgnppgeqn.supabase.co";
-        const SUPABASE_KEY = "vivgzxitlikpgnppgeqn";
-        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-        // ============================================================
         // DATA
         // ============================================================
         const suppliers = ["PT Sinar Roti", "CV Snack Nusantara", "PT Segar Abadi", "UD Makmur Sentosa", "CV Boga Raya",
             "PT Sumber Pangan", "UD Berkah Abadi", "CV Mitra Frozen", "PT Pangan Sejahtera", "UD Niaga Bersama"
         ];
 
-        let products = [
+        const products = [
             { id: 1, name: "NUGGET AYAM 500G", category: "Frozen Food", price: 35000, modal: 26000, stock: 200,
             minStock: 50, maxStock: 500, supplier: "PT Sumber Pangan", imageIcon: "fa-drumstick-bite" },
             { id: 2, name: "Sosis Sapi 250G", category: "Frozen Food", price: 25000, modal: 18000, stock: 180,
@@ -2791,7 +2788,7 @@
                 total: 35000, payStatus: "Batal", wmsStatus: "Batal", courier: "-", resi: "-" }
         ];
 
-        let karyawanData = [
+        const karyawanData = [
             { name: "Ahmad Hidayat", role: "Manager Operasional", status: "Aktif", theme: "badge-lunas" },
             { name: "Siti Aminah", role: "Kasir POS Utama", status: "Aktif", theme: "badge-lunas" },
             { name: "Doni Setiawan", role: "Staf Gudang / WMS", status: "Aktif", theme: "badge-lunas" },
@@ -2802,7 +2799,7 @@
             { name: "Dewi Lestari", role: "Kasir", status: "Aktif", theme: "badge-lunas" }
         ];
 
-        let kontrakanData = [
+        const kontrakanData = [
             { id: "K001", pintu: "Pintu A1", penyewa: "Rendi Pratama", tipe: "Standar", harga: 850000, tempo: 20,
                 kontak: "0812-3456-7890", listrik: 150000, air: 50000, deposit: 500000, tglMasuk: "2024-01-15",
                 catatan: "Bayar rutin", persentase: 75, status: "Sudah Bayar",
@@ -2885,40 +2882,6 @@
         let currentUser = null;
 
         // ============================================================
-        // SUPABASE DATA LOADING
-        // ============================================================
-        async function initSupabaseData() {
-            try {
-                const [pRes, oRes, kRes, ktRes] = await Promise.all([
-                    sb.from('products').select('*'),
-                    sb.from('orders').select('*').order('date', { ascending: false }),
-                    sb.from('karyawan').select('*'),
-                    sb.from('kontrakan').select('*')
-                ]);
-                if (pRes.data && pRes.data.length > 0) products = pRes.data;
-                if (oRes.data && oRes.data.length > 0) ordersData = oRes.data;
-                if (kRes.data && kRes.data.length > 0) karyawanData = kRes.data;
-                if (ktRes.data && ktRes.data.length > 0) kontrakanData = ktRes.data;
-                console.log("Supabase: data loaded", { p: products.length, o: ordersData.length, k: karyawanData.length, kt: kontrakanData.length });
-            } catch (err) {
-                console.warn("Supabase: using local data fallback", err.message);
-            }
-            refreshAllUI();
-        }
-
-        function refreshAllUI() {
-            renderProducts(currentSearch, posCategory);
-            renderPenjualanTable();
-            renderPosHistory();
-            updatePosTodayStats();
-            renderCatalogTable();
-            renderMonitorStok();
-            renderEmployeeGrid();
-            renderKontrakanGrid();
-            renderPricingTables();
-        }
-
-        // ============================================================
         // AUTH & MENU FILTERING
         // ============================================================
         function getMenuPermissions(menuGroup) {
@@ -2975,6 +2938,19 @@
             document.getElementById("loginError").innerHTML = "";
             document.getElementById("loginUsername").value = "";
             document.getElementById("loginPassword").value = "";
+        }
+
+        function updateUserBadge() {
+            const badge = document.getElementById("userBadge");
+            if (!badge) return;
+            if (currentUser) {
+                badge.innerHTML = `<span class="user-avatar">${currentUser.name.charAt(0)}</span><span class="user-name">${currentUser.name}</span><span class="user-role-tag">${currentUser.roleLabel}</span>`;
+                badge.style.display = "flex";
+                document.getElementById("logoutBtn").style.display = "flex";
+            } else {
+                badge.style.display = "none";
+                document.getElementById("logoutBtn").style.display = "none";
+            }
         }
 
         function renderAccountCards() {
@@ -3693,20 +3669,25 @@
                 if (k) {
                     Object.assign(k, { pintu, penyewa, harga, tipe, tempo, kontak, listrik, air, deposit,
                         status: isVacant ? "Vacant" : "Belum Bayar" });
-                    sb.from('kontrakan').update(k).eq('id', editingKontrakanId).then(r => {
-                        if (r.error) console.warn("Supabase update kontrakan error:", r.error.message);
-                    });
                 }
             } else {
                 const newId = "K" + String(kontrakanData.length + 1).padStart(3, "0");
-                const newK = {
-                    id: newId, pintu, penyewa, tipe, harga, tempo, kontak, listrik, air, deposit,
-                    tglMasuk: new Date().toISOString().split("T")[0], catatan: "", persentase: 0,
-                    status: isVacant ? "Vacant" : "Belum Bayar", tagihan: []
-                };
-                kontrakanData.push(newK);
-                sb.from('kontrakan').insert(newK).then(r => {
-                    if (r.error) console.warn("Supabase insert kontrakan error:", r.error.message);
+                kontrakanData.push({
+                    id: newId,
+                    pintu,
+                    penyewa,
+                    tipe,
+                    harga,
+                    tempo,
+                    kontak,
+                    listrik,
+                    air,
+                    deposit,
+                    tglMasuk: new Date().toISOString().split("T")[0],
+                    catatan: "",
+                    persentase: 0,
+                    status: isVacant ? "Vacant" : "Belum Bayar",
+                    tagihan: []
                 });
             }
             closeKontrakanModal();
@@ -4072,12 +4053,6 @@
             ordersData.unshift({ orderId, date: dateStr, channel, customer, total, payStatus: "Lunas",
                 wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-" });
 
-            // Sync ke Supabase
-            sb.from('orders').insert({ orderId, date: dateStr, channel, customer, total, payStatus: "Lunas",
-                wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-" }).then(r => {
-                if (r.error) console.warn("Supabase insert order error:", r.error.message);
-            });
-
             renderPenjualanTable();
             renderPosHistory();
             updatePosTodayStats();
@@ -4309,6 +4284,17 @@
             const supSel = document.getElementById("newProdSupplier");
             if (supSel) supSel.innerHTML = suppliers.map(s => `<option value="${s}">${s}</option>`).join('');
 
+            // --- THEME ---
+            const theme = localStorage.getItem("theme") || "light";
+            document.documentElement.setAttribute("data-theme", theme);
+            document.getElementById("themeToggleBtn").addEventListener("click", function() {
+                const newTheme = document.documentElement.getAttribute("data-theme") === "dark" ? "light" :
+                "dark";
+                document.documentElement.setAttribute("data-theme", newTheme);
+                localStorage.setItem("theme", newTheme);
+                showToast(`Mode ${newTheme === "dark" ? "gelap" : "terang"}`);
+            });
+
             // --- MOBILE TOGGLE ---
             document.getElementById("mobileToggleBtn").addEventListener("click", function(e) {
                 e.stopPropagation();
@@ -4370,7 +4356,7 @@
                 const barcode = document.getElementById("newProdBarcode").value.trim();
                 if (!name || !modal || !price || !stock) { showToast("Isi semua field"); return; }
                 const nextId = products.length ? Math.max(...products.map(p => p.id)) + 1 : 1;
-                const newProduct = {
+                products.push({
                     id: nextId,
                     name,
                     category: cat,
@@ -4382,12 +4368,6 @@
                     supplier,
                     imageIcon: icon,
                     barcode: barcode || ("899" + String(Math.floor(Math.random() * 10000000000)).padStart(10, "0"))
-                };
-                products.push(newProduct);
-
-                // Sync ke Supabase
-                sb.from('products').insert(newProduct).then(r => {
-                    if (r.error) console.warn("Supabase insert product error:", r.error.message);
                 });
                 renderProducts();
                 renderCatalogTable();
@@ -4501,6 +4481,7 @@
                     const matched = userAccounts.find(a => a.username === parsed.username && a.password === (userAccounts.find(x => x.username === parsed.username)?.password));
                     if (matched) {
                         currentUser = { username: matched.username, name: matched.name, role: matched.role, roleLabel: matched.roleLabel, menus: [...matched.menus] };
+                        updateUserBadge();
                         filterMenuByRole();
                         document.getElementById("loginOverlay").classList.remove("active");
                     } else {
@@ -4520,6 +4501,7 @@
                 if (user) {
                     err.innerHTML = "";
                     document.getElementById("loginOverlay").classList.remove("active");
+                    updateUserBadge();
                     filterMenuByRole();
                     const firstMenu = currentUser.menus[0] || "pos";
                     showPage(firstMenu);
@@ -4532,14 +4514,16 @@
                 if (e.key === "Enter") document.getElementById("loginBtn").click();
             });
 
+            document.getElementById("logoutBtn").addEventListener("click", function() {
+                doLogout();
+                showPage("pos");
+            });
+
             // --- DEFAULT PAGE ---
             if (currentUser) {
                 const available = currentUser.menus[0] || "pos";
                 showPage(available);
             }
-
-            // --- LOAD DATA FROM SUPABASE ---
-            initSupabaseData();
         });
 
         // ============================================================
