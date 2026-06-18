@@ -1958,6 +1958,7 @@
             </ul>
 
             <div class="nav-actions">
+                <button id="navLogoutBtn" style="display:none;align-items:center;justify-content:center;background:var(--danger-light);border:none;width:34px;height:34px;border-radius:50%;cursor:pointer;color:var(--danger);font-size:0.85rem;transition:var(--transition);" onclick="doLogout()" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
                 <button class="mobile-toggle" id="mobileToggleBtn" aria-label="Buka Menu">
                     <i class="fas fa-bars"></i>
                 </button>
@@ -1978,7 +1979,6 @@
                         <div id="settingUserEmail" style="font-size:0.68rem;color:var(--text-muted);line-height:1.2;">admin@juwita.com</div>
                     </div>
                 </div>
-                <button class="checkout-btn" onclick="doLogout()" style="width:auto;padding:6px 16px;font-size:0.75rem;background:var(--danger-gradient);"><i class="fas fa-sign-out-alt"></i> Logout</button>
             </div>
         </div>
 
@@ -3098,15 +3098,19 @@
             const name = document.getElementById("settingUserName");
             const email = document.getElementById("settingUserEmail");
             const card = document.getElementById("pengaturanAkunCard");
+            const logoutBtn = document.getElementById("navLogoutBtn");
             if (currentUser && avatar && name && email) {
                 const initial = currentUser.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
                 avatar.textContent = initial;
                 name.textContent = currentUser.name;
                 email.textContent = currentUser.username + "@juwita.com";
                 if (card) card.style.display = "";
-            } else if (card) {
-                card.style.display = "none";
+                if (logoutBtn) logoutBtn.style.display = "flex";
+            } else {
+                if (card) card.style.display = "none";
+                if (logoutBtn) logoutBtn.style.display = "none";
             }
+        }
         }
 
         function renderAccountCards() {
