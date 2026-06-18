@@ -2133,13 +2133,6 @@
                         <i class="fas fa-barcode"></i>
                         <input type="text" id="scanInput" autofocus placeholder="Scan Barcode / ketik nama produk lalu ENTER..." />
                     </div>
-                    <div class="filter-tabs" id="posCategoryFilter">
-                        <button class="filter-tab active" data-cat="all">Semua</button>
-                        <button class="filter-tab" data-cat="Frozen Food">Frozen Food</button>
-                        <button class="filter-tab" data-cat="Roti">Roti</button>
-                        <button class="filter-tab" data-cat="Snack">Snack</button>
-                        <button class="filter-tab" data-cat="Minuman">Minuman</button>
-                    </div>
                     <div class="product-grid" id="productGrid"></div>
                 </div>
 
@@ -4986,17 +4979,6 @@
                     filterStatus = this.dataset.filter;
                     document.getElementById("statusFilter").value = filterStatus;
                     renderPenjualanTable();
-                });
-            });
-
-            // --- POS CATEGORY FILTER ---
-            document.querySelectorAll("#posCategoryFilter .filter-tab").forEach(tab => {
-                tab.addEventListener("click", function() {
-                    document.querySelectorAll("#posCategoryFilter .filter-tab").forEach(t => t.classList
-                        .remove("active"));
-                    this.classList.add("active");
-                    posCategory = this.dataset.cat;
-                    renderProducts(currentSearch, posCategory);
                 });
             });
 
