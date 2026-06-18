@@ -1960,8 +1960,10 @@
             <div class="nav-actions">
                 <div id="navUserBadge" style="display:none;align-items:center;gap:8px;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:var(--radius-xl);padding:5px 14px 5px 6px;font-size:0.78rem;font-weight:600;color:var(--text-primary);">
                     <div class="user-avatar" id="navUserAvatar" style="width:30px;height:30px;border-radius:50%;background:var(--primary-gradient);color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;flex-shrink:0;">AH</div>
-                    <span class="user-name" id="navUserName" style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Ahmad Hidayat</span>
-                    <span class="user-role-tag" id="navUserRole" style="font-size:0.65rem;font-weight:500;color:var(--primary);background:var(--primary-light);padding:2px 8px;border-radius:10px;white-space:nowrap;">Manager</span>
+                    <div style="display:flex;flex-direction:column;line-height:1.2;">
+                        <span class="user-name" id="navUserName" style="font-size:0.78rem;font-weight:700;color:var(--text-primary);">Ahmad Hidayat</span>
+                        <span class="user-email" id="navUserEmail" style="font-size:0.65rem;color:var(--text-muted);font-weight:500;">ahmad@juwita.com</span>
+                    </div>
                 </div>
                 <button id="navLogoutBtn" style="display:none;align-items:center;justify-content:center;background:var(--danger-light);border:none;width:34px;height:34px;border-radius:50%;cursor:pointer;color:var(--danger);font-size:0.85rem;transition:var(--transition);" onclick="doLogout()" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
                 <button class="mobile-toggle" id="mobileToggleBtn" aria-label="Buka Menu">
@@ -3090,14 +3092,14 @@
             const navLogout = document.getElementById("navLogoutBtn");
             const navAvatar = document.getElementById("navUserAvatar");
             const navName = document.getElementById("navUserName");
-            const navRole = document.getElementById("navUserRole");
+            const navEmail = document.getElementById("navUserEmail");
             if (currentUser) {
                 const initial = currentUser.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
                 if (navBadge) navBadge.style.display = "flex";
                 if (navLogout) navLogout.style.display = "flex";
                 if (navAvatar) navAvatar.textContent = initial;
                 if (navName) navName.textContent = currentUser.name;
-                if (navRole) navRole.textContent = currentUser.role;
+                if (navEmail) navEmail.textContent = currentUser.username + "@juwita.com";
             } else {
                 if (navBadge) navBadge.style.display = "none";
                 if (navLogout) navLogout.style.display = "none";
