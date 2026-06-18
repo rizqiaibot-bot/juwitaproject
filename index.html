@@ -767,7 +767,7 @@
             opacity: 1;
         }
         .product-img {
-            height: 70px;
+            height: 100px;
             background: var(--bg-primary);
             border-radius: var(--radius-sm);
             display: flex;
@@ -775,6 +775,7 @@
             justify-content: center;
             font-size: 1.6rem;
             transition: var(--transition);
+            overflow: hidden;
         }
         .product-card[data-cat="Roti"] .product-img {
             color: #f59e0b;
@@ -2250,7 +2251,7 @@
             <div class="table-wrapper">
                 <table>
                     <thead>
-                        <tr><th>ID PRODUK</th><th>NAMA PRODUK</th><th>KATEGORI</th><th>HARGA JUAL</th><th>STOK</th><th>LEVEL STOK</th><th>AKSI</th></tr>
+                        <tr><th>ID PRODUK</th><th>SKU</th><th>NAMA PRODUK</th><th>KATEGORI</th><th>HARGA JUAL</th><th>STOK</th><th>LEVEL STOK</th><th>AKSI</th></tr>
                     </thead>
                     <tbody id="catalogTableBody"></tbody>
                 </table>
@@ -2271,6 +2272,11 @@
                         <div class="form-group form-grid-full">
                             <label>Nama Produk</label>
                             <input type="text" id="newProdName" class="form-control" placeholder="Contoh: Roti Tawar Gandum Spesial" required />
+                        </div>
+                        <div class="form-group">
+                            <label>SKU</label>
+                            <input type="text" id="newProdSKU" class="form-control" placeholder="SKU-001 atau auto-generate" />
+                            <button type="button" class="aksi-btn" onclick="generateSKU()" style="margin-top:6px;width:fit-content;"><i class="fas fa-sync-alt"></i> Generate SKU</button>
                         </div>
                         <div class="form-group">
                             <label>Kategori</label>
@@ -2297,17 +2303,57 @@
                             <label>Supplier</label>
                             <select id="newProdSupplier" class="form-control"></select>
                         </div>
-                        <div class="form-group">
-                            <label>Icon Pilihan (FontAwesome)</label>
-                            <select id="newProdIcon" class="form-control">
-                                <option value="fa-bread-slice">Roti (Slice)</option>
-                                <option value="fa-cookie">Kue/Snack</option>
-                                <option value="fa-glass-water">Minuman Ringan</option>
-                                <option value="fa-mug-hot">Kopi/Teh Hangat</option>
-                            </select>
+                        <div class="form-group form-grid-full">
+                            <label>Spesifikasi Produk</label>
+                            <textarea id="newProdSpec" class="form-control" rows="3" placeholder="Contoh: Bahan premium, tanpa pengawet, kemasan vacuum sealed..."></textarea>
                         </div>
                     </div>
 
+                    <!-- CARD: UKURAN & BERAT -->
+                    <div class="form-card" style="background:var(--bg-primary);border:2px dashed var(--purple-light);margin-bottom:18px;padding:18px 20px;">
+                        <h4 style="font-size:0.9rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--text-primary);"><i class="fas fa-weight-scale" style="color:var(--purple);"></i> Ukuran &amp; Berat Produk</h4>
+                        <div class="form-grid" style="grid-template-columns: 1fr 1fr 1fr 1fr;">
+                            <div class="form-group">
+                                <label>Panjang (cm)</label>
+                                <input type="number" id="newProdLength" class="form-control" placeholder="0" step="0.1" min="0" />
+                            </div>
+                            <div class="form-group">
+                                <label>Lebar (cm)</label>
+                                <input type="number" id="newProdWidth" class="form-control" placeholder="0" step="0.1" min="0" />
+                            </div>
+                            <div class="form-group">
+                                <label>Tinggi (cm)</label>
+                                <input type="number" id="newProdHeight" class="form-control" placeholder="0" step="0.1" min="0" />
+                            </div>
+                            <div class="form-group">
+                                <label>Berat (gram)</label>
+                                <input type="number" id="newProdWeight" class="form-control" placeholder="0" step="0.1" min="0" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CARD: UPLOAD FOTO -->
+                    <div class="form-card" style="background:var(--bg-primary);border:2px dashed var(--accent-light);margin-bottom:18px;padding:18px 20px;">
+                        <h4 style="font-size:0.9rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--text-primary);"><i class="fas fa-camera" style="color:var(--accent);"></i> Foto Produk</h4>
+                        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+                            <div id="photoPreviewContainer" style="width:120px;height:120px;border:2px dashed var(--border-color);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;color:var(--text-muted);overflow:hidden;background:var(--bg-card);flex-shrink:0;">
+                                <div id="photoPreviewPlaceholder" style="text-align:center;">
+                                    <i class="fas fa-image" style="font-size:2rem;display:block;margin-bottom:4px;"></i>
+                                    <span style="font-size:0.65rem;font-weight:600;">Preview</span>
+                                </div>
+                                <img id="photoPreviewImg" src="" alt="Preview" style="display:none;width:100%;height:100%;object-fit:cover;" />
+                            </div>
+                            <div style="flex:1;min-width:200px;">
+                                <label for="newProdPhoto" class="checkout-btn" style="width:auto;padding:10px 20px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;white-space:nowrap;font-size:0.82rem;">
+                                    <i class="fas fa-upload"></i> Pilih Foto
+                                </label>
+                                <input type="file" id="newProdPhoto" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;" onchange="previewPhoto(event)" />
+                                <p style="font-size:0.65rem;color:var(--text-muted);margin-top:8px;font-weight:600;">Format: JPG, PNG, WebP, GIF · Maks 2MB</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CARD: BARCODE -->
                     <div class="form-card" style="background:var(--bg-primary);border:2px dashed var(--primary-light);margin-bottom:18px;padding:18px 20px;">
                         <h4 style="font-size:0.9rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--text-primary);"><i class="fas fa-barcode" style="color:var(--primary);"></i> Barcode Produk</h4>
                         <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
@@ -2319,6 +2365,7 @@
                         </div>
                         <div id="barcodePreview" style="text-align:center;margin-top:12px;display:none;"></div>
                     </div>
+
                     <div class="form-actions">
                         <button type="button" class="btn-secondary" onclick="showPage('daftar-produk')">Batal</button>
                         <button type="submit" class="checkout-btn" style="width:auto;padding:10px 28px;">Simpan Produk</button>
@@ -3089,19 +3136,28 @@
                 grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Produk tidak ditemukan</div>';
                 return;
             }
-            grid.innerHTML = filtered.map(p =>
-                `<div class="product-card" data-id="${p.id}" data-cat="${p.category}">
-                    <div class="product-img"><i class="fas ${p.imageIcon}"></i></div>
+            grid.innerHTML = filtered.map(p => {
+                const imgHtml = p.photo
+                    ? `<img src="${p.photo}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm);" />`
+                    : `<i class="fas ${p.imageIcon || 'fa-box'}"></i>`;
+                const skuLabel = p.sku ? `<span style="font-size:0.55rem;color:var(--text-muted);font-weight:600;">${p.sku}</span>` : '';
+                const sizeInfo = (p.weight || p.length)
+                    ? `<span style="font-size:0.55rem;color:var(--text-muted);font-weight:500;">${p.weight ? p.weight+'g' : ''}${p.weight&&p.length?' · ':''}${p.length?p.length+'x'+p.width+'x'+p.height+'cm' : ''}</span>`
+                    : '';
+                return `<div class="product-card" data-id="${p.id}" data-cat="${p.category}">
+                    <div class="product-img">${imgHtml}</div>
                     <div class="product-info">
+                        ${skuLabel}
                         <div class="product-title">${p.name}</div>
                         <div class="product-price">${p.price.toLocaleString('id-ID')}</div>
+                        ${sizeInfo}
                     </div>
                     <div class="product-footer">
                         <span class="product-stock">Stok: ${p.stock}</span>
                         <button class="product-add-btn" onclick="event.stopPropagation(); quickAdd(${p.id})"><i class="fas fa-plus"></i></button>
                     </div>
-                </div>`
-            ).join('');
+                </div>`;
+            }).join('');
             document.querySelectorAll("#productGrid .product-card").forEach(card => {
                 card.addEventListener("click", () => quickAdd(parseInt(card.dataset.id)));
             });
@@ -3341,15 +3397,19 @@
             if (!tbody) return;
             if (!products.length) {
                 tbody.innerHTML =
-                '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Belum ada produk</td></tr>';
+                '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);">Belum ada produk</td></tr>';
                 return;
             }
             tbody.innerHTML = products.map(p => {
                 const levelClass = p.stock > 500 ? "badge-lunas" : p.stock > 100 ? "badge-belum" : "badge-batal";
                 const levelText = p.stock > 500 ? "Tersedia" : p.stock > 100 ? "Sedang" : "Kritis";
+                const thumbHtml = p.photo
+                    ? `<img src="${p.photo}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:6px;" />`
+                    : '';
                 return `<tr>
                             <td><strong>#${String(p.id).padStart(3,'0')}</strong></td>
-                            <td>${p.name}</td>
+                            <td><span style="font-size:0.7rem;font-weight:600;color:var(--text-muted);">${p.sku || '-'}</span></td>
+                            <td>${thumbHtml}${p.name}</td>
                             <td>${p.category}</td>
                             <td><strong>${p.price.toLocaleString('id-ID')}</strong></td>
                             <td>${p.stock}</td>
@@ -4434,21 +4494,51 @@
                 <div style="font-size:0.65rem;color:var(--text-muted);margin-top:4px;"><i class="fas fa-check-circle" style="color:var(--success);"></i> Barcode auto-generated</div>`;
         }
 
+        function generateSKU() {
+            const cat = document.getElementById("newProdCat").value;
+            const prefix = { "Frozen Food": "FRZ", "Roti": "ROT", "Snack": "SNC", "Minuman": "MIN" }[cat] || "PRD";
+            const num = String(products.length + 1).padStart(4, "0");
+            document.getElementById("newProdSKU").value = prefix + "-" + num;
+        }
+
+        let pendingPhotoData = null;
+        function previewPhoto(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (file.size > 2 * 1024 * 1024) { showToast("Foto maksimal 2MB"); return; }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                pendingPhotoData = e.target.result;
+                document.getElementById("photoPreviewPlaceholder").style.display = "none";
+                const img = document.getElementById("photoPreviewImg");
+                img.src = e.target.result;
+                img.style.display = "block";
+            };
+            reader.readAsDataURL(file);
+        }
+
         document.getElementById("addProductForm").addEventListener("submit", function(e) {
                 e.preventDefault();
                 const name = document.getElementById("newProdName").value.trim();
+                const sku = document.getElementById("newProdSKU").value.trim();
                 const cat = document.getElementById("newProdCat").value;
                 const modal = parseInt(document.getElementById("newProdModal").value);
                 const price = parseInt(document.getElementById("newProdPrice").value);
                 const stock = parseInt(document.getElementById("newProdStock").value);
                 const supplier = document.getElementById("newProdSupplier").value;
-                const icon = document.getElementById("newProdIcon").value;
+                const spec = document.getElementById("newProdSpec").value.trim();
+                const length = parseFloat(document.getElementById("newProdLength").value) || 0;
+                const width = parseFloat(document.getElementById("newProdWidth").value) || 0;
+                const height = parseFloat(document.getElementById("newProdHeight").value) || 0;
+                const weight = parseFloat(document.getElementById("newProdWeight").value) || 0;
                 const barcode = document.getElementById("newProdBarcode").value.trim();
-                if (!name || !modal || !price || !stock) { showToast("Isi semua field"); return; }
+                const photo = pendingPhotoData || null;
+                if (!name || !modal || !price || !stock) { showToast("Isi semua field wajib"); return; }
                 const nextId = products.length ? Math.max(...products.map(p => p.id)) + 1 : 1;
                 const newProduct = {
                     id: nextId,
                     name,
+                    sku: sku || ("SKU" + String(nextId).padStart(4, "0")),
                     category: cat,
                     modal,
                     price,
@@ -4456,7 +4546,10 @@
                     minStock: 10,
                     maxStock: stock * 2,
                     supplier,
-                    imageIcon: icon,
+                    spec,
+                    length, width, height, weight,
+                    imageIcon: "fa-box",
+                    photo,
                     barcode: barcode || ("899" + String(Math.floor(Math.random() * 10000000000)).padStart(10, "0"))
                 };
                 products.push(newProduct);
@@ -4617,6 +4710,11 @@
 
             // --- LOAD DATA FROM SUPABASE ---
             initSupabaseData();
+
+            // Expose form functions to window (defined inside this callback)
+            window.generateNewProdBarcode = generateNewProdBarcode;
+            window.generateSKU = generateSKU;
+            window.previewPhoto = previewPhoto;
         });
 
         // ============================================================
