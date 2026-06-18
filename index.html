@@ -2510,34 +2510,114 @@
             <div class="table-wrapper"><table><thead><tr><th>NAMA SUPPLIER</th><th>KONTAK</th><th>ALAMAT</th><th>PRODUK</th><th>STATUS</th></tr></thead><tbody><tr><td><strong>PT Sinar Roti Sejahtera</strong></td><td>0812-3456-7890</td><td>Jl. Industri No. 10</td><td>Roti</td><td><span class="badge-status badge-lunas">Aktif</span></td></tr><tr><td><strong>CV Snack Nusantara</strong></td><td>0821-9876-5432</td><td>Jl. Raya Snack No. 5</td><td>Snack</td><td><span class="badge-status badge-lunas">Aktif</span></td></tr></tbody></table></div>
         </div>
 
+        <div id="page-penerimaan" class="page-content">
+            <div class="page-header">
+                <div>
+                    <h1>Penerimaan Barang Masuk</h1>
+                    <div class="page-header-desc">Catat barang masuk dari supplier dan update stok otomatis</div>
+                </div>
+            </div>
+            <div class="form-card" style="margin-bottom:20px;">
+                <h3 style="margin-bottom:16px;">Form Penerimaan Barang</h3>
+                <div class="form-grid">
+                    <div class="form-group"><label>No PO / Referensi</label><input type="text" id="recPO" class="form-control" placeholder="PO-2026-001" /></div>
+                    <div class="form-group"><label>Supplier</label><select id="recSupplier" class="form-control"></select></div>
+                    <div class="form-group"><label>Produk</label><select id="recProduct" class="form-control"></select></div>
+                    <div class="form-group"><label>Jumlah (Qty)</label><input type="number" id="recQty" class="form-control" placeholder="0" min="1" /></div>
+                    <div class="form-group"><label>Tanggal Diterima</label><input type="date" id="recDate" class="form-control" /></div>
+                    <div class="form-group"><label>Catatan</label><input type="text" id="recNotes" class="form-control" placeholder="Kondisi barang..." /></div>
+                </div>
+                <button class="checkout-btn" onclick="submitReceiving()" style="width:auto;padding:10px 28px;"><i class="fas fa-check"></i> Catat Penerimaan</button>
+            </div>
+            <div class="page-header" style="margin-top:8px;"><h3 style="font-size:1rem;">Riwayat Penerimaan</h3></div>
+            <div class="table-wrapper"><table><thead><tr><th>TANGGAL</th><th>NO PO</th><th>PRODUK</th><th>SUPPLIER</th><th>QTY</th><th>CATATAN</th></tr></thead><tbody id="recTableBody"></tbody></table></div>
+        </div>
+
         <div id="page-picking" class="page-content">
-            <div class="page-header"><h1>Picking Area - Gudang</h1><div class="page-header-desc">Daftar pesanan yang perlu diambil dari rak</div></div>
-            <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>RAK</th><th>JUMLAH PICK</th><th>ORDER TARGET</th><th>STATUS</th></tr></thead><tbody id="pickingTableBody"></tbody></table></div>
+            <div class="page-header">
+                <div>
+                    <h1>Picking Area - Gudang</h1>
+                    <div class="page-header-desc">Daftar pesanan yang perlu diambil dari rak</div>
+                </div>
+            </div>
+            <div class="filter-tabs" id="pickingFilter">
+                <button class="filter-tab active" data-filter="all">Semua</button>
+                <button class="filter-tab" data-filter="pending">Perlu Dipick</button>
+                <button class="filter-tab" data-filter="done">Sudah Dipick</button>
+            </div>
+            <div class="table-wrapper"><table><thead><tr><th>ORDER ID</th><th>PRODUK</th><th>RAK</th><th>JUMLAH</th><th>STATUS</th><th>AKSI</th></tr></thead><tbody id="pickingTableBody"></tbody></table></div>
         </div>
 
         <div id="page-packing" class="page-content">
-            <div class="page-header"><h1>Packing &amp; Quality Control</h1></div>
-            <div class="form-card" style="text-align:center;"><i class="fas fa-boxes" style="font-size:3.5rem;color:var(--purple);margin-bottom:20px;"></i><h3>Area Pengemasan Barang</h3><button class="checkout-btn" style="background:var(--purple-gradient);" onclick="showToast('Cetak label dimulai')">Cetak Label Massal</button></div>
-        </div>
-
-        <div id="page-penerimaan" class="page-content">
-            <div class="page-header"><h1>Penerimaan Barang Masuk</h1></div>
-            <div class="form-card"><h3 style="margin-bottom:16px;">Form Input PO</h3><div class="form-grid"><div class="form-group"><label>No PO</label><input type="text" class="form-control" /></div><div class="form-group"><label>Jumlah Koli</label><input type="number" class="form-control" /></div></div><button class="checkout-btn" onclick="showToast('Barang masuk dicatat')">Submit</button></div>
+            <div class="page-header">
+                <div>
+                    <h1>Packing &amp; Quality Control</h1>
+                    <div class="page-header-desc">Periksa dan kemas pesanan sebelum dikirim</div>
+                </div>
+            </div>
+            <div class="table-wrapper"><table><thead><tr><th>ORDER ID</th><th>PELANGGAN</th><th>CHANNEL</th><th>ITEM</th><th>QTY</th><th>QC STATUS</th><th>AKSI</th></tr></thead><tbody id="packingTableBody"></tbody></table></div>
         </div>
 
         <div id="page-pengiriman" class="page-content">
-            <div class="page-header"><h1>Pengiriman Barang</h1><div class="page-header-desc">Jadwal dan status pengiriman ke pelanggan</div></div>
-            <div class="table-wrapper"><table><thead><tr><th>NO RESI</th><th>PELANGGAN</th><th>ALAMAT TUJUAN</th><th>STATUS</th><th>AKSI</th></tr></thead><tbody><tr><td>SHIP-001</td><td>Budi Santoso</td><td>Jl. Merdeka No. 5</td><td><span class="badge-status badge-belum">Dalam Perjalanan</span></td><td><button class="aksi-btn" onclick="showToast('Lacak pengiriman')"><i class="fas fa-search"></i></button></td></tr><tr><td>SHIP-002</td><td>Siti Rahma</td><td>Perumahan Griya Asri Blok C3</td><td><span class="badge-status badge-lunas">Terkirim</span></td><td><button class="aksi-btn" onclick="showToast('Lacak pengiriman')"><i class="fas fa-search"></i></button></td></tr></tbody></table></div>
+            <div class="page-header">
+                <div>
+                    <h1>Pengiriman Barang</h1>
+                    <div class="page-header-desc">Jadwal dan status pengiriman ke pelanggan</div>
+                </div>
+            </div>
+            <div class="table-wrapper"><table><thead><tr><th>ORDER ID</th><th>PELANGGAN</th><th>KURIR</th><th>NO RESI</th><th>STATUS</th><th>AKSI</th></tr></thead><tbody id="shippingTableBody"></tbody></table></div>
         </div>
 
         <div id="page-rak-lokasi" class="page-content">
-            <div class="page-header"><h1>Rak &amp; Lokasi Gudang</h1><div class="page-header-desc">Penataan letak barang berdasarkan zona dan rak</div></div>
-            <div class="table-wrapper"><table><thead><tr><th>ZONA</th><th>RAK</th><th>PRODUK</th><th>KAPASITAS</th><th>TERISI</th></tr></thead><tbody><tr><td>Zone A</td><td>Rak 1</td><td>TASAJI ROTI MARYAM</td><td>500</td><td>320</td></tr><tr><td>Zone A</td><td>Rak 2</td><td>RUJAK CIRENG BRECXELLE</td><td>300</td><td>150</td></tr><tr><td>Zone B</td><td>Rak 1</td><td>MINUMAN RINGAN</td><td>400</td><td>280</td></tr></tbody></table></div>
+            <div class="page-header">
+                <div>
+                    <h1>Rak &amp; Lokasi Gudang</h1>
+                    <div class="page-header-desc">Penataan letak barang berdasarkan zona dan rak</div>
+                </div>
+                <button class="checkout-btn" onclick="openRackForm()" style="width:auto;padding:10px 24px;"><i class="fas fa-plus"></i> Tambah Rak</button>
+            </div>
+            <div class="table-wrapper"><table><thead><tr><th>ZONA</th><th>NAMA RAK</th><th>PRODUK</th><th>KAPASITAS</th><th>TERISI</th><th>AKSI</th></tr></thead><tbody id="rackTableBody"></tbody></table></div>
+
+            <div id="rackFormModal" class="modal-overlay" onclick="if(event.target===this)closeRackForm()">
+                <div class="modal-card" style="max-width:90vw;text-align:left;padding:0;overflow:hidden;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border-color);">
+                        <h2 id="rackFormTitle" style="margin:0;font-size:1.1rem;">Tambah Rak Baru</h2>
+                        <button onclick="closeRackForm()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-muted);">&times;</button>
+                    </div>
+                    <div style="padding:20px 24px;">
+                        <div class="form-grid">
+                            <div class="form-group"><label>Zona</label><input id="rackZone" class="form-control" placeholder="Zone A" /></div>
+                            <div class="form-group"><label>Nama Rak</label><input id="rackName" class="form-control" placeholder="Rak 1" /></div>
+                            <div class="form-group"><label>Produk</label><select id="rackProduct" class="form-control"><option value="">-- Kosong --</option></select></div>
+                            <div class="form-group"><label>Kapasitas</label><input id="rackCap" type="number" class="form-control" placeholder="100" /></div>
+                            <div class="form-group"><label>Terisi</label><input id="rackFilled" type="number" class="form-control" placeholder="0" /></div>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:12px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border-color);">
+                        <button class="btn-secondary" onclick="closeRackForm()">Batal</button>
+                        <button class="checkout-btn" onclick="saveRack()" style="width:auto;padding:10px 28px;"><i class="fas fa-save"></i> Simpan</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div id="page-opname-gudang" class="page-content">
-            <div class="page-header"><h1>Opname Gudang</h1><div class="page-header-desc">Rekonsiliasi stok fisik per zona gudang</div></div>
-            <div class="form-card"><h3 style="margin-bottom:16px;">Buat Sesi Opname</h3><div class="form-grid"><div class="form-group"><label>Zona Gudang</label><select class="form-control"><option>Zone A - Roti &amp; Kue</option><option>Zone B - Snack &amp; Minuman</option><option>Zone C - Frozen</option></select></div><div class="form-group"><label>Petugas</label><select class="form-control"><option>Ahmad Hidayat</option><option>Siti Aminah</option></select></div></div><button class="checkout-btn" onclick="showToast('Sesi opname dimulai')"><i class="fas fa-play"></i> Mulai Opname</button></div>
+            <div class="page-header">
+                <div>
+                    <h1>Opname Gudang</h1>
+                    <div class="page-header-desc">Rekonsiliasi stok fisik per zona gudang</div>
+                </div>
+            </div>
+            <div class="form-card" style="margin-bottom:20px;">
+                <h3 style="margin-bottom:16px;">Buat Sesi Opname</h3>
+                <div class="form-grid">
+                    <div class="form-group"><label>Zona Gudang</label><select id="opnameZone" class="form-control"></select></div>
+                    <div class="form-group"><label>Petugas</label><input type="text" id="opnameOfficer" class="form-control" placeholder="Nama petugas" /></div>
+                </div>
+                <button class="checkout-btn" onclick="startOpname()" style="width:auto;padding:10px 28px;"><i class="fas fa-play"></i> Mulai Opname</button>
+            </div>
+            <div class="page-header" style="margin-top:8px;"><h3 style="font-size:1rem;">Sesi Opname Aktif</h3></div>
+            <div id="opnameActiveList"></div>
         </div>
 
         <div id="page-harga-belanja" class="page-content">
@@ -2897,25 +2977,51 @@
         let rekapBulan = new Date().getMonth();
         let rekapTahun = new Date().getFullYear();
         let currentUser = null;
+        let editingRackId = null;
+        let warehouseReceiving = [];
+        let warehouseRacks = [];
+        let warehouseOpname = [];
+
+        // Warehouse seed data
+        function seedWarehouseData() {
+            if (!warehouseReceiving.length) warehouseReceiving = [
+                { id: 1, po_number: "PO-2026-001", product_id: 18, product_name: "ROTI TAWAR GANDUM", supplier: "PT Sinar Roti", quantity: 200, received_date: "2026-06-15", notes: "Kondisi baik" },
+                { id: 2, po_number: "PO-2026-002", product_id: 23, product_name: "SUSU SEGAR UHT 1L", supplier: "UD Niaga Bersama", quantity: 150, received_date: "2026-06-14", notes: "Segel utuh" }
+            ];
+            if (!warehouseRacks.length) warehouseRacks = [
+                { id: 1, zone: "Zone A", rack_name: "Rak 1", product_id: 18, capacity: 500, filled: 320 },
+                { id: 2, zone: "Zone A", rack_name: "Rak 2", product_id: null, capacity: 300, filled: 150 },
+                { id: 3, zone: "Zone B", rack_name: "Rak 1", product_id: 23, capacity: 400, filled: 280 },
+                { id: 4, zone: "Zone C", rack_name: "Freezer 1", product_id: 1, capacity: 300, filled: 200 }
+            ];
+            if (!warehouseOpname.length) warehouseOpname = [];
+        }
 
         // ============================================================
         // SUPABASE DATA LOADING
         // ============================================================
         async function initSupabaseData() {
             try {
-                const [pRes, oRes, kRes, ktRes] = await Promise.all([
+                const [pRes, oRes, kRes, ktRes, wRecRes, wRackRes, wOpRes] = await Promise.all([
                     sb.from('products').select('*'),
                     sb.from('orders').select('*').order('date', { ascending: false }),
                     sb.from('karyawan').select('*'),
-                    sb.from('kontrakan').select('*')
+                    sb.from('kontrakan').select('*'),
+                    sb.from('warehouse_receiving').select('*').order('received_date', { ascending: false }),
+                    sb.from('warehouse_racks').select('*'),
+                    sb.from('warehouse_opname').select('*').order('session_date', { ascending: false })
                 ]);
                 if (pRes.data && pRes.data.length > 0) products = pRes.data;
                 if (oRes.data && oRes.data.length > 0) ordersData = oRes.data;
                 if (kRes.data && kRes.data.length > 0) karyawanData = kRes.data;
                 if (ktRes.data && ktRes.data.length > 0) kontrakanData = ktRes.data;
-                console.log("Supabase: data loaded", { p: products.length, o: ordersData.length, k: karyawanData.length, kt: kontrakanData.length });
+                if (wRecRes.data && wRecRes.data.length > 0) warehouseReceiving = wRecRes.data;
+                if (wRackRes.data && wRackRes.data.length > 0) warehouseRacks = wRackRes.data;
+                if (wOpRes.data && wOpRes.data.length > 0) warehouseOpname = wOpRes.data;
+                console.log("Supabase: data loaded");
             } catch (err) {
                 console.warn("Supabase: using local data fallback", err.message);
+                seedWarehouseData();
             }
             refreshAllUI();
         }
@@ -2930,6 +3036,12 @@
             renderEmployees();
             renderAssets();
             renderPricingTables();
+            renderWarehouseReceiving();
+            renderWarehousePicking();
+            renderWarehousePacking();
+            renderWarehouseShipping();
+            renderWarehouseRacks();
+            renderWarehouseOpnameList();
         }
 
         // ============================================================
@@ -3563,25 +3675,314 @@
         }
 
         // ============================================================
-        // PICKING TABLE
+        // WAREHOUSE: PENERIMAAN
         // ============================================================
-        function renderPickingTable() {
+        function renderWarehouseReceiving() {
+            const tbody = document.getElementById("recTableBody");
+            if (!tbody) return;
+            if (!warehouseReceiving.length) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Belum ada penerimaan</td></tr>';
+                return;
+            }
+            tbody.innerHTML = warehouseReceiving.map(r => `<tr>
+                <td>${r.received_date || '-'}</td>
+                <td><strong>${r.po_number || '-'}</strong></td>
+                <td>${r.product_name || '-'}</td>
+                <td>${r.supplier || '-'}</td>
+                <td>${r.quantity}</td>
+                <td>${r.notes || '-'}</td>
+            </tr>`).join('');
+        }
+
+        async function submitReceiving() {
+            const po = document.getElementById("recPO").value.trim();
+            const pid = parseInt(document.getElementById("recProduct").value);
+            const prod = products.find(p => p.id === pid);
+            const supplier = document.getElementById("recSupplier").value;
+            const qty = parseInt(document.getElementById("recQty").value) || 0;
+            const date = document.getElementById("recDate").value || new Date().toISOString().slice(0, 10);
+            const notes = document.getElementById("recNotes").value.trim();
+            if (!pid || !qty) { showToast("Isi produk dan jumlah"); return; }
+
+            const record = {
+                id: warehouseReceiving.length + 1,
+                po_number: po || ("PO-" + Date.now().toString(36).toUpperCase()),
+                product_id: pid, product_name: prod ? prod.name : '', supplier, quantity: qty,
+                received_date: date, notes
+            };
+            warehouseReceiving.unshift(record);
+
+            if (prod) { prod.stock += qty;
+                sb.from('products').update({ stock: prod.stock }).eq('id', pid); }
+            sb.from('warehouse_receiving').insert(record).then(r => { if (r.error) console.warn(r.error.message); });
+
+            renderWarehouseReceiving();
+            renderProducts(); renderCatalogTable(); renderMonitorStok();
+            document.getElementById("recPO").value = ""; document.getElementById("recQty").value = "";
+            showToast(`Penerimaan ${prod?prod.name:''} +${qty} dicatat`);
+        }
+
+        function populateRecForm() {
+            const supSel = document.getElementById("recSupplier");
+            const prodSel = document.getElementById("recProduct");
+            const dateEl = document.getElementById("recDate");
+            if (supSel) supSel.innerHTML = suppliers.map(s => `<option value="${s}">${s}</option>`).join('');
+            if (prodSel) prodSel.innerHTML = '<option value="">-- Pilih Produk --</option>' + products.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+            if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
+        }
+
+        // ============================================================
+        // WAREHOUSE: PICKING
+        // ============================================================
+        function renderWarehousePicking(filter) {
             const tbody = document.getElementById("pickingTableBody");
             if (!tbody) return;
-            const zones = ["Zone A - Rak 1", "Zone A - Rak 2", "Zone B - Rak 1", "Zone C - Freezer 1",
-            "Zone C - Freezer 2"];
-            tbody.innerHTML = products.slice(0, 8).map((p, i) => {
-                const qty = Math.floor(Math.random() * 10) + 1;
-                const status = i % 3 === 0 ? "Sudah Diambil" : "Belum Diambil";
-                const cls = status === "Sudah Diambil" ? "badge-lunas" : "badge-belum";
+            const f = filter || 'all';
+            const pickingOrders = ordersData.filter(o => o.wmsStatus !== 'Selesai' && o.wmsStatus !== 'Batal' && o.wmsStatus !== 'Dikirim');
+            const filtered = f === 'done' ? pickingOrders.filter(o => o.wmsStatus === 'Dipick') : f === 'pending' ? pickingOrders.filter(o => o.wmsStatus !== 'Dipick') : pickingOrders;
+            if (!filtered.length) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Tidak ada pesanan untuk dipick</td></tr>';
+                return;
+            }
+            tbody.innerHTML = filtered.map(o => {
+                const rack = warehouseRacks.length ? warehouseRacks[Math.floor(Math.random() * warehouseRacks.length)] : null;
+                const isDone = o.wmsStatus === 'Dipick';
                 return `<tr>
-                            <td>${p.name}</td>
-                            <td>${zones[i % zones.length]}</td>
-                            <td>${qty} Pcs</td>
-                            <td>ORD-202606${String(i+1).padStart(2,'0')}</td>
-                            <td><span class="badge-status ${cls}">${status}</span></td>
-                        </tr>`;
+                    <td><strong>${o.orderId}</strong></td>
+                    <td>${o.customer}</td>
+                    <td>${rack ? rack.zone + ' - ' + rack.rack_name : 'Belum ditentukan'}</td>
+                    <td>1 Pcs</td>
+                    <td><span class="badge-status ${isDone ? 'badge-lunas' : 'badge-belum'}">${isDone ? 'Sudah Dipick' : 'Perlu Dipick'}</span></td>
+                    <td>${!isDone ? `<button class="aksi-btn" onclick="markPicked('${o.orderId}')"><i class="fas fa-check"></i> Tandai Dipick</button>` : '-'}</td>
+                </tr>`;
             }).join('');
+        }
+
+        async function markPicked(orderId) {
+            const o = ordersData.find(x => x.orderId === orderId);
+            if (!o) return;
+            o.wmsStatus = 'Dipick';
+            sb.from('orders').update({ wmsStatus: 'Dipick' }).eq('orderId', orderId);
+            renderWarehousePicking();
+            renderWarehousePacking();
+            showToast(`${orderId} ditandai sudah dipick`);
+        }
+
+        // ============================================================
+        // WAREHOUSE: PACKING
+        // ============================================================
+        function renderWarehousePacking() {
+            const tbody = document.getElementById("packingTableBody");
+            if (!tbody) return;
+            const packingOrders = ordersData.filter(o => o.wmsStatus === 'Dipick' || o.wmsStatus === 'Packing' || o.wmsStatus === 'Siap Kirim');
+            if (!packingOrders.length) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Tidak ada pesanan untuk packing</td></tr>';
+                return;
+            }
+            tbody.innerHTML = packingOrders.map(o => {
+                const statusCls = o.wmsStatus === 'Siap Kirim' ? 'badge-lunas' : o.wmsStatus === 'Packing' ? 'badge-belum' : 'badge-belum';
+                return `<tr>
+                    <td><strong>${o.orderId}</strong></td>
+                    <td>${o.customer}</td>
+                    <td>${renderChannelBadge(o.channel)}</td>
+                    <td>Pesanan ${o.orderId}</td>
+                    <td>1</td>
+                    <td><span class="badge-status ${statusCls}">${o.wmsStatus}</span></td>
+                    <td>
+                        ${o.wmsStatus !== 'Siap Kirim' ? `<button class="aksi-btn" onclick="markPacked('${o.orderId}')"><i class="fas fa-box"></i> QC OK</button>` : '-'}
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function markPacked(orderId) {
+            const o = ordersData.find(x => x.orderId === orderId);
+            if (!o) return;
+            o.wmsStatus = 'Siap Kirim';
+            sb.from('orders').update({ wmsStatus: 'Siap Kirim' }).eq('orderId', orderId);
+            renderWarehousePacking();
+            renderWarehouseShipping();
+            showToast(`${orderId} siap dikirim`);
+        }
+
+        // ============================================================
+        // WAREHOUSE: PENGIRIMAN
+        // ============================================================
+        function renderWarehouseShipping() {
+            const tbody = document.getElementById("shippingTableBody");
+            if (!tbody) return;
+            const shipOrders = ordersData.filter(o => o.wmsStatus === 'Siap Kirim' || o.wmsStatus === 'Dikirim');
+            if (!shipOrders.length) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Tidak ada pesanan siap kirim</td></tr>';
+                return;
+            }
+            tbody.innerHTML = shipOrders.map(o => {
+                const isSent = o.wmsStatus === 'Dikirim';
+                return `<tr>
+                    <td><strong>${o.orderId}</strong></td>
+                    <td>${o.customer}</td>
+                    <td>${o.courier || 'Belum ditentukan'}</td>
+                    <td>${o.resi !== '-' ? o.resi : 'Belum ada'}</td>
+                    <td><span class="badge-status ${isSent ? 'badge-lunas' : 'badge-belum'}">${isSent ? 'Dikirim' : 'Siap Kirim'}</span></td>
+                    <td>${!isSent ? `<button class="aksi-btn" onclick="openShipForm('${o.orderId}')"><i class="fas fa-truck"></i> Kirim</button>` : '<button class="aksi-btn" onclick="showToast(\'Lacak ' + o.resi + '\')"><i class="fas fa-search"></i></button>'}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function openShipForm(orderId) {
+            const courier = prompt(`Kurir untuk ${orderId}:`, "J&T Express");
+            const resi = prompt("No Resi:", "JP" + Date.now().toString(36).toUpperCase());
+            if (courier && resi) {
+                const o = ordersData.find(x => x.orderId === orderId);
+                if (o) {
+                    o.courier = courier; o.resi = resi; o.wmsStatus = 'Dikirim';
+                    sb.from('orders').update({ courier, resi, wmsStatus: 'Dikirim' }).eq('orderId', orderId);
+                    renderWarehouseShipping();
+                    renderPenjualanTable();
+                    showToast(`${orderId} dikirim via ${courier}`);
+                }
+            }
+        }
+
+        // ============================================================
+        // WAREHOUSE: RAK & LOKASI
+        // ============================================================
+        function renderWarehouseRacks() {
+            const tbody = document.getElementById("rackTableBody");
+            if (!tbody) return;
+            if (!warehouseRacks.length) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Belum ada rak</td></tr>';
+                return;
+            }
+            tbody.innerHTML = warehouseRacks.map(r => {
+                const prod = r.product_id ? products.find(p => p.id === r.product_id) : null;
+                const pct = r.capacity > 0 ? Math.round(r.filled / r.capacity * 100) : 0;
+                const pctCls = pct > 80 ? 'badge-batal' : pct > 50 ? 'badge-belum' : 'badge-lunas';
+                return `<tr>
+                    <td><span class="badge-status badge-lunas">${r.zone}</span></td>
+                    <td><strong>${r.rack_name}</strong></td>
+                    <td>${prod ? prod.name : '<span style="color:var(--text-muted);">Kosong</span>'}</td>
+                    <td>${r.capacity}</td>
+                    <td><span class="badge-status ${pctCls}">${r.filled} (${pct}%)</span></td>
+                    <td>
+                        <button class="aksi-btn" onclick="editRack(${r.id})"><i class="fas fa-pen"></i></button>
+                        <button class="aksi-btn" onclick="deleteRack(${r.id})" style="color:var(--danger);"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>`;
+            }).join('');
+            const rackProd = document.getElementById("rackProduct");
+            if (rackProd) rackProd.innerHTML = '<option value="">-- Kosong --</option>' + products.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+        }
+
+        function openRackForm() {
+            editingRackId = null;
+            document.getElementById("rackFormTitle").textContent = "Tambah Rak Baru";
+            ["rackZone","rackName","rackCap","rackFilled"].forEach(id => document.getElementById(id).value = "");
+            document.getElementById("rackProduct").value = "";
+            document.getElementById("rackFormModal").classList.add("active");
+        }
+
+        function editRack(id) {
+            const r = warehouseRacks.find(x => x.id === id);
+            if (!r) return;
+            editingRackId = id;
+            document.getElementById("rackFormTitle").textContent = "Edit Rak";
+            document.getElementById("rackZone").value = r.zone;
+            document.getElementById("rackName").value = r.rack_name;
+            document.getElementById("rackProduct").value = r.product_id || "";
+            document.getElementById("rackCap").value = r.capacity;
+            document.getElementById("rackFilled").value = r.filled;
+            document.getElementById("rackFormModal").classList.add("active");
+        }
+
+        function closeRackForm() {
+            document.getElementById("rackFormModal").classList.remove("active");
+            editingRackId = null;
+        }
+
+        function saveRack() {
+            const zone = document.getElementById("rackZone").value.trim();
+            const rackName = document.getElementById("rackName").value.trim();
+            const pid = document.getElementById("rackProduct").value ? parseInt(document.getElementById("rackProduct").value) : null;
+            const cap = parseInt(document.getElementById("rackCap").value) || 0;
+            const filled = parseInt(document.getElementById("rackFilled").value) || 0;
+            if (!zone || !rackName) { showToast("Isi zona dan nama rak"); return; }
+
+            if (editingRackId) {
+                const r = warehouseRacks.find(x => x.id === editingRackId);
+                if (r) {
+                    Object.assign(r, { zone, rack_name: rackName, product_id: pid, capacity: cap, filled });
+                    sb.from('warehouse_racks').update(r).eq('id', editingRackId);
+                }
+            } else {
+                const newRack = { id: warehouseRacks.length + 1, zone, rack_name: rackName, product_id: pid, capacity: cap, filled };
+                warehouseRacks.push(newRack);
+                sb.from('warehouse_racks').insert(newRack);
+            }
+            closeRackForm();
+            renderWarehouseRacks();
+            showToast(editingRackId ? "Rak diperbarui" : "Rak ditambahkan");
+        }
+
+        async function deleteRack(id) {
+            const idx = warehouseRacks.findIndex(x => x.id === id);
+            if (idx > -1 && confirm(`Hapus rak ${warehouseRacks[idx].rack_name}?`)) {
+                warehouseRacks.splice(idx, 1);
+                sb.from('warehouse_racks').delete().eq('id', id);
+                renderWarehouseRacks();
+                showToast("Rak dihapus");
+            }
+        }
+
+        // ============================================================
+        // WAREHOUSE: OPNAME GUDANG
+        // ============================================================
+        function renderWarehouseOpnameList() {
+            const container = document.getElementById("opnameActiveList");
+            const zoneSel = document.getElementById("opnameZone");
+            if (!container) return;
+            if (zoneSel && warehouseRacks.length) {
+                const zones = [...new Set(warehouseRacks.map(r => r.zone))];
+                zoneSel.innerHTML = zones.map(z => `<option value="${z}">${z}</option>`).join('');
+            }
+            const openSessions = warehouseOpname.filter(o => o.status === 'open');
+            if (!openSessions.length) {
+                container.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text-muted);">Tidak ada sesi opname aktif</div>';
+                return;
+            }
+            container.innerHTML = openSessions.map(s => `<div class="account-card">
+                <div class="account-header">
+                    <div class="account-info">
+                        <span class="acc-name">${s.zone} - ${s.officer}</span>
+                        <span class="acc-detail">${s.session_date}</span>
+                    </div>
+                    <button class="checkout-btn" onclick="finishOpname('${s.id}')" style="width:auto;padding:6px 16px;font-size:0.75rem;">Selesai</button>
+                </div>
+            </div>`).join('');
+        }
+
+        async function startOpname() {
+            const zone = document.getElementById("opnameZone").value;
+            const officer = document.getElementById("opnameOfficer").value.trim();
+            if (!officer) { showToast("Isi nama petugas"); return; }
+            const session = {
+                id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36),
+                zone, officer, session_date: new Date().toISOString().slice(0, 10), status: 'open'
+            };
+            warehouseOpname.push(session);
+            sb.from('warehouse_opname').insert(session);
+            renderWarehouseOpnameList();
+            document.getElementById("opnameOfficer").value = "";
+            showToast(`Sesi opname ${zone} dimulai`);
+        }
+
+        async function finishOpname(id) {
+            const s = warehouseOpname.find(x => x.id === id);
+            if (!s) return;
+            s.status = 'closed';
+            sb.from('warehouse_opname').update({ status: 'closed' }).eq('id', id);
+            renderWarehouseOpnameList();
+            showToast(`Opname ${s.zone} selesai`);
         }
 
         // ============================================================
@@ -4359,8 +4760,25 @@
             renderPosHistory();
             renderMonitorStok();
             renderPricingTables();
-            renderPickingTable();
+            renderWarehouseReceiving();
+            renderWarehousePicking();
+            renderWarehousePacking();
+            renderWarehouseShipping();
+            renderWarehouseRacks();
+            renderWarehouseOpnameList();
             renderRekapKehadiran();
+
+            // Warehouse form init
+            populateRecForm();
+
+            // Picking filter
+            document.querySelectorAll("#pickingFilter .filter-tab").forEach(tab => {
+                tab.addEventListener("click", function() {
+                    document.querySelectorAll("#pickingFilter .filter-tab").forEach(t => t.classList.remove("active"));
+                    this.classList.add("active");
+                    renderWarehousePicking(this.dataset.filter);
+                });
+            });
 
             // Markup category
             const mcat = document.getElementById("markupCategory");
@@ -4683,7 +5101,17 @@
         window.closeClosingModal = closeClosingModal;
         window.toggleSplit = toggleSplit;
         window.updateSplit = updateSplit;
-        window.renderPickingTable = renderPickingTable;
+        window.submitReceiving = submitReceiving;
+        window.markPicked = markPicked;
+        window.markPacked = markPacked;
+        window.openShipForm = openShipForm;
+        window.openRackForm = openRackForm;
+        window.editRack = editRack;
+        window.closeRackForm = closeRackForm;
+        window.saveRack = saveRack;
+        window.deleteRack = deleteRack;
+        window.startOpname = startOpname;
+        window.finishOpname = finishOpname;
         window.openAddKontrakan = openAddKontrakan;
         window.editKontrakan = editKontrakan;
         window.saveKontrakan = saveKontrakan;
