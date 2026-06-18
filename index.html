@@ -2462,7 +2462,7 @@
         <!-- ===== PLACEHOLDER HALAMAN LAINNYA ===== -->
         <div id="page-monitor-stok" class="page-content">
             <div class="page-header"><h1>Monitor Stok</h1><div class="page-header-desc">Pantau ketersediaan stok semua produk secara real-time</div></div>
-            <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>KATEGORI</th><th>STOK AKHIR</th><th>MIN STOK</th><th>MAKS STOK</th><th>STATUS</th></tr></thead><tbody id="stokTableBody"></tbody></table></div>
+            <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>KATEGORI</th><th>STOK</th><th>SYNC</th><th>STATUS</th></tr></thead><tbody id="stokTableBody"></tbody></table></div>
         </div>
 
         <div id="page-stock-opname" class="page-content">
@@ -3537,9 +3537,8 @@
                 return `<tr>
                             <td><strong>${p.name}</strong></td>
                             <td>${p.category}</td>
-                            <td>${p.stock.toLocaleString('id-ID')}</td>
-                            <td>${p.minStock}</td>
-                            <td>${p.maxStock}</td>
+                            <td><strong style="font-size:1.1rem;">${p.stock.toLocaleString('id-ID')}</strong></td>
+                            <td><span class="badge-status badge-belum" style="font-size:0.62rem;" title="Menunggu sync ke Shopee"><i class="fas fa-sync-alt fa-spin"></i> Pending</span></td>
                             <td><span class="badge-status ${badge}">${status}</span></td>
                         </tr>`;
             }).join('');
@@ -3712,8 +3711,12 @@
             };
             warehouseReceiving.unshift(record);
 
-            if (prod) { prod.stock += qty;
-                sb.from('products').update({ stock: prod.stock }).eq('id', pid); }
+            if (prod) {
+                const qtyBefore = prod.stock;
+                prod.stock += qty;
+                sb.from('products').update({ stock: prod.stock }).eq('id', pid);
+                logStockMutation(prod.id, prod.name, 'IN', qty, qtyBefore, prod.stock, 'Penerimaan: ' + (po || record.po_number));
+            }
             sb.from('warehouse_receiving').insert(record).then(r => { if (r.error) console.warn(r.error.message); });
 
             renderWarehouseReceiving();
@@ -3983,6 +3986,26 @@
             sb.from('warehouse_opname').update({ status: 'closed' }).eq('id', id);
             renderWarehouseOpnameList();
             showToast(`Opname ${s.zone} selesai`);
+        }
+
+        // ============================================================
+        // STOCK MUTATION LOGGER (untuk sync stok ke Shopee)
+        // ============================================================
+        function logStockMutation(productId, productName, type, qty, qtyBefore, qtyAfter, source) {
+            const mutation = {
+                product_id: productId,
+                product_name: productName,
+                type: type,
+                quantity: qty,
+                qty_before: qtyBefore,
+                qty_after: qtyAfter,
+                source: source,
+                sync_status: 'pending',
+                created_at: new Date().toISOString()
+            };
+            sb.from('stock_mutations').insert(mutation).then(r => {
+                if (r.error) console.warn("Stock mutation log error:", r.error.message);
+            });
         }
 
         // ============================================================
@@ -4555,10 +4578,24 @@
             ordersData.unshift({ orderId, date: dateStr, channel, customer, total, payStatus: "Lunas",
                 wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-" });
 
-            // Sync ke Supabase
+            // Sync order ke Supabase
             sb.from('orders').insert({ orderId, date: dateStr, channel, customer, total, payStatus: "Lunas",
                 wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-" }).then(r => {
                 if (r.error) console.warn("Supabase insert order error:", r.error.message);
+            });
+
+            // Kurangi stok & catat mutasi
+            cart.forEach(item => {
+                const prod = products.find(p => p.id === item.id);
+                if (prod) {
+                    const qtyBefore = prod.stock;
+                    prod.stock = Math.max(0, prod.stock - item.quantity);
+                    const qtyAfter = prod.stock;
+                    sb.from('products').update({ stock: prod.stock }).eq('id', prod.id).then(r => {
+                        if (r.error) console.warn("Stock update error:", r.error.message);
+                    });
+                    logStockMutation(prod.id, prod.name, 'OUT', item.quantity, qtyBefore, qtyAfter, 'POS: ' + orderId);
+                }
             });
 
             renderPenjualanTable();
@@ -4917,6 +4954,7 @@
                 sb.from('products').insert(newProduct).then(r => {
                     if (r.error) console.warn("Supabase insert product error:", r.error.message);
                 });
+                logStockMutation(newProduct.id, newProduct.name, 'IN', newProduct.stock, 0, newProduct.stock, 'Produk Baru');
                 renderProducts();
                 renderCatalogTable();
                 renderMonitorStok();
