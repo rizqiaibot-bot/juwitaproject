@@ -2075,11 +2075,19 @@
 
         <!-- ===== HALAMAN POS ===== -->
         <div id="page-pos" class="page-content">
-            <div class="page-header">
-                <div>
+            <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+                <div style="flex:0 0 auto;">
                     <h1>Point of Sale (POS)</h1>
                     <div class="page-header-desc">Kasir cepat untuk penjualan langsung pelanggan offline</div>
                 </div>
+                <div id="posAccountCard" style="display:flex;align-items:center;gap:8px;background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:8px 14px;box-shadow:var(--card-shadow);flex-shrink:0;">
+                    <div id="posAvatar" style="width:30px;height:30px;border-radius:50%;background:var(--primary-gradient);color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;">AH</div>
+                    <div style="line-height:1.2;">
+                        <div id="posName" style="font-weight:700;font-size:0.72rem;color:var(--text-primary);">Ahmad Hidayat</div>
+                        <div id="posEmail" style="font-size:0.62rem;color:var(--text-muted);">admin@juwita.com</div>
+                    </div>
+                </div>
+                <button id="posLogoutBtn" onclick="doLogout()" style="display:flex;align-items:center;gap:6px;background:var(--danger-light);border:1px solid var(--danger);border-radius:var(--radius-lg);padding:8px 14px;cursor:pointer;color:var(--danger);font-size:0.72rem;font-weight:700;transition:var(--transition);white-space:nowrap;flex-shrink:0;"><i class="fas fa-sign-out-alt" style="font-size:0.75rem;"></i> Logout</button>
             </div>
 
             <div class="stats-row" id="posTodayStats" style="margin-bottom:16px;">
@@ -3097,16 +3105,28 @@
             const name = document.getElementById("settingUserName");
             const email = document.getElementById("settingUserEmail");
             const logoutBtn = document.getElementById("navLogoutBtn");
-            if (currentUser && card) {
+            const posCard = document.getElementById("posAccountCard");
+            const posAvatar = document.getElementById("posAvatar");
+            const posName = document.getElementById("posName");
+            const posEmail = document.getElementById("posEmail");
+            const posLogout = document.getElementById("posLogoutBtn");
+            if (currentUser) {
                 const initial = currentUser.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                if (card) card.style.display = "flex";
                 if (avatar) avatar.textContent = initial;
                 if (name) name.textContent = currentUser.name;
                 if (email) email.textContent = currentUser.username + "@juwita.com";
                 if (logoutBtn) logoutBtn.style.display = "flex";
-                card.style.display = "flex";
+                if (posCard) posCard.style.display = "flex";
+                if (posAvatar) posAvatar.textContent = initial;
+                if (posName) posName.textContent = currentUser.name;
+                if (posEmail) posEmail.textContent = currentUser.username + "@juwita.com";
+                if (posLogout) posLogout.style.display = "flex";
             } else {
                 if (card) card.style.display = "none";
                 if (logoutBtn) logoutBtn.style.display = "none";
+                if (posCard) posCard.style.display = "none";
+                if (posLogout) posLogout.style.display = "none";
             }
         }
 
