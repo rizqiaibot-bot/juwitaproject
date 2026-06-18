@@ -1958,14 +1958,6 @@
             </ul>
 
             <div class="nav-actions">
-                <div id="navUserBadge" style="display:none;align-items:center;gap:8px;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:var(--radius-xl);padding:5px 14px 5px 6px;font-size:0.78rem;font-weight:600;color:var(--text-primary);">
-                    <div class="user-avatar" id="navUserAvatar" style="width:30px;height:30px;border-radius:50%;background:var(--primary-gradient);color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;flex-shrink:0;">AH</div>
-                    <div style="display:flex;flex-direction:column;line-height:1.2;">
-                        <span class="user-name" id="navUserName" style="font-size:0.78rem;font-weight:700;color:var(--text-primary);">Ahmad Hidayat</span>
-                        <span class="user-email" id="navUserEmail" style="font-size:0.65rem;color:var(--text-muted);font-weight:500;">ahmad@juwita.com</span>
-                    </div>
-                </div>
-                <button id="navLogoutBtn" style="display:none;align-items:center;justify-content:center;background:var(--danger-light);border:none;width:34px;height:34px;border-radius:50%;cursor:pointer;color:var(--danger);font-size:0.85rem;transition:var(--transition);" onclick="doLogout()" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
                 <button class="mobile-toggle" id="mobileToggleBtn" aria-label="Buka Menu">
                     <i class="fas fa-bars"></i>
                 </button>
@@ -2698,6 +2690,19 @@
                 </p>
                 <div id="accountListContainer"></div>
             </div>
+
+            <div id="pengaturanAkunCard" class="form-card" style="max-width:100%;margin-top:20px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <div id="settingUserAvatar" style="width:48px;height:48px;border-radius:50%;background:var(--primary-gradient);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:700;flex-shrink:0;">AH</div>
+                        <div>
+                            <div id="settingUserName" style="font-weight:700;font-size:0.95rem;color:var(--text-primary);">Ahmad Hidayat</div>
+                            <div id="settingUserEmail" style="font-size:0.75rem;color:var(--text-muted);">admin@juwita.com</div>
+                        </div>
+                    </div>
+                    <button class="checkout-btn" onclick="doLogout()" style="width:auto;padding:10px 24px;background:var(--danger-gradient);"><i class="fas fa-sign-out-alt"></i> Logout</button>
+                </div>
+            </div>
         </div>
 
     </div><!-- /main-container -->
@@ -3088,21 +3093,18 @@
         }
 
         function renderUserUI() {
-            const navBadge = document.getElementById("navUserBadge");
-            const navLogout = document.getElementById("navLogoutBtn");
-            const navAvatar = document.getElementById("navUserAvatar");
-            const navName = document.getElementById("navUserName");
-            const navEmail = document.getElementById("navUserEmail");
-            if (currentUser) {
+            const avatar = document.getElementById("settingUserAvatar");
+            const name = document.getElementById("settingUserName");
+            const email = document.getElementById("settingUserEmail");
+            const card = document.getElementById("pengaturanAkunCard");
+            if (currentUser && avatar && name && email) {
                 const initial = currentUser.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-                if (navBadge) navBadge.style.display = "flex";
-                if (navLogout) navLogout.style.display = "flex";
-                if (navAvatar) navAvatar.textContent = initial;
-                if (navName) navName.textContent = currentUser.name;
-                if (navEmail) navEmail.textContent = currentUser.username + "@juwita.com";
-            } else {
-                if (navBadge) navBadge.style.display = "none";
-                if (navLogout) navLogout.style.display = "none";
+                avatar.textContent = initial;
+                name.textContent = currentUser.name;
+                email.textContent = currentUser.username + "@juwita.com";
+                if (card) card.style.display = "";
+            } else if (card) {
+                card.style.display = "none";
             }
         }
 
