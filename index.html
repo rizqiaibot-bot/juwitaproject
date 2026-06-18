@@ -1963,6 +1963,12 @@
             </ul>
 
             <div class="nav-actions">
+                <div id="navUserBadge" style="display:none;align-items:center;gap:8px;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:var(--radius-xl);padding:5px 14px 5px 6px;font-size:0.78rem;font-weight:600;color:var(--text-primary);">
+                    <div class="user-avatar" id="navUserAvatar" style="width:30px;height:30px;border-radius:50%;background:var(--primary-gradient);color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;flex-shrink:0;">AH</div>
+                    <span class="user-name" id="navUserName" style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Ahmad Hidayat</span>
+                    <span class="user-role-tag" id="navUserRole" style="font-size:0.65rem;font-weight:500;color:var(--primary);background:var(--primary-light);padding:2px 8px;border-radius:10px;white-space:nowrap;">Manager</span>
+                </div>
+                <button id="navLogoutBtn" style="display:none;align-items:center;justify-content:center;background:var(--danger-light);border:none;width:34px;height:34px;border-radius:50%;cursor:pointer;color:var(--danger);font-size:0.85rem;transition:var(--transition);" onclick="doLogout()" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
                 <button class="mobile-toggle" id="mobileToggleBtn" aria-label="Buka Menu">
                     <i class="fas fa-bars"></i>
                 </button>
@@ -2073,12 +2079,18 @@
                     <h1>Point of Sale (POS)</h1>
                     <div class="page-header-desc">Kasir cepat untuk penjualan langsung pelanggan offline</div>
                 </div>
-                <div class="kasir-info" style="display:flex;align-items:center;gap:8px;background:var(--bg-primary);padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--border-color);min-width:0;flex-shrink:1;">
+                <div class="kasir-info" id="posKasirInfo" style="position:relative;display:flex;align-items:center;gap:8px;background:var(--bg-primary);padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--border-color);min-width:0;flex-shrink:1;cursor:pointer;transition:var(--transition);">
                     <i class="fas fa-user-circle" style="font-size:2rem;color:var(--primary);"></i>
                     <div>
-                        <div style="font-weight:700;color:var(--text-primary);line-height:1.2;">Ahmad Hidayat</div>
-                        <div style="font-size:0.72rem;color:var(--text-muted);">ahmad@juwita.com</div>
+                        <div class="kasir-name" style="font-weight:700;color:var(--text-primary);line-height:1.2;">Ahmad Hidayat</div>
+                        <div class="kasir-email" style="font-size:0.72rem;color:var(--text-muted);">ahmad@juwita.com</div>
                     </div>
+                    <i class="fas fa-chevron-down" style="font-size:0.65rem;color:var(--text-muted);margin-left:4px;transition:transform 0.2s;"></i>
+                    <div class="kasir-dropdown" id="posKasirDropdown" style="display:none;position:absolute;top:105%;right:0;background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius-md);box-shadow:0 12px 40px -8px rgba(15,23,42,0.15);min-width:200px;z-index:100;padding:6px;text-align:left;">
+                        <div style="padding:8px 12px;font-weight:700;font-size:0.82rem;color:var(--text-primary);border-bottom:1px solid var(--border-color);margin-bottom:4px;">Kasir Aktif</div>
+                        <button onclick="doLogout()" style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;border:none;background:none;color:var(--danger);font-size:0.78rem;font-weight:600;cursor:pointer;border-radius:var(--radius-sm);transition:var(--transition);"><i class="fas fa-sign-out-alt"></i> Keluar / Logout</button>
+                    </div>
+                    <div class="kasir-dropdown-backdrop" id="posKasirBackdrop" style="display:none;position:fixed;inset:0;z-index:99;" onclick="event.stopPropagation();toggleKasirDropdown()"></div>
                 </div>
             </div>
 
@@ -2913,8 +2925,8 @@
             updatePosTodayStats();
             renderCatalogTable();
             renderMonitorStok();
-            renderEmployeeGrid();
-            renderKontrakanGrid();
+            renderEmployees();
+            renderAssets();
             renderPricingTables();
         }
 
@@ -2965,16 +2977,52 @@
             };
             currentUser = user;
             localStorage.setItem("juwita_user", JSON.stringify(user));
+            renderUserUI();
             return user;
         }
 
         function doLogout() {
             currentUser = null;
             localStorage.removeItem("juwita_user");
+            renderUserUI();
             document.getElementById("loginOverlay").classList.add("active");
             document.getElementById("loginError").innerHTML = "";
             document.getElementById("loginUsername").value = "";
             document.getElementById("loginPassword").value = "";
+        }
+
+        function renderUserUI() {
+            const navBadge = document.getElementById("navUserBadge");
+            const navLogout = document.getElementById("navLogoutBtn");
+            const navAvatar = document.getElementById("navUserAvatar");
+            const navName = document.getElementById("navUserName");
+            const navRole = document.getElementById("navUserRole");
+            const posKasir = document.getElementById("posKasirInfo");
+            if (currentUser) {
+                const initial = currentUser.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                if (navBadge) navBadge.style.display = "flex";
+                if (navLogout) navLogout.style.display = "flex";
+                if (navAvatar) navAvatar.textContent = initial;
+                if (navName) navName.textContent = currentUser.name;
+                if (navRole) navRole.textContent = currentUser.role;
+                if (posKasir) {
+                    posKasir.querySelector(".kasir-name").textContent = currentUser.name;
+                    posKasir.querySelector(".kasir-email").textContent = currentUser.username + "@juwita.com";
+                }
+            } else {
+                if (navBadge) navBadge.style.display = "none";
+                if (navLogout) navLogout.style.display = "none";
+            }
+        }
+
+        function toggleKasirDropdown() {
+            const dropdown = document.getElementById("posKasirDropdown");
+            const backdrop = document.getElementById("posKasirBackdrop");
+            const chevron = document.querySelector("#posKasirInfo .fa-chevron-down");
+            const isOpen = dropdown.style.display === "block";
+            dropdown.style.display = isOpen ? "none" : "block";
+            backdrop.style.display = isOpen ? "none" : "block";
+            if (chevron) chevron.style.transform = isOpen ? "rotate(0deg)" : "rotate(180deg)";
         }
 
         function renderAccountCards() {
@@ -3316,12 +3364,19 @@
             }).join('');
         }
 
-        function deleteProduct(id) {
+        async function deleteProduct(id) {
             const idx = products.findIndex(p => p.id === id);
-            if (idx > -1) { products.splice(idx, 1);
+            if (idx > -1) {
+                const deleted = products.splice(idx, 1)[0];
+                sb.from('products').delete().eq('id', id).then(r => {
+                    if (r.error) console.warn("Supabase delete product error:", r.error.message);
+                });
                 renderCatalogTable();
                 renderProducts();
-                showToast("Produk dihapus"); }
+                renderPricingTables();
+                renderMonitorStok();
+                showToast("Produk dihapus");
+            }
         }
 
         // ============================================================
@@ -3436,12 +3491,15 @@
             }
         }
 
-        function editSellPrice(idx) {
+        async function editSellPrice(idx) {
             const p = products[idx];
             const newPrice = prompt(`Ubah harga jual ${p.name}:\n(Harga saat ini: Rp ${p.price.toLocaleString('id-ID')})`, p
                 .price);
             if (newPrice && !isNaN(newPrice) && parseInt(newPrice) > 0) {
                 p.price = parseInt(newPrice);
+                sb.from('products').update({ price: p.price }).eq('id', p.id).then(r => {
+                    if (r.error) console.warn("Supabase update price error:", r.error.message);
+                });
                 renderProducts();
                 renderPricingTables();
                 renderCatalogTable();
@@ -3472,13 +3530,16 @@
             }).join('');
         }
 
-        function applyMarkup() {
+        async function applyMarkup() {
             const sel = document.getElementById("markupCategory");
             const pct = parseInt(document.getElementById("markupPercent").value) || 0;
             if (!sel || !pct) { showToast("Isi persentase markup"); return; }
             const cat = sel.value;
             const filtered = cat === "Semua" ? products : products.filter(p => p.category === cat);
             filtered.forEach(p => { p.price = Math.round(p.price * (1 + pct / 100)); });
+            await Promise.all(filtered.map(p =>
+                sb.from('products').update({ price: p.price }).eq('id', p.id)
+            ));
             renderProducts();
             renderPricingTables();
             renderMarkupPreview();
@@ -3743,6 +3804,9 @@
             k.tagihan.push({ bulan, nominal: k.harga, tglBayar: now.toISOString().split("T")[0] });
             k.persentase = 100;
             k.status = "Sudah Bayar";
+            sb.from('kontrakan').update({ tagihan: k.tagihan, persentase: k.persentase, status: k.status }).eq('id', id).then(r => {
+                if (r.error) console.warn("Supabase update kontrakan error:", r.error.message);
+            });
             renderAssets();
             showToast(`Pembayaran ${k.pintu} dicatat`);
         }
@@ -3751,6 +3815,9 @@
             const idx = kontrakanData.findIndex(x => x.id === id);
             if (idx > -1 && confirm(`Hapus ${kontrakanData[idx].pintu}?`)) {
                 kontrakanData.splice(idx, 1);
+                sb.from('kontrakan').delete().eq('id', id).then(r => {
+                    if (r.error) console.warn("Supabase delete kontrakan error:", r.error.message);
+                });
                 renderAssets();
                 showToast("Unit dihapus");
             }
@@ -4315,6 +4382,15 @@
                 document.getElementById("navMenu").classList.toggle("active");
             });
 
+            // --- POS KASIR DROPDOWN ---
+            const kasirInfo = document.getElementById("posKasirInfo");
+            if (kasirInfo) {
+                kasirInfo.addEventListener("click", function(e) {
+                    e.stopPropagation();
+                    toggleKasirDropdown();
+                });
+            }
+
             // --- DROPDOWN TOGGLE (improved) ---
             document.querySelectorAll("#navMenu .dropdown > a").forEach(el => {
                 el.addEventListener("click", function(e) {
@@ -4502,6 +4578,7 @@
                     if (matched) {
                         currentUser = { username: matched.username, name: matched.name, role: matched.role, roleLabel: matched.roleLabel, menus: [...matched.menus] };
                         filterMenuByRole();
+                        renderUserUI();
                         document.getElementById("loginOverlay").classList.remove("active");
                     } else {
                         localStorage.removeItem("juwita_user");
@@ -4586,6 +4663,7 @@
         window.filterMenuByRole = filterMenuByRole;
         window.renderAccountCards = renderAccountCards;
         window.toggleAccountMenu = toggleAccountMenu;
+        window.toggleKasirDropdown = toggleKasirDropdown;
     </script>
 
     <!-- ===== LOGIN OVERLAY ===== -->
