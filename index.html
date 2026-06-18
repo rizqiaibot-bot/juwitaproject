@@ -2074,19 +2074,6 @@
                     <h1>Point of Sale (POS)</h1>
                     <div class="page-header-desc">Kasir cepat untuk penjualan langsung pelanggan offline</div>
                 </div>
-                <div class="kasir-info" id="posKasirInfo" style="position:relative;display:flex;align-items:center;gap:8px;background:var(--bg-primary);padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--border-color);min-width:0;flex-shrink:1;cursor:pointer;transition:var(--transition);">
-                    <i class="fas fa-user-circle" style="font-size:2rem;color:var(--primary);"></i>
-                    <div>
-                        <div class="kasir-name" style="font-weight:700;color:var(--text-primary);line-height:1.2;">Ahmad Hidayat</div>
-                        <div class="kasir-email" style="font-size:0.72rem;color:var(--text-muted);">ahmad@juwita.com</div>
-                    </div>
-                    <i class="fas fa-chevron-down" style="font-size:0.65rem;color:var(--text-muted);margin-left:4px;transition:transform 0.2s;"></i>
-                    <div class="kasir-dropdown" id="posKasirDropdown" style="display:none;position:absolute;top:105%;right:0;background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius-md);box-shadow:0 12px 40px -8px rgba(15,23,42,0.15);min-width:200px;z-index:100;padding:6px;text-align:left;">
-                        <div style="padding:8px 12px;font-weight:700;font-size:0.82rem;color:var(--text-primary);border-bottom:1px solid var(--border-color);margin-bottom:4px;">Kasir Aktif</div>
-                        <button onclick="doLogout()" style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;border:none;background:none;color:var(--danger);font-size:0.78rem;font-weight:600;cursor:pointer;border-radius:var(--radius-sm);transition:var(--transition);"><i class="fas fa-sign-out-alt"></i> Keluar / Logout</button>
-                    </div>
-                    <div class="kasir-dropdown-backdrop" id="posKasirBackdrop" style="display:none;position:fixed;inset:0;z-index:99;" onclick="event.stopPropagation();toggleKasirDropdown()"></div>
-                </div>
             </div>
 
             <div class="stats-row" id="posTodayStats" style="margin-bottom:16px;">
@@ -3104,7 +3091,6 @@
             const navAvatar = document.getElementById("navUserAvatar");
             const navName = document.getElementById("navUserName");
             const navRole = document.getElementById("navUserRole");
-            const posKasir = document.getElementById("posKasirInfo");
             if (currentUser) {
                 const initial = currentUser.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
                 if (navBadge) navBadge.style.display = "flex";
@@ -3112,24 +3098,10 @@
                 if (navAvatar) navAvatar.textContent = initial;
                 if (navName) navName.textContent = currentUser.name;
                 if (navRole) navRole.textContent = currentUser.role;
-                if (posKasir) {
-                    posKasir.querySelector(".kasir-name").textContent = currentUser.name;
-                    posKasir.querySelector(".kasir-email").textContent = currentUser.username + "@juwita.com";
-                }
             } else {
                 if (navBadge) navBadge.style.display = "none";
                 if (navLogout) navLogout.style.display = "none";
             }
-        }
-
-        function toggleKasirDropdown() {
-            const dropdown = document.getElementById("posKasirDropdown");
-            const backdrop = document.getElementById("posKasirBackdrop");
-            const chevron = document.querySelector("#posKasirInfo .fa-chevron-down");
-            const isOpen = dropdown.style.display === "block";
-            dropdown.style.display = isOpen ? "none" : "block";
-            backdrop.style.display = isOpen ? "none" : "block";
-            if (chevron) chevron.style.transform = isOpen ? "rotate(0deg)" : "rotate(180deg)";
         }
 
         function renderAccountCards() {
@@ -4831,15 +4803,6 @@
                 document.getElementById("navMenu").classList.toggle("active");
             });
 
-            // --- POS KASIR DROPDOWN ---
-            const kasirInfo = document.getElementById("posKasirInfo");
-            if (kasirInfo) {
-                kasirInfo.addEventListener("click", function(e) {
-                    e.stopPropagation();
-                    toggleKasirDropdown();
-                });
-            }
-
             // --- DROPDOWN TOGGLE (improved) ---
             document.querySelectorAll("#navMenu .dropdown > a").forEach(el => {
                 el.addEventListener("click", function(e) {
@@ -5149,7 +5112,6 @@
         window.filterMenuByRole = filterMenuByRole;
         window.renderAccountCards = renderAccountCards;
         window.toggleAccountMenu = toggleAccountMenu;
-        window.toggleKasirDropdown = toggleKasirDropdown;
     </script>
 
     <!-- ===== LOGIN OVERLAY ===== -->
