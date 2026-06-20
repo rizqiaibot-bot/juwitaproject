@@ -2395,8 +2395,6 @@
                         <div class="form-group"><label>Tipe Unit</label><select id="kTipe" class="form-control"><option>Standar</option><option>Khusus</option><option>Ruko</option></select></div>
                         <div class="form-group"><label>Tgl Jatuh Tempo</label><input id="kTempo" type="number" class="form-control" placeholder="20" min="1" max="31" /></div>
                         <div class="form-group"><label>Kontak Penyewa</label><input id="kKontak" class="form-control" placeholder="0812xxxx" /></div>
-                        <div class="form-group"><label>Listrik/bln</label><input id="kListrik" type="number" class="form-control" placeholder="0" value="0" /></div>
-                        <div class="form-group"><label>Air/bln</label><input id="kAir" type="number" class="form-control" placeholder="0" value="0" /></div>
                         <div class="form-group"><label>Deposit</label><input id="kDeposit" type="number" class="form-control" placeholder="500000" value="500000" /></div>
                         <div class="form-group"><label>Status</label><select id="kStatus" class="form-control"><option>Terisi</option><option>Vacant</option></select></div>
                     </div>
@@ -4041,7 +4039,6 @@
                                     <div class="asset-info-row"><span>Tipe Unit</span><span>${k.tipe}</span></div>
                                     <div class="asset-info-row"><span>Harga Sewa</span><span>Rp ${k.harga.toLocaleString('id-ID')}</span></div>
                                     ${isVacant ? '' : `
-                                        <div class="asset-info-row"><span>Listrik + Air</span><span>Rp ${(k.listrik + k.air).toLocaleString('id-ID')}</span></div>
                                         <div class="asset-info-row"><span>Kontak</span><span>${k.kontak}</span></div>
                                     `}
                                     <div class="asset-info-row"><span>Progress Pembayaran</span><span>${k.persentase}%</span></div>
@@ -4151,8 +4148,6 @@
             ["kPintu", "kPenyewa", "kKontak"].forEach(id => { const el = document.getElementById(id); if (el) el.value =
                 ""; });
             document.getElementById("kHarga").value = "";
-            document.getElementById("kListrik").value = "0";
-            document.getElementById("kAir").value = "0";
             document.getElementById("kDeposit").value = "500000";
             document.getElementById("kTempo").value = "20";
             document.getElementById("kTipe").value = "Standar";
@@ -4169,8 +4164,6 @@
             document.getElementById("kPenyewa").value = k.penyewa === "-" ? "" : k.penyewa;
             document.getElementById("kKontak").value = k.kontak === "-" ? "" : k.kontak;
             document.getElementById("kHarga").value = k.harga;
-            document.getElementById("kListrik").value = k.listrik;
-            document.getElementById("kAir").value = k.air;
             document.getElementById("kDeposit").value = k.deposit;
             document.getElementById("kTempo").value = k.tempo;
             document.getElementById("kTipe").value = k.tipe;
@@ -4183,18 +4176,17 @@
             const penyewa = document.getElementById("kPenyewa").value.trim() || "-";
             const harga = parseInt(document.getElementById("kHarga").value) || 0;
             if (!pintu || !harga) { showToast("Isi nama pintu dan harga sewa"); return; }
+            if (!editingKontrakanId && (!penyewa || penyewa === "-")) { showToast("Isi nama penyewa"); return; }
             const tipe = document.getElementById("kTipe").value;
             const tempo = parseInt(document.getElementById("kTempo").value) || 20;
             const kontak = document.getElementById("kKontak").value.trim() || "-";
-            const listrik = parseInt(document.getElementById("kListrik").value) || 0;
-            const air = parseInt(document.getElementById("kAir").value) || 0;
             const deposit = parseInt(document.getElementById("kDeposit").value) || 0;
             const isVacant = document.getElementById("kStatus").value === "Vacant";
 
             if (editingKontrakanId) {
                 const k = kontrakanData.find(x => x.id === editingKontrakanId);
                 if (k) {
-                    Object.assign(k, { pintu, penyewa, harga, tipe, tempo, kontak, listrik, air, deposit,
+                    Object.assign(k, { pintu, penyewa, harga, tipe, tempo, kontak, deposit,
                         status: isVacant ? "Vacant" : "Belum Bayar" });
                     sb.from('kontrakan').update(k).eq('id', editingKontrakanId).then(r => {
                         if (r.error) console.warn("Supabase update kontrakan error:", r.error.message);
@@ -4203,7 +4195,7 @@
             } else {
                 const newId = "K" + String(kontrakanData.length + 1).padStart(3, "0");
                 const newK = {
-                    id: newId, pintu, penyewa, tipe, harga, tempo, kontak, listrik, air, deposit,
+                    id: newId, pintu, penyewa, tipe, harga, tempo, kontak, deposit,
                     tglMasuk: new Date().toISOString().split("T")[0], catatan: "", persentase: 0,
                     status: isVacant ? "Vacant" : "Belum Bayar", tagihan: []
                 };
