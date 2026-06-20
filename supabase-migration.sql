@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS orders (
   payStatus TEXT NOT NULL DEFAULT 'Lunas',
   wmsStatus TEXT NOT NULL DEFAULT 'Selesai',
   courier TEXT DEFAULT 'Self-Pickup',
-  resi TEXT DEFAULT '-'
+  resi TEXT DEFAULT '-',
+  items JSONB DEFAULT '[]'::jsonb
 );
 
 -- 3. TABEL KARYAWAN

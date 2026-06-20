@@ -4541,6 +4541,11 @@
         // ============================================================
         function processCheckout() {
             if (cart.length === 0) { showToast("Keranjang masih kosong"); return; }
+            for (const item of cart) {
+                const prod = products.find(p => p.id === item.id);
+                if (!prod) { showToast(`Produk "${item.name}" tidak ditemukan`); return; }
+                if (prod.stock < item.quantity) { showToast(`Stok ${prod.name} tidak cukup (tersedia: ${prod.stock})`); return; }
+            }
             let subtotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
             let disc = Math.min(parseInt(document.getElementById("discountInput").value) || 0, subtotal);
             let total = subtotal - disc;
@@ -4564,18 +4569,20 @@
                 methodLabel = method;
             }
 
-            const orderId = "ORD-" + new Date().toISOString().slice(0, 10).replace(/-/g, "") + "-" + String(ordersData
-                .length + 1).padStart(2, "0");
+            const todayStamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+            const todayCount = ordersData.filter(o => o.orderId && o.orderId.startsWith("ORD-" + todayStamp)).length;
+            const orderId = "ORD-" + todayStamp + "-" + String(todayCount + 1).padStart(2, "0");
             const now = new Date();
             const dateStr = now.toISOString().slice(0, 10) + " " + now.toTimeString().slice(0, 5);
             const channel = method === "QRIS" || method === "EDC" || method === "Split" ? "POS2" : "POS1";
 
+            const items = cart.map(i => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity, subtotal: i.price * i.quantity }));
             ordersData.unshift({ orderId, date: dateStr, channel, customer, total, payStatus: "Lunas",
-                wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-" });
+                wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-", items });
 
             // Sync order ke Supabase
             sb.from('orders').insert({ orderId, date: dateStr, channel, customer, total, payStatus: "Lunas",
-                wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-" }).then(r => {
+                wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-", items }).then(r => {
                 if (r.error) console.warn("Supabase insert order error:", r.error.message);
             });
 
@@ -4614,6 +4621,7 @@
 
             document.getElementById("checkoutModal").classList.add("active");
             cart = [];
+            document.getElementById("discountInput").value = "0";
             updateCartUI();
             document.getElementById("customerName").value = "";
             document.getElementById("splitToggle").checked = false;
@@ -4982,7 +4990,7 @@
                     const val = this.value.trim();
                     if (!val) return;
                     let prod = products.find(p => p.id === parseInt(val)) || products.find(p => p.name
-                        .toLowerCase() === val.toLowerCase());
+                        .toLowerCase() === val.toLowerCase()) || products.find(p => p.barcode && p.barcode === val);
                     if (!prod) {
                         const matches = products.filter(p => p.name.toLowerCase().includes(val.toLowerCase()));
                         if (matches.length > 0) prod = matches[0];
