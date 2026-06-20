@@ -2365,7 +2365,7 @@
         <div id="page-kontrakan" class="page-content">
             <div class="page-header">
                 <div>
-                    <h1>Manajemen Aset Kontrakan</h1>
+                    <h1>Manajemen Kontrakan</h1>
                     <div class="page-header-desc">Pantau keterisian sewa, pembayaran bulanan, dan jatuh tempo pintu kontrakan</div>
                 </div>
                 <button class="checkout-btn" onclick="openAddKontrakan()" style="width:auto;padding:10px 24px;"><i class="fas fa-plus"></i> Tambah Unit</button>
@@ -2395,8 +2395,8 @@
                         <div class="form-group"><label>Tipe Unit</label><select id="kTipe" class="form-control"><option>Standar</option><option>Khusus</option><option>Ruko</option></select></div>
                         <div class="form-group"><label>Tgl Jatuh Tempo</label><input id="kTempo" type="number" class="form-control" placeholder="20" min="1" max="31" /></div>
                         <div class="form-group"><label>Kontak Penyewa</label><input id="kKontak" class="form-control" placeholder="0812xxxx" /></div>
-                        <div class="form-group"><label>Listrik/bln</label><input id="kListrik" type="number" class="form-control" placeholder="150000" value="150000" /></div>
-                        <div class="form-group"><label>Air/bln</label><input id="kAir" type="number" class="form-control" placeholder="50000" value="50000" /></div>
+                        <div class="form-group"><label>Listrik/bln</label><input id="kListrik" type="number" class="form-control" placeholder="0" value="0" /></div>
+                        <div class="form-group"><label>Air/bln</label><input id="kAir" type="number" class="form-control" placeholder="0" value="0" /></div>
                         <div class="form-group"><label>Deposit</label><input id="kDeposit" type="number" class="form-control" placeholder="500000" value="500000" /></div>
                         <div class="form-group"><label>Status</label><select id="kStatus" class="form-control"><option>Terisi</option><option>Vacant</option></select></div>
                     </div>
@@ -2789,7 +2789,25 @@
         // ============================================================
         const SUPABASE_URL = "https://vivgzxitlikpgnppgeqn.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpdmd6eGl0bGlrcGducHBnZXFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3NTI4MjAsImV4cCI6MjA5NzMyODgyMH0.BpLLNrSnuufGLOb21zKp-f6luz7e3olpOkx7SNazCW8";
-        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        let sb = null;
+        try {
+            if (typeof supabase !== 'undefined') {
+                sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+            }
+        } catch (e) {
+            console.warn("Supabase client init failed:", e.message);
+        }
+        if (!sb) {
+            console.warn("Supabase SDK not available - running in offline mode");
+            const noopPromise = Promise.resolve({ data: null, error: { message: "offline" } });
+            const noopThenable = { then: (cb) => { cb({ data: null, error: { message: "offline" } }); return noopThenable; }, catch: () => noopThenable };
+            const builder = new Proxy(function(){}, {
+                get: () => () => builder,
+                apply: () => noopThenable
+            });
+            builder.then = (cb) => { cb({ data: null, error: { message: "offline" } }); return noopPromise; };
+            sb = { from: () => builder };
+        }
 
         // ============================================================
         // DATA
@@ -2879,42 +2897,57 @@
         ];
 
         let kontrakanData = [
-            { id: "K001", pintu: "Pintu A1", penyewa: "Rendi Pratama", tipe: "Standar", harga: 850000, tempo: 20,
-                kontak: "0812-3456-7890", listrik: 150000, air: 50000, deposit: 500000, tglMasuk: "2024-01-15",
+            { id: "K001", pintu: "Pintu 01", penyewa: "Rendi Pratama", tipe: "Standar", harga: 1000000, tempo: 20,
+                kontak: "0812-3456-7890", listrik: 0, air: 0, deposit: 500000, tglMasuk: "2024-01-15",
                 catatan: "Bayar rutin", persentase: 75, status: "Sudah Bayar",
-                tagihan: [{ bulan: "Juni 2026", nominal: 850000, tglBayar: "2026-06-18" }, { bulan: "Mei 2026",
-                    nominal: 850000, tglBayar: "2026-05-20" }, { bulan: "April 2026", nominal: 850000,
+                tagihan: [{ bulan: "Juni 2026", nominal: 1000000, tglBayar: "2026-06-18" }, { bulan: "Mei 2026",
+                    nominal: 1000000, tglBayar: "2026-05-20" }, { bulan: "April 2026", nominal: 1000000,
                     tglBayar: "2026-04-19" }] },
-            { id: "K002", pintu: "Pintu A2", penyewa: "Suprapto", tipe: "Standar", harga: 850000, tempo: 18,
-                kontak: "0821-9876-5432", listrik: 180000, air: 60000, deposit: 500000, tglMasuk: "2024-03-01",
+            { id: "K002", pintu: "Pintu 02", penyewa: "Suprapto", tipe: "Standar", harga: 1000000, tempo: 18,
+                kontak: "0821-9876-5432", listrik: 0, air: 0, deposit: 500000, tglMasuk: "2024-03-01",
                 catatan: "Sering telat", persentase: 90, status: "Tunggakan 2 Hari",
-                tagihan: [{ bulan: "Juni 2026", nominal: 850000, tglBayar: null }, { bulan: "Mei 2026",
-                    nominal: 850000, tglBayar: "2026-05-22" }, { bulan: "April 2026", nominal: 850000,
+                tagihan: [{ bulan: "Juni 2026", nominal: 1000000, tglBayar: null }, { bulan: "Mei 2026",
+                    nominal: 1000000, tglBayar: "2026-05-22" }, { bulan: "April 2026", nominal: 1000000,
                     tglBayar: "2026-04-18" }] },
-            { id: "K003", pintu: "Pintu A3", penyewa: "-", tipe: "Standar", harga: 850000, tempo: 15, kontak: "-",
+            { id: "K003", pintu: "Pintu 03", penyewa: "-", tipe: "Standar", harga: 1000000, tempo: 15, kontak: "-",
                 listrik: 0, air: 0, deposit: 0, tglMasuk: "-", catatan: "Dalam perbaikan", persentase: 0,
                 status: "Vacant", tagihan: [] },
-            { id: "K004", pintu: "Pintu B1", penyewa: "Siti Nurhaliza", tipe: "Khusus", harga: 1200000, tempo: 10,
-                kontak: "0856-1234-5678", listrik: 250000, air: 80000, deposit: 1000000, tglMasuk: "2025-06-01",
+            { id: "K004", pintu: "Pintu 04", penyewa: "Siti Nurhaliza", tipe: "Khusus", harga: 1000000, tempo: 10,
+                kontak: "0856-1234-5678", listrik: 0, air: 0, deposit: 1000000, tglMasuk: "2025-06-01",
                 catatan: "Penyewa lama", persentase: 100, status: "Sudah Bayar",
-                tagihan: [{ bulan: "Juni 2026", nominal: 1200000, tglBayar: "2026-06-09" }, { bulan: "Mei 2026",
-                    nominal: 1200000, tglBayar: "2026-05-10" }] },
-            { id: "K005", pintu: "Pintu B2", penyewa: "Ahmad Fauzi", tipe: "Khusus", harga: 1200000, tempo: 25,
-                kontak: "0877-6543-2109", listrik: 200000, air: 70000, deposit: 1000000, tglMasuk: "2025-08-15",
+                tagihan: [{ bulan: "Juni 2026", nominal: 1000000, tglBayar: "2026-06-09" }, { bulan: "Mei 2026",
+                    nominal: 1000000, tglBayar: "2026-05-10" }] },
+            { id: "K005", pintu: "Pintu 05", penyewa: "Ahmad Fauzi", tipe: "Khusus", harga: 1000000, tempo: 25,
+                kontak: "0877-6543-2109", listrik: 0, air: 0, deposit: 1000000, tglMasuk: "2025-08-15",
                 catatan: "-", persentase: 40, status: "Tunggakan 5 Hari",
-                tagihan: [{ bulan: "Juni 2026", nominal: 1200000, tglBayar: null }, { bulan: "Mei 2026",
-                    nominal: 1200000, tglBayar: null }, { bulan: "April 2026", nominal: 1200000,
+                tagihan: [{ bulan: "Juni 2026", nominal: 1000000, tglBayar: null }, { bulan: "Mei 2026",
+                    nominal: 1000000, tglBayar: null }, { bulan: "April 2026", nominal: 1000000,
                     tglBayar: "2026-04-26" }] },
-            { id: "K006", pintu: "Ruko C1", penyewa: "CV Makmur Jaya", tipe: "Ruko", harga: 2500000, tempo: 5,
-                kontak: "021-555-1234", listrik: 500000, air: 150000, deposit: 2000000, tglMasuk: "2023-01-01",
+            { id: "K006", pintu: "Pintu 06", penyewa: "CV Makmur Jaya", tipe: "Ruko", harga: 1000000, tempo: 5,
+                kontak: "021-555-1234", listrik: 0, air: 0, deposit: 2000000, tglMasuk: "2023-01-01",
                 catatan: "Komersial", persentase: 100, status: "Sudah Bayar",
-                tagihan: [{ bulan: "Juni 2026", nominal: 2500000, tglBayar: "2026-06-04" }, { bulan: "Mei 2026",
-                    nominal: 2500000, tglBayar: "2026-05-05" }] },
-            { id: "K007", pintu: "Pintu C1", penyewa: "Dewi Sartika", tipe: "Standar", harga: 850000, tempo: 22,
-                kontak: "0813-4567-8901", listrik: 130000, air: 45000, deposit: 500000, tglMasuk: "2025-11-01",
-                catatan: "-", persentase: 60, status: "Belum Bayar", tagihan: [{ bulan: "Juni 2026", nominal: 850000,
+                tagihan: [{ bulan: "Juni 2026", nominal: 1000000, tglBayar: "2026-06-04" }, { bulan: "Mei 2026",
+                    nominal: 1000000, tglBayar: "2026-05-05" }] },
+            { id: "K007", pintu: "Pintu 07", penyewa: "Dewi Sartika", tipe: "Standar", harga: 1000000, tempo: 22,
+                kontak: "0813-4567-8901", listrik: 0, air: 0, deposit: 500000, tglMasuk: "2025-11-01",
+                catatan: "-", persentase: 60, status: "Belum Bayar", tagihan: [{ bulan: "Juni 2026", nominal: 1000000,
                     tglBayar: null }] },
-            { id: "K008", pintu: "Pintu C2", penyewa: "-", tipe: "Standar", harga: 850000, tempo: 28, kontak: "-",
+            { id: "K008", pintu: "Pintu 08", penyewa: "-", tipe: "Standar", harga: 1000000, tempo: 28, kontak: "-",
+                listrik: 0, air: 0, deposit: 0, tglMasuk: "-", catatan: "Belum ada penyewa", persentase: 0,
+                status: "Vacant", tagihan: [] },
+            { id: "K009", pintu: "Pintu 09", penyewa: "-", tipe: "Standar", harga: 1000000, tempo: 20, kontak: "-",
+                listrik: 0, air: 0, deposit: 0, tglMasuk: "-", catatan: "Belum ada penyewa", persentase: 0,
+                status: "Vacant", tagihan: [] },
+            { id: "K010", pintu: "Pintu 10", penyewa: "-", tipe: "Standar", harga: 1000000, tempo: 20, kontak: "-",
+                listrik: 0, air: 0, deposit: 0, tglMasuk: "-", catatan: "Belum ada penyewa", persentase: 0,
+                status: "Vacant", tagihan: [] },
+            { id: "K011", pintu: "Pintu 11", penyewa: "-", tipe: "Standar", harga: 1000000, tempo: 20, kontak: "-",
+                listrik: 0, air: 0, deposit: 0, tglMasuk: "-", catatan: "Belum ada penyewa", persentase: 0,
+                status: "Vacant", tagihan: [] },
+            { id: "K012", pintu: "Pintu 12", penyewa: "-", tipe: "Standar", harga: 1000000, tempo: 20, kontak: "-",
+                listrik: 0, air: 0, deposit: 0, tglMasuk: "-", catatan: "Belum ada penyewa", persentase: 0,
+                status: "Vacant", tagihan: [] },
+            { id: "K013", pintu: "Pintu 13", penyewa: "-", tipe: "Standar", harga: 1000000, tempo: 20, kontak: "-",
                 listrik: 0, air: 0, deposit: 0, tglMasuk: "-", catatan: "Belum ada penyewa", persentase: 0,
                 status: "Vacant", tagihan: [] }
         ];
@@ -3000,6 +3033,9 @@
                 if (wRecRes.data && wRecRes.data.length > 0) warehouseReceiving = wRecRes.data;
                 if (wRackRes.data && wRackRes.data.length > 0) warehouseRacks = wRackRes.data;
                 if (wOpRes.data && wOpRes.data.length > 0) warehouseOpname = wOpRes.data;
+                if (wRecRes.error || wRackRes.error || wOpRes.error) {
+                    seedWarehouseData();
+                }
                 console.log("Supabase: data loaded");
             } catch (err) {
                 console.warn("Supabase: using local data fallback", err.message);
@@ -4115,8 +4151,8 @@
             ["kPintu", "kPenyewa", "kKontak"].forEach(id => { const el = document.getElementById(id); if (el) el.value =
                 ""; });
             document.getElementById("kHarga").value = "";
-            document.getElementById("kListrik").value = "150000";
-            document.getElementById("kAir").value = "50000";
+            document.getElementById("kListrik").value = "0";
+            document.getElementById("kAir").value = "0";
             document.getElementById("kDeposit").value = "500000";
             document.getElementById("kTempo").value = "20";
             document.getElementById("kTipe").value = "Standar";
