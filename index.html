@@ -2368,7 +2368,7 @@
                     <h1>Manajemen Kontrakan</h1>
                     <div class="page-header-desc">Pantau keterisian sewa, pembayaran bulanan, dan jatuh tempo pintu kontrakan</div>
                 </div>
-                <button class="checkout-btn" onclick="openAddKontrakan()" style="width:auto;padding:10px 24px;"><i class="fas fa-plus"></i> Tambah Unit</button>
+                <button class="checkout-btn" onclick="openAddKontrakan()" style="width:auto;padding:10px 24px;"><i class="fas fa-plus"></i> Penyewa</button>
             </div>
             <div class="stats-row" id="kontrakanStats"></div>
             <div class="filter-tabs" id="kontrakanFilter">
@@ -2384,7 +2384,7 @@
         <div id="kontrakanModal" class="modal-overlay" onclick="if(event.target===this)closeKontrakanModal()">
             <div class="modal-card" style="max-width:95vw;text-align:left;padding:0;overflow:hidden;">
                 <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border-color);">
-                    <h2 id="kontrakanModalTitle" style="margin:0;font-size:1.1rem;">Tambah Unit Kontrakan</h2>
+                    <h2 id="kontrakanModalTitle" style="margin:0;font-size:1.1rem;">Tambah Penyewa</h2>
                     <button onclick="closeKontrakanModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-muted);">&times;</button>
                 </div>
                 <div style="padding:20px 24px;">
@@ -4144,7 +4144,7 @@
         // ============================================================
         function openAddKontrakan() {
             editingKontrakanId = null;
-            document.getElementById("kontrakanModalTitle").textContent = "Tambah Unit Kontrakan";
+            document.getElementById("kontrakanModalTitle").textContent = "Tambah Penyewa";
             ["kPintu", "kPenyewa", "kKontak"].forEach(id => { const el = document.getElementById(id); if (el) el.value =
                 ""; });
             document.getElementById("kHarga").value = "";
