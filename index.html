@@ -1951,6 +1951,7 @@
                         <li data-page="kontrakan"><a href="#"><i class="fas fa-home"></i> Kontrakan</a></li>
                         <li data-page="peternakan-lele"><a href="#"><i class="fas fa-fish"></i> Peternakan Lele</a></li>
                         <li data-page="kandang-ayam"><a href="#"><i class="fas fa-egg"></i> Kandang Ayam</a></li>
+                        <li data-page="pecel-lele"><a href="#"><i class="fas fa-fish"></i> Pecel Lele</a></li>
                     </ul>
                 </li>
 
@@ -2437,6 +2438,115 @@
                 </div>
             </div>
             <div class="grid-assets" id="ayamGrid"></div>
+        </div>
+
+        <!-- ===== HALAMAN PECEL LELE ===== -->
+        <div id="page-pecel-lele" class="page-content">
+            <div class="page-header">
+                <div>
+                    <h1>Manajemen Usaha Pecel Lele</h1>
+                    <div class="page-header-desc">Pantau stok bahan baku, menu, pemasukan &amp; pengeluaran harian</div>
+                </div>
+                <div style="display:flex;gap:8px;">
+                    <button class="checkout-btn" onclick="openPecelLeleExpense()" style="width:auto;padding:10px 24px;background:var(--danger-gradient);"><i class="fas fa-minus-circle"></i> Pengeluaran</button>
+                    <button class="checkout-btn" onclick="openPecelLeleIncome()" style="width:auto;padding:10px 24px;"><i class="fas fa-plus-circle"></i> Pemasukan</button>
+                </div>
+            </div>
+            <div class="stats-row" id="pecelLeleStats"></div>
+            <div class="filter-tabs" id="pecelLeleTabs">
+                <button class="filter-tab active" data-tab="stok">Stok Bahan Baku</button>
+                <button class="filter-tab" data-tab="menu">Menu &amp; Harga</button>
+                <button class="filter-tab" data-tab="transaksi">Riwayat Transaksi</button>
+            </div>
+            <div id="pecelLeleStokSection" class="grid-assets"></div>
+            <div id="pecelLeleMenuSection" style="display:none;">
+                <div class="table-wrapper"><table><thead><tr><th>MENU</th><th>KATEGORI</th><th>HARGA JUAL</th><th>HPP</th><th>STATUS</th><th>AKSI</th></tr></thead><tbody id="pecelLeleMenuBody"></tbody></table></div>
+                <button class="btn-secondary" onclick="openPecelLeleMenuForm()" style="margin-top:12px;"><i class="fas fa-plus"></i> Tambah Menu</button>
+            </div>
+            <div id="pecelLeleTransaksiSection" style="display:none;">
+                <div class="form-card" style="margin-bottom:16px;">
+                    <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;">
+                        <div class="form-group" style="min-width:130px;"><label>Filter Tipe</label><select id="pecelLeleTrxFilter" class="form-control" onchange="renderPecelLele()"><option value="all">Semua</option><option value="pemasukan">Pemasukan</option><option value="pengeluaran">Pengeluaran</option></select></div>
+                        <div class="form-group" style="min-width:130px;"><label>Dari Tanggal</label><input type="date" id="pecelLeleDateFrom" class="form-control" onchange="renderPecelLele()" /></div>
+                        <div class="form-group" style="min-width:130px;"><label>Sampai Tanggal</label><input type="date" id="pecelLeleDateTo" class="form-control" onchange="renderPecelLele()" /></div>
+                    </div>
+                </div>
+                <div class="table-wrapper"><table><thead><tr><th>TANGGAL</th><th>TIPE</th><th>ITEM</th><th>QTY</th><th>HARGA</th><th>TOTAL</th><th>CATATAN</th><th>AKSI</th></tr></thead><tbody id="pecelLeleTrxBody"></tbody></table></div>
+            </div>
+        </div>
+
+        <!-- ===== PECEL LELE MODAL ===== -->
+        <div id="pecelLeleModal" class="modal-overlay" onclick="if(event.target===this)closePecelLeleModal()">
+            <div class="modal-card" style="max-width:95vw;text-align:left;padding:0;overflow:hidden;">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border-color);">
+                    <h2 id="pecelLeleModalTitle" style="margin:0;font-size:1.1rem;">Tambah Transaksi</h2>
+                    <button onclick="closePecelLeleModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-muted);">&times;</button>
+                </div>
+                <div style="padding:20px 24px;">
+                    <input type="hidden" id="plModalMode" />
+                    <input type="hidden" id="plEditId" />
+                    <div class="form-grid">
+                        <div class="form-group"><label>Tipe</label><select id="plTipe" class="form-control"><option value="pemasukan">Pemasukan</option><option value="pengeluaran">Pengeluaran</option></select></div>
+                        <div class="form-group"><label>Tanggal</label><input type="date" id="plTanggal" class="form-control" /></div>
+                        <div class="form-group"><label>Item</label><input id="plItem" class="form-control" placeholder="Contoh: Pecel Lele Biasa, Beli Lele" /></div>
+                        <div class="form-group"><label>Qty</label><input type="number" id="plQty" class="form-control" placeholder="1" min="1" /></div>
+                        <div class="form-group"><label>Harga Satuan (Rp)</label><input type="number" id="plHarga" class="form-control" placeholder="15000" /></div>
+                        <div class="form-group"><label>Total (Rp)</label><input type="number" id="plTotal" class="form-control" placeholder="15000" readonly /></div>
+                        <div class="form-group form-grid-full"><label>Catatan</label><input id="plCatatan" class="form-control" placeholder="Catatan tambahan..." /></div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:12px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border-color);">
+                    <button class="btn-secondary" onclick="closePecelLeleModal()">Batal</button>
+                    <button class="checkout-btn" onclick="savePecelLeleTrx()" style="width:auto;padding:10px 28px;"><i class="fas fa-save"></i> Simpan</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== PECEL LELE STOK MODAL ===== -->
+        <div id="pecelLeleStokModal" class="modal-overlay" onclick="if(event.target===this)closePecelLeleStokModal()">
+            <div class="modal-card" style="max-width:95vw;text-align:left;padding:0;overflow:hidden;">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border-color);">
+                    <h2 id="pecelLeleStokModalTitle" style="margin:0;font-size:1.1rem;">Update Stok</h2>
+                    <button onclick="closePecelLeleStokModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-muted);">&times;</button>
+                </div>
+                <div style="padding:20px 24px;">
+                    <input type="hidden" id="plStokId" />
+                    <div class="form-grid">
+                        <div class="form-group"><label>Nama Bahan</label><input id="plStokNama" class="form-control" readonly /></div>
+                        <div class="form-group"><label>Stok Saat Ini</label><input id="plStokCurrent" class="form-control" readonly style="font-weight:bold;color:var(--primary);" /></div>
+                        <div class="form-group"><label>Tambah / Kurang</label><input type="number" id="plStokDelta" class="form-control" placeholder="+10 untuk tambah, -5 untuk kurang" /></div>
+                        <div class="form-group form-grid-full"><label>Catatan</label><input id="plStokCatatan" class="form-control" placeholder="Contoh: Beli dari pasar" /></div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:12px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border-color);">
+                    <button class="btn-secondary" onclick="closePecelLeleStokModal()">Batal</button>
+                    <button class="checkout-btn" onclick="savePecelLeleStok()" style="width:auto;padding:10px 28px;"><i class="fas fa-save"></i> Update Stok</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== PECEL LELE MENU MODAL ===== -->
+        <div id="pecelLeleMenuModal" class="modal-overlay" onclick="if(event.target===this)closePecelLeleMenuModal()">
+            <div class="modal-card" style="max-width:95vw;text-align:left;padding:0;overflow:hidden;">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border-color);">
+                    <h2 id="pecelLeleMenuModalTitle" style="margin:0;font-size:1.1rem;">Tambah Menu</h2>
+                    <button onclick="closePecelLeleMenuModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-muted);">&times;</button>
+                </div>
+                <div style="padding:20px 24px;">
+                    <input type="hidden" id="plMenuEditId" />
+                    <div class="form-grid">
+                        <div class="form-group"><label>Nama Menu</label><input id="plMenuNama" class="form-control" placeholder="Contoh: Pecel Lele Biasa" /></div>
+                        <div class="form-group"><label>Kategori</label><select id="plMenuKategori" class="form-control"><option>Lele Goreng</option><option>Tahu Tempe</option><option>Ayam</option><option>Minuman</option><option>Lainnya</option></select></div>
+                        <div class="form-group"><label>Harga Jual (Rp)</label><input type="number" id="plMenuHarga" class="form-control" placeholder="15000" /></div>
+                        <div class="form-group"><label>HPP (Rp)</label><input type="number" id="plMenuHpp" class="form-control" placeholder="7000" /></div>
+                        <div class="form-group"><label>Status</label><select id="plMenuStatus" class="form-control"><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option></select></div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:12px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border-color);">
+                    <button class="btn-secondary" onclick="closePecelLeleMenuModal()">Batal</button>
+                    <button class="checkout-btn" onclick="savePecelLeleMenu()" style="width:auto;padding:10px 28px;"><i class="fas fa-save"></i> Simpan</button>
+                </div>
+            </div>
         </div>
 
         <!-- ===== PLACEHOLDER HALAMAN LAINNYA ===== -->
@@ -2975,9 +3085,45 @@
                 kesehatan: "Dalam Pengawasan (92%)" }
         ];
 
+        // --- PECEL LELE DATA ---
+        const pecelLeleStok = [
+            { id: "B01", nama: "Lele Segar", satuan: "Kg", stok: 25, minStok: 5, status: "aman", ikon: "fa-fish" },
+            { id: "B02", nama: "Tahu Putih", satuan: "Pcs", stok: 80, minStok: 30, status: "aman", ikon: "fa-cubes" },
+            { id: "B03", nama: "Tempe", satuan: "Pcs", stok: 12, minStok: 20, status: "kritis", ikon: "fa-square" },
+            { id: "B04", nama: "Sambal Terasi", satuan: "Porsi", stok: 45, minStok: 20, status: "aman", ikon: "fa-pepper-hot" },
+            { id: "B05", nama: "Lalapan (Timun, Kemangi, Kol)", satuan: "Porsi", stok: 55, minStok: 25, status: "aman", ikon: "fa-leaf" },
+            { id: "B06", nama: "Minyak Goreng", satuan: "Liter", stok: 8, minStok: 5, status: "aman", ikon: "fa-oil-can" },
+            { id: "B07", nama: "Tepung Bumbu", satuan: "Kg", stok: 3, minStok: 5, status: "kritis", ikon: "fa-wheat-awn" },
+            { id: "B08", nama: "Bumbu Racik", satuan: "Pcs", stok: 15, minStok: 10, status: "aman", ikon: "fa-mortar-pestle" },
+            { id: "B09", nama: "Nasi", satuan: "Porsi", stok: 60, minStok: 30, status: "aman", ikon: "fa-bowl-rice" },
+            { id: "B10", nama: "Gas LPG 3kg", satuan: "Tabung", stok: 4, minStok: 2, status: "aman", ikon: "fa-fire" },
+            { id: "B11", nama: "Es Teh / Es Jeruk", satuan: "Gelas", stok: 35, minStok: 15, status: "aman", ikon: "fa-glass-water" }
+        ];
+
+        const pecelLeleMenu = [
+            { id: "M01", nama: "Pecel Lele Biasa", kategori: "Lele Goreng", harga: 15000, hpp: 7000, status: "aktif" },
+            { id: "M02", nama: "Pecel Lele Jumbo", kategori: "Lele Goreng", harga: 22000, hpp: 11000, status: "aktif" },
+            { id: "M03", nama: "Paket Lele + Tahu Tempe", kategori: "Lele Goreng", harga: 20000, hpp: 10000, status: "aktif" },
+            { id: "M04", nama: "Tahu Goreng", kategori: "Tahu Tempe", harga: 8000, hpp: 3500, status: "aktif" },
+            { id: "M05", nama: "Tempe Goreng", kategori: "Tahu Tempe", harga: 8000, hpp: 3500, status: "aktif" },
+            { id: "M06", nama: "Tahu Tempe Komplit", kategori: "Tahu Tempe", harga: 12000, hpp: 5000, status: "aktif" },
+            { id: "M07", nama: "Ayam Goreng", kategori: "Ayam", harga: 18000, hpp: 10000, status: "aktif" },
+            { id: "M08", nama: "Es Teh Manis", kategori: "Minuman", harga: 4000, hpp: 1500, status: "aktif" },
+            { id: "M09", nama: "Es Jeruk", kategori: "Minuman", harga: 5000, hpp: 2000, status: "aktif" }
+        ];
+
+        const pecelLeleTransaksi = [
+            { id: "T01", tipe: "pemasukan", tanggal: "2026-06-22", item: "Pecel Lele Biasa", qty: 35, harga: 15000, total: 525000, catatan: "Pesanan Hari Ini" },
+            { id: "T02", tipe: "pengeluaran", tanggal: "2026-06-22", item: "Beli Lele Segar", qty: 10, harga: 25000, total: 250000, catatan: "Dari Pasar Ikan" },
+            { id: "T03", tipe: "pemasukan", tanggal: "2026-06-21", item: "Pecel Lele Jumbo", qty: 22, harga: 22000, total: 484000, catatan: "" },
+            { id: "T04", tipe: "pemasukan", tanggal: "2026-06-21", item: "Tahu Tempe Komplit", qty: 15, harga: 12000, total: 180000, catatan: "" },
+            { id: "T05", tipe: "pengeluaran", tanggal: "2026-06-21", item: "Beli Minyak Goreng", qty: 5, harga: 18000, total: 90000, catatan: "Dari Toko Sembako" },
+            { id: "T06", tipe: "pengeluaran", tanggal: "2026-06-20", item: "Beli Tepung + Bumbu", qty: 1, harga: 120000, total: 120000, catatan: "" },
+            { id: "T07", tipe: "pemasukan", tanggal: "2026-06-20", item: "Es Teh Manis", qty: 40, harga: 4000, total: 160000, catatan: "Ramai Sore" }
+        ];
+
         // ============================================================
         // STATE
-        // ============================================================
         let cart = [];
         let savedOrders = [];
         let currentSearch = "";
@@ -4140,6 +4286,304 @@
         }
 
         // ============================================================
+        // PECEL LELE - RENDER & CRUD
+        // ============================================================
+        let pecelLeleTab = "stok";
+        function renderPecelLele() {
+            const statsEl = document.getElementById("pecelLeleStats");
+            const stokSection = document.getElementById("pecelLeleStokSection");
+            const menuSection = document.getElementById("pecelLeleMenuSection");
+            const trxSection = document.getElementById("pecelLeleTransaksiSection");
+
+            // Stats
+            const today = new Date().toISOString().split("T")[0];
+            const todayIn = pecelLeleTransaksi.filter(t => t.tipe === "pemasukan" && t.tanggal === today);
+            const todayOut = pecelLeleTransaksi.filter(t => t.tipe === "pengeluaran" && t.tanggal === today);
+            const totalIn = todayIn.reduce((s, t) => s + t.total, 0);
+            const totalOut = todayOut.reduce((s, t) => s + t.total, 0);
+            const profit = totalIn - totalOut;
+            const kritisCount = pecelLeleStok.filter(s => s.stok < s.minStok).length;
+            if (statsEl) {
+                statsEl.innerHTML = `
+                    <div class="stat-item active"><div><div class="stat-number">Rp ${totalIn.toLocaleString('id-ID')}</div><div class="stat-label">Pemasukan Hari Ini</div></div><div class="stat-icon-wrapper"><i class="fas fa-arrow-up"></i></div></div>
+                    <div class="stat-item"><div><div class="stat-number">Rp ${totalOut.toLocaleString('id-ID')}</div><div class="stat-label">Pengeluaran Hari Ini</div></div><div class="stat-icon-wrapper"><i class="fas fa-arrow-down"></i></div></div>
+                    <div class="stat-item"><div><div class="stat-number" style="color:${profit>=0?'var(--success)':'var(--danger)'}">Rp ${profit.toLocaleString('id-ID')}</div><div class="stat-label">Keuntungan Hari Ini</div></div><div class="stat-icon-wrapper"><i class="fas fa-chart-line"></i></div></div>
+                    <div class="stat-item"><div><div class="stat-number">${kritisCount}</div><div class="stat-label">Stok Kritis</div></div><div class="stat-icon-wrapper"><i class="fas fa-exclamation-circle"></i></div></div>
+                `;
+            }
+
+            // Tabs visibility
+            if (stokSection && menuSection && trxSection) {
+                stokSection.style.display = pecelLeleTab === "stok" ? "grid" : "none";
+                menuSection.style.display = pecelLeleTab === "menu" ? "block" : "none";
+                trxSection.style.display = pecelLeleTab === "transaksi" ? "block" : "none";
+            }
+
+            // Stok section
+            if (stokSection && pecelLeleTab === "stok") {
+                const statusColors = { aman: "var(--success-gradient)", kritis: "var(--danger-gradient)", warning: "var(--warning-gradient)" };
+                stokSection.innerHTML = pecelLeleStok.map(s => {
+                    const badgeClass = s.stok < s.minStok ? "badge-belum" : "badge-lunas";
+                    const statusText = s.stok < s.minStok ? "Kritis" : s.stok < s.minStok * 2 ? "Hampir Kritis" : "Aman";
+                    const iconBg = s.stok < s.minStok ? "var(--danger-gradient)" : s.stok < s.minStok * 2 ? "var(--warning-gradient)" : "var(--primary-gradient)";
+                    const stokPercent = Math.min(100, Math.round(s.stok / (s.minStok * 4) * 100));
+                    return `<div class="asset-card">
+                                <div class="asset-header">
+                                    <div class="asset-title">
+                                        <i class="fas ${s.ikon}" style="background:${iconBg};"></i>
+                                        <div>
+                                            <div class="asset-name">${s.nama}</div>
+                                            <div class="asset-meta">Min. Stok: ${s.minStok} ${s.satuan}</div>
+                                        </div>
+                                    </div>
+                                    <span class="badge-status ${badgeClass}">${statusText}</span>
+                                </div>
+                                <div class="asset-body">
+                                    <div class="asset-info-row"><span>Stok Saat Ini</span><span style="font-weight:700;font-size:1.1rem;">${s.stok} ${s.satuan}</span></div>
+                                    <div class="asset-info-row"><span>Satuan</span><span>${s.satuan}</span></div>
+                                    <div class="asset-info-row"><span>Level Stok</span><span>${stokPercent}%</span></div>
+                                    <div class="progress-container"><div class="progress-bar" style="width:${stokPercent}%;background:${s.stok < s.minStok ? 'var(--danger)' : s.stok < s.minStok * 2 ? 'var(--warning)' : 'var(--success)'};"></div></div>
+                                </div>
+                                <div class="asset-actions" style="display:flex;gap:8px;margin-top:6px;">
+                                    <button class="aksi-btn" onclick="updatePecelLeleStok('${s.id}')" title="Update Stok"><i class="fas fa-pen"></i></button>
+                                </div>
+                            </div>`;
+                }).join('');
+            }
+
+            // Menu section
+            const menuBody = document.getElementById("pecelLeleMenuBody");
+            if (menuBody && pecelLeleTab === "menu") {
+                menuBody.innerHTML = pecelLeleMenu.map(m => {
+                    const badgeClass = m.status === "aktif" ? "badge-lunas" : "badge-batal";
+                    const margin = m.harga - m.hpp;
+                    const marginPct = Math.round(margin / m.harga * 100);
+                    return `<tr>
+                                <td><strong>${m.nama}</strong></td>
+                                <td>${m.kategori}</td>
+                                <td>Rp ${m.harga.toLocaleString('id-ID')}</td>
+                                <td>Rp ${m.hpp.toLocaleString('id-ID')}</td>
+                                <td><span class="badge-status ${badgeClass}">${m.status === 'aktif' ? 'Aktif' : 'Nonaktif'}</span></td>
+                                <td>
+                                    <button class="aksi-btn" onclick="editPecelLeleMenu('${m.id}')"><i class="fas fa-pen"></i></button>
+                                    <button class="aksi-btn" onclick="hapusPecelLeleMenu('${m.id}')" style="color:#ef4444;"><i class="fas fa-trash"></i></button>
+                                </td>
+                            </tr>`;
+                }).join('');
+            }
+
+            // Transaksi section
+            const trxBody = document.getElementById("pecelLeleTrxBody");
+            if (trxBody && pecelLeleTab === "transaksi") {
+                const filter = document.getElementById("pecelLeleTrxFilter")?.value || "all";
+                const dateFrom = document.getElementById("pecelLeleDateFrom")?.value || "";
+                const dateTo = document.getElementById("pecelLeleDateTo")?.value || "";
+                let filtered = [...pecelLeleTransaksi];
+                if (filter !== "all") filtered = filtered.filter(t => t.tipe === filter);
+                if (dateFrom) filtered = filtered.filter(t => t.tanggal >= dateFrom);
+                if (dateTo) filtered = filtered.filter(t => t.tanggal <= dateTo);
+                filtered.sort((a, b) => b.tanggal.localeCompare(a.tanggal) || b.id.localeCompare(a.id));
+                trxBody.innerHTML = filtered.map(t => {
+                    const isIncome = t.tipe === "pemasukan";
+                    const badgeClass = isIncome ? "badge-lunas" : "badge-batal";
+                    return `<tr>
+                                <td>${t.tanggal}</td>
+                                <td><span class="badge-status ${badgeClass}">${isIncome ? 'Pemasukan' : 'Pengeluaran'}</span></td>
+                                <td>${t.item}</td>
+                                <td>${t.qty}</td>
+                                <td>Rp ${t.harga.toLocaleString('id-ID')}</td>
+                                <td style="font-weight:700;color:${isIncome ? 'var(--success)' : 'var(--danger)'};">Rp ${t.total.toLocaleString('id-ID')}</td>
+                                <td>${t.catatan || '-'}</td>
+                                <td>
+                                    <button class="aksi-btn" onclick="editPecelLeleTrx('${t.id}')"><i class="fas fa-pen"></i></button>
+                                    <button class="aksi-btn" onclick="hapusPecelLeleTrx('${t.id}')" style="color:#ef4444;"><i class="fas fa-trash"></i></button>
+                                </td>
+                            </tr>`;
+                }).join('');
+                if (!filtered.length) trxBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted);">Tidak ada transaksi</td></tr>';
+            }
+        }
+
+        // --- Stok Operations ---
+        function updatePecelLeleStok(id) {
+            const s = pecelLeleStok.find(x => x.id === id);
+            if (!s) return;
+            document.getElementById("plStokId").value = id;
+            document.getElementById("pecelLeleStokModalTitle").textContent = `Update Stok - ${s.nama}`;
+            document.getElementById("plStokNama").value = s.nama;
+            document.getElementById("plStokCurrent").value = `${s.stok} ${s.satuan}`;
+            document.getElementById("plStokDelta").value = "";
+            document.getElementById("plStokCatatan").value = "";
+            document.getElementById("pecelLeleStokModal").classList.add("active");
+        }
+
+        function closePecelLeleStokModal() {
+            document.getElementById("pecelLeleStokModal").classList.remove("active");
+        }
+
+        function savePecelLeleStok() {
+            const id = document.getElementById("plStokId").value;
+            const delta = parseInt(document.getElementById("plStokDelta").value) || 0;
+            const catatan = document.getElementById("plStokCatatan").value.trim();
+            if (delta === 0) { showToast("Masukkan jumlah tambah/kurang"); return; }
+            const s = pecelLeleStok.find(x => x.id === id);
+            if (!s) return;
+            s.stok = Math.max(0, s.stok + delta);
+            s.status = s.stok < s.minStok ? "kritis" : s.stok < s.minStok * 2 ? "warning" : "aman";
+            const trxId = "T" + Date.now();
+            pecelLeleTransaksi.push({
+                id: trxId, tipe: delta > 0 ? "pengeluaran" : "pengeluaran",
+                tanggal: new Date().toISOString().split("T")[0],
+                item: delta > 0 ? `Tambah Stok ${s.nama}` : `Kurangi Stok ${s.nama}`,
+                qty: Math.abs(delta), harga: 0, total: 0,
+                catatan: catatan || (delta > 0 ? "Penambahan stok" : "Pengurangan stok")
+            });
+            closePecelLeleStokModal();
+            renderPecelLele();
+            showToast(`Stok ${s.nama} ${delta > 0 ? "+" + delta : delta}`);
+        }
+
+        // --- Transaction Operations ---
+        function openPecelLeleIncome() { openPecelLeleTrxForm("pemasukan"); }
+        function openPecelLeleExpense() { openPecelLeleTrxForm("pengeluaran"); }
+        function openPecelLeleTrxForm(tipe) {
+            document.getElementById("plModalMode").value = "add";
+            document.getElementById("plEditId").value = "";
+            document.getElementById("pecelLeleModalTitle").textContent = tipe === "pemasukan" ? "Tambah Pemasukan" : "Tambah Pengeluaran";
+            document.getElementById("plTipe").value = tipe;
+            document.getElementById("plTanggal").value = new Date().toISOString().split("T")[0];
+            document.getElementById("plItem").value = "";
+            document.getElementById("plQty").value = "1";
+            document.getElementById("plHarga").value = "";
+            document.getElementById("plTotal").value = "";
+            document.getElementById("plCatatan").value = "";
+            document.getElementById("pecelLeleModal").classList.add("active");
+            setTimeout(() => {
+                document.getElementById("plQty").addEventListener("input", calcPlTotal);
+                document.getElementById("plHarga").addEventListener("input", calcPlTotal);
+            }, 50);
+        }
+
+        function calcPlTotal() {
+            const qty = parseInt(document.getElementById("plQty").value) || 0;
+            const harga = parseInt(document.getElementById("plHarga").value) || 0;
+            document.getElementById("plTotal").value = qty * harga;
+        }
+
+        function editPecelLeleTrx(id) {
+            const t = pecelLeleTransaksi.find(x => x.id === id);
+            if (!t) return;
+            document.getElementById("plModalMode").value = "edit";
+            document.getElementById("plEditId").value = id;
+            document.getElementById("pecelLeleModalTitle").textContent = "Edit Transaksi";
+            document.getElementById("plTipe").value = t.tipe;
+            document.getElementById("plTanggal").value = t.tanggal;
+            document.getElementById("plItem").value = t.item;
+            document.getElementById("plQty").value = t.qty;
+            document.getElementById("plHarga").value = t.harga;
+            document.getElementById("plTotal").value = t.total;
+            document.getElementById("plCatatan").value = t.catatan;
+            document.getElementById("pecelLeleModal").classList.add("active");
+            setTimeout(() => {
+                document.getElementById("plQty").addEventListener("input", calcPlTotal);
+                document.getElementById("plHarga").addEventListener("input", calcPlTotal);
+            }, 50);
+        }
+
+        function savePecelLeleTrx() {
+            const mode = document.getElementById("plModalMode").value;
+            const editId = document.getElementById("plEditId").value;
+            const tipe = document.getElementById("plTipe").value;
+            const tanggal = document.getElementById("plTanggal").value;
+            const item = document.getElementById("plItem").value.trim();
+            const qty = parseInt(document.getElementById("plQty").value) || 0;
+            const harga = parseInt(document.getElementById("plHarga").value) || 0;
+            const total = qty * harga;
+            const catatan = document.getElementById("plCatatan").value.trim();
+            if (!item || !tanggal || !qty) { showToast("Isi item, tanggal, dan qty"); return; }
+
+            if (mode === "edit" && editId) {
+                const t = pecelLeleTransaksi.find(x => x.id === editId);
+                if (t) Object.assign(t, { tipe, tanggal, item, qty, harga, total, catatan });
+                showToast("Transaksi diperbarui");
+            } else {
+                const newId = "T" + Date.now();
+                pecelLeleTransaksi.push({ id: newId, tipe, tanggal, item, qty, harga, total, catatan });
+                showToast("Transaksi ditambahkan");
+            }
+            closePecelLeleModal();
+            renderPecelLele();
+        }
+
+        function hapusPecelLeleTrx(id) {
+            const idx = pecelLeleTransaksi.findIndex(x => x.id === id);
+            if (idx > -1) { pecelLeleTransaksi.splice(idx, 1);
+                renderPecelLele();
+                showToast("Transaksi dihapus"); }
+        }
+
+        function closePecelLeleModal() {
+            document.getElementById("pecelLeleModal").classList.remove("active");
+        }
+
+        // --- Menu Operations ---
+        function openPecelLeleMenuForm() {
+            document.getElementById("plMenuEditId").value = "";
+            document.getElementById("pecelLeleMenuModalTitle").textContent = "Tambah Menu";
+            document.getElementById("plMenuNama").value = "";
+            document.getElementById("plMenuKategori").value = "Lele Goreng";
+            document.getElementById("plMenuHarga").value = "";
+            document.getElementById("plMenuHpp").value = "";
+            document.getElementById("plMenuStatus").value = "aktif";
+            document.getElementById("pecelLeleMenuModal").classList.add("active");
+        }
+
+        function editPecelLeleMenu(id) {
+            const m = pecelLeleMenu.find(x => x.id === id);
+            if (!m) return;
+            document.getElementById("plMenuEditId").value = id;
+            document.getElementById("pecelLeleMenuModalTitle").textContent = "Edit Menu";
+            document.getElementById("plMenuNama").value = m.nama;
+            document.getElementById("plMenuKategori").value = m.kategori;
+            document.getElementById("plMenuHarga").value = m.harga;
+            document.getElementById("plMenuHpp").value = m.hpp;
+            document.getElementById("plMenuStatus").value = m.status;
+            document.getElementById("pecelLeleMenuModal").classList.add("active");
+        }
+
+        function savePecelLeleMenu() {
+            const editId = document.getElementById("plMenuEditId").value;
+            const nama = document.getElementById("plMenuNama").value.trim();
+            const kategori = document.getElementById("plMenuKategori").value;
+            const harga = parseInt(document.getElementById("plMenuHarga").value) || 0;
+            const hpp = parseInt(document.getElementById("plMenuHpp").value) || 0;
+            const status = document.getElementById("plMenuStatus").value;
+            if (!nama || !harga) { showToast("Isi nama dan harga"); return; }
+            if (editId) {
+                const m = pecelLeleMenu.find(x => x.id === editId);
+                if (m) Object.assign(m, { nama, kategori, harga, hpp, status });
+                showToast("Menu diperbarui");
+            } else {
+                const newId = "M" + String(pecelLeleMenu.length + 1).padStart(2, "0");
+                pecelLeleMenu.push({ id: newId, nama, kategori, harga, hpp, status });
+                showToast("Menu ditambahkan");
+            }
+            closePecelLeleMenuModal();
+            renderPecelLele();
+        }
+
+        function hapusPecelLeleMenu(id) {
+            const idx = pecelLeleMenu.findIndex(x => x.id === id);
+            if (idx > -1) { pecelLeleMenu.splice(idx, 1);
+                renderPecelLele();
+                showToast("Menu dihapus"); }
+        }
+
+        function closePecelLeleMenuModal() {
+            document.getElementById("pecelLeleMenuModal").classList.remove("active");
+        }
+
+        // ============================================================
         // KONTRAKAN CRUD
         // ============================================================
         function openAddKontrakan() {
@@ -4757,7 +5201,7 @@
                     penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "rak-lokasi": "gudang", "opname-gudang": "gudang",
                     "harga-belanja": "pricing", "harga-jual": "pricing", "ubah-harga": "pricing", "diskon-promo": "pricing", "margin-keuntungan": "pricing",
                     karyawan: "hr", absensi: "hr", "rekap-kehadiran": "hr", cuti: "hr", "jadwal-kerja": "hr", penggajian: "hr", "slip-gaji": "hr",
-                    kontrakan: "lain-lain", "peternakan-lele": "lain-lain", "kandang-ayam": "lain-lain",
+                    kontrakan: "lain-lain", "peternakan-lele": "lain-lain", "kandang-ayam": "lain-lain", "pecel-lele": "lain-lain",
                     pengaturan: "pengaturan"
                 };
                 const group = menuMap[pageId];
@@ -4784,6 +5228,7 @@
             document.getElementById("navMenu")?.classList.remove("active");
             if (pageId === "pos") setTimeout(() => document.getElementById("scanInput")?.focus(), 100);
             if (pageId === "pengaturan") setTimeout(() => renderAccountCards(), 10);
+            if (pageId === "pecel-lele") setTimeout(() => renderPecelLele(), 10);
         }
 
         // ============================================================
@@ -4797,6 +5242,7 @@
             renderCatalogTable();
             renderEmployees();
             renderAssets();
+            renderPecelLele();
             renderPosHistory();
             renderMonitorStok();
             renderPricingTables();
@@ -4817,6 +5263,16 @@
                     document.querySelectorAll("#pickingFilter .filter-tab").forEach(t => t.classList.remove("active"));
                     this.classList.add("active");
                     renderWarehousePicking(this.dataset.filter);
+                });
+            });
+
+            // Pecel Lele tab switch
+            document.querySelectorAll("#pecelLeleTabs .filter-tab").forEach(tab => {
+                tab.addEventListener("click", function() {
+                    document.querySelectorAll("#pecelLeleTabs .filter-tab").forEach(t => t.classList.remove("active"));
+                    this.classList.add("active");
+                    pecelLeleTab = this.dataset.tab;
+                    renderPecelLele();
                 });
             });
 
@@ -5141,6 +5597,23 @@
         window.bayarSewa = bayarSewa;
         window.hapusKontrakan = hapusKontrakan;
         window.closePembayaranModal = closePembayaranModal;
+
+        window.renderPecelLele = renderPecelLele;
+        window.updatePecelLeleStok = updatePecelLeleStok;
+        window.closePecelLeleStokModal = closePecelLeleStokModal;
+        window.savePecelLeleStok = savePecelLeleStok;
+        window.openPecelLeleIncome = openPecelLeleIncome;
+        window.openPecelLeleExpense = openPecelLeleExpense;
+        window.editPecelLeleTrx = editPecelLeleTrx;
+        window.savePecelLeleTrx = savePecelLeleTrx;
+        window.hapusPecelLeleTrx = hapusPecelLeleTrx;
+        window.closePecelLeleModal = closePecelLeleModal;
+        window.openPecelLeleMenuForm = openPecelLeleMenuForm;
+        window.editPecelLeleMenu = editPecelLeleMenu;
+        window.savePecelLeleMenu = savePecelLeleMenu;
+        window.hapusPecelLeleMenu = hapusPecelLeleMenu;
+        window.closePecelLeleMenuModal = closePecelLeleMenuModal;
+
         window.renderRekapKehadiran = renderRekapKehadiran;
         window.ubahBulanRekap = ubahBulanRekap;
         window.deleteProduct = deleteProduct;
