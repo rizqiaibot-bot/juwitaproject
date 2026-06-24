@@ -1787,7 +1787,15 @@
 
             <ul class="nav-menu-horizontal" id="navMenu">
                 <li class="nav-item" data-page="pos"><a href="#"><i class="fas fa-cash-register"></i> POS</a></li>
-                <li class="nav-item active" data-page="penjualan"><a href="#"><i class="fas fa-chart-line"></i> Penjualan</a></li>
+                <!-- PENJUALAN -->
+                <li class="dropdown">
+                    <a href="#"><i class="fas fa-chart-line"></i> Penjualan <i class="fas fa-chevron-down"></i></a>
+                    <ul class="dropdown-menu">
+                        <li data-page="daftar-penjualan"><a href="#"><i class="fas fa-list"></i> Daftar Penjualan</a></li>
+                        <li data-page="daftar-pelanggan"><a href="#"><i class="fas fa-users"></i> Daftar Pelanggan</a></li>
+                        <li data-page="rekap-penjualan"><a href="#"><i class="fas fa-chart-bar"></i> Rekap Penjualan</a></li>
+                    </ul>
+                </li>
 
                 <!-- KATALOG -->
                 <li class="dropdown">
@@ -1886,7 +1894,7 @@
     <div class="main-container">
 
         <!-- ===== HALAMAN PENJUALAN ===== -->
-        <div id="page-penjualan" class="page-content active-page">
+        <div id="page-daftar-penjualan" class="page-content">
             <div class="page-header">
                 <div>
                     <h1>Daftar Penjualan</h1>
@@ -1976,6 +1984,41 @@
                 <span>Server Terkoneksi · Waktu Lokal Indonesia</span>
                 <span>Juwita One v2.0</span>
             </div>
+        </div>
+
+        <!-- ===== HALAMAN DAFTAR PELANGGAN ===== -->
+        <div id="page-daftar-pelanggan" class="page-content">
+            <div class="page-header">
+                <div>
+                    <h1>Daftar Pelanggan</h1>
+                    <div class="page-header-desc">Kelola data pelanggan tetap dan riwayat pembelian mereka</div>
+                </div>
+                <button class="checkout-btn" onclick="showToast('Fitur tambah pelanggan segera hadir')" style="width:auto;padding:10px 24px;"><i class="fas fa-plus"></i> Tambah Pelanggan</button>
+            </div>
+            <div class="table-wrapper"><table><thead><tr><th>NAMA</th><th>KONTAK</th><th>TOTAL BELANJA</th><th>TRANSAKSI</th><th>TERAKHIR BELANJA</th><th>STATUS</th></tr></thead><tbody><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">Fitur dalam pengembangan ⚡</td></tr></tbody></table></div>
+        </div>
+
+        <!-- ===== HALAMAN REKAP PENJUALAN ===== -->
+        <div id="page-rekap-penjualan" class="page-content">
+            <div class="page-header">
+                <div>
+                    <h1>Rekap Penjualan</h1>
+                    <div class="page-header-desc">Ringkasan penjualan per periode: harian, mingguan, bulanan</div>
+                </div>
+            </div>
+            <div class="form-card" style="margin-bottom:16px;">
+                <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;">
+                    <div class="form-group" style="min-width:130px;"><label>Dari Tanggal</label><input type="date" class="form-control" /></div>
+                    <div class="form-group" style="min-width:130px;"><label>Sampai Tanggal</label><input type="date" class="form-control" /></div>
+                    <button class="checkout-btn" onclick="showToast('Fitur rekap dalam pengembangan')" style="width:auto;padding:10px 24px;margin-bottom:2px;"><i class="fas fa-search"></i> Tampilkan</button>
+                </div>
+            </div>
+            <div class="stats-row">
+                <div class="stat-item active"><div><div class="stat-number">-</div><div class="stat-label">Total Omzet</div></div><div class="stat-icon-wrapper"><i class="fas fa-coins"></i></div></div>
+                <div class="stat-item"><div><div class="stat-number">-</div><div class="stat-label">Total Transaksi</div></div><div class="stat-icon-wrapper"><i class="fas fa-receipt"></i></div></div>
+                <div class="stat-item"><div><div class="stat-number">-</div><div class="stat-label">Rata-rata / Hari</div></div><div class="stat-icon-wrapper"><i class="fas fa-calendar-alt"></i></div></div>
+            </div>
+            <div class="table-wrapper"><table><thead><tr><th>PERIODE</th><th>TOTAL OMZET</th><th>TRANSAKSI</th><th>ITEM TERJUAL</th><th>RATA-RATA</th></tr></thead><tbody><tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">Fitur dalam pengembangan ⚡</td></tr></tbody></table></div>
         </div>
 
         <!-- ===== HALAMAN POS ===== -->
@@ -2989,14 +3032,14 @@
         function filterMenuByRole() {
             const menuMap = {
                 "pos": "[data-page=\"pos\"]",
-                "penjualan": "[data-page=\"penjualan\"]",
-                "katalog": ".dropdown:nth-of-type(1)",
-                "persediaan": ".dropdown:nth-of-type(2)",
-                "pembelian": ".dropdown:nth-of-type(3)",
-                "gudang": ".dropdown:nth-of-type(4)",
-                "pricing": ".dropdown:nth-of-type(5)",
-                "hr": ".dropdown:nth-of-type(6)",
-                "lain-lain": ".dropdown:nth-of-type(7)",
+                "penjualan": ".dropdown:nth-of-type(1)",
+                "katalog": ".dropdown:nth-of-type(2)",
+                "persediaan": ".dropdown:nth-of-type(3)",
+                "pembelian": ".dropdown:nth-of-type(4)",
+                "gudang": ".dropdown:nth-of-type(5)",
+                "pricing": ".dropdown:nth-of-type(6)",
+                "hr": ".dropdown:nth-of-type(7)",
+                "lain-lain": ".dropdown:nth-of-type(8)",
                 "pengaturan": "[data-page=\"pengaturan\"]"
             };
 
@@ -4664,7 +4707,8 @@
             // Permission check
             if (currentUser) {
                 const menuMap = {
-                    pos: "pos", penjualan: "penjualan",
+                    pos: "pos",
+                    "daftar-penjualan": "penjualan", "daftar-pelanggan": "penjualan", "rekap-penjualan": "penjualan",
                     "daftar-produk": "katalog", "tambah-produk": "katalog",
                     "monitor-stok": "persediaan", "stock-opname": "persediaan", "mutasi-stok": "persediaan", "kartu-stok": "persediaan", "barang-rusak": "persediaan",
                     "data-pembelian": "pembelian", "tambah-pembelian": "pembelian", "riwayat-pembelian": "pembelian", "retur-pembelian": "pembelian", "data-supplier": "pembelian",
