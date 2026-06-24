@@ -1469,86 +1469,6 @@
         }
 
         /* ===== LOGIN OVERLAY ===== */
-        .login-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.6);
-            backdrop-filter: blur(8px);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 2000;
-        }
-        .login-overlay.active {
-            display: flex;
-        }
-        .login-card {
-            background: var(--bg-card);
-            border-radius: var(--radius-xl);
-            border: 1px solid var(--border-color);
-            padding: 40px 36px;
-            width: 400px;
-            max-width: 92vw;
-            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
-            text-align: center;
-        }
-        .login-card h2 {
-            font-size: 1.5rem;
-            font-weight: 800;
-            margin-bottom: 4px;
-        }
-        .login-card .subtitle {
-            font-size: 0.82rem;
-            color: var(--text-muted);
-            margin-bottom: 24px;
-        }
-        .login-card .form-group {
-            text-align: left;
-            margin-bottom: 14px;
-        }
-        .login-card .form-group label {
-            display: block;
-            font-size: 0.78rem;
-            font-weight: 600;
-            color: var(--text-secondary);
-            margin-bottom: 5px;
-        }
-        .login-card .form-group input {
-            width: 100%;
-            padding: 10px 14px;
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-sm);
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            font-size: 0.9rem;
-            font-family: var(--font-sans);
-            transition: var(--transition);
-        }
-        .login-card .form-group input:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px var(--primary-light);
-        }
-        .login-error {
-            color: var(--danger);
-            font-size: 0.78rem;
-            font-weight: 600;
-            margin-bottom: 10px;
-            min-height: 18px;
-        }
-        .login-hint {
-            margin-top: 16px;
-            font-size: 0.72rem;
-            color: var(--text-muted);
-            line-height: 1.6;
-        }
-        .login-hint code {
-            background: var(--border-color);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.7rem;
-        }
-
         /* ===== MENU CHIPS (ACCOUNT TABLE) ===== */
         .menu-chip {
             display: inline-block;
@@ -1807,9 +1727,6 @@
             }
             .grid-assets {
                 grid-template-columns: 1fr;
-            }
-            .login-card {
-                padding: 24px 20px;
             }
             .stats-inline-grid {
                 grid-template-columns: 1fr;
@@ -3115,11 +3032,7 @@
         function doLogout() {
             currentUser = null;
             localStorage.removeItem("juwita_user");
-            renderUserUI();
-            document.getElementById("loginOverlay").classList.add("active");
-            document.getElementById("loginError").innerHTML = "";
-            document.getElementById("loginUsername").value = "";
-            document.getElementById("loginPassword").value = "";
+            location.reload();
         }
 
         function renderUserUI() {
@@ -5045,44 +4958,12 @@
             setTimeout(() => document.getElementById("scanInput")?.focus(), 200);
 
             // --- AUTH INIT ---
-            const savedUser = localStorage.getItem("juwita_user");
-            if (savedUser) {
-                try {
-                    const parsed = JSON.parse(savedUser);
-                    const matched = userAccounts.find(a => a.username === parsed.username && a.password === (userAccounts.find(x => x.username === parsed.username)?.password));
-                    if (matched) {
-                        currentUser = { username: matched.username, name: matched.name, role: matched.role, roleLabel: matched.roleLabel, menus: [...matched.menus] };
-                        filterMenuByRole();
-                        renderUserUI();
-                        document.getElementById("loginOverlay").classList.remove("active");
-                    } else {
-                        localStorage.removeItem("juwita_user");
-                    }
-                } catch(e) {
-                    localStorage.removeItem("juwita_user");
-                }
+            const admin = userAccounts.find(a => a.username === "admin");
+            if (admin) {
+                currentUser = { username: admin.username, name: admin.name, role: admin.role, roleLabel: admin.roleLabel, menus: [...admin.menus] };
             }
-
-            document.getElementById("loginBtn").addEventListener("click", function() {
-                const username = document.getElementById("loginUsername").value.trim();
-                const password = document.getElementById("loginPassword").value.trim();
-                const err = document.getElementById("loginError");
-                if (!username || !password) { err.innerHTML = "Harap isi username dan password"; return; }
-                const user = doLogin(username, password);
-                if (user) {
-                    err.innerHTML = "";
-                    document.getElementById("loginOverlay").classList.remove("active");
-                    filterMenuByRole();
-                    const firstMenu = currentUser.menus[0] || "pos";
-                    showPage(firstMenu);
-                } else {
-                    err.innerHTML = "Username atau password salah";
-                }
-            });
-
-            document.getElementById("loginPassword").addEventListener("keypress", function(e) {
-                if (e.key === "Enter") document.getElementById("loginBtn").click();
-            });
+            filterMenuByRole();
+            renderUserUI();
 
             // --- DEFAULT PAGE ---
             if (currentUser) {
@@ -5164,29 +5045,5 @@
     </script>
 
     <!-- ===== LOGIN OVERLAY ===== -->
-    <div class="login-overlay active" id="loginOverlay">
-        <div class="login-card">
-            <div style="margin-bottom:12px;"><img src="juwitalogo.png" alt="Logo" style="width:48px;height:48px;border-radius:12px;" onerror="this.style.display='none'" /></div>
-            <h2>Juwita One</h2>
-            <p class="subtitle">Masuk untuk mengakses sistem</p>
-            <div class="login-error" id="loginError"></div>
-            <div class="form-group">
-                <label>Username</label>
-                <input type="text" id="loginUsername" placeholder="Masukkan username" />
-            </div>
-            <div class="form-group">
-                <label>Password</label>
-                <input type="password" id="loginPassword" placeholder="Masukkan password" />
-            </div>
-            <button class="checkout-btn" id="loginBtn" style="margin-top:6px;width:100%;"><i class="fas fa-sign-in-alt"></i> Masuk</button>
-            <div class="login-hint">
-                <strong>Akun Demo:</strong><br />
-                <code>admin / admin123</code> — Akses Penuh<br />
-                <code>siti / siti123</code> — Kasir (POS + Penjualan)<br />
-                <code>doni / doni123</code> — Gudang (POS + Katalog + Persediaan + Gudang)
-            </div>
-        </div>
-    </div>
-
 </body>
 </html>
