@@ -3328,7 +3328,7 @@
         }
 
         function updateSplit() {
-            const total = parseInt((document.getElementById("total").innerText || "0").replace(/\./g, "")) || 0;
+            const total = parseInt((document.getElementById("total").innerText || "0").replace(/\D/g, "")) || 0;
             const cash = parseInt(document.getElementById("splitCash").value.replace(/\D/g, "")) || 0;
             const nonCash = parseInt(document.getElementById("splitNonCash").value.replace(/\D/g, "")) || 0;
             document.getElementById("splitRemain").textContent = (total - cash - nonCash).toLocaleString('id-ID');
@@ -5012,7 +5012,7 @@
             // --- CASH BUTTONS ---
             document.querySelectorAll(".cash-btn").forEach(btn => {
                 btn.addEventListener("click", function() {
-                    const total = parseInt(document.getElementById("total").innerText.replace(/\./g, "")) ||
+                    const total = parseInt(document.getElementById("total").innerText.replace(/\D/g, "")) ||
                         0;
                     if (this.dataset.amount === "pas") {
                         document.getElementById("payAmount").value = total;
