@@ -4550,7 +4550,11 @@
             // Kurangi stok lokal dulu
             cart.forEach(item => {
                 const prod = products.find(p => p.id === item.id);
-                if (prod) prod.stock = Math.max(0, prod.stock - item.quantity);
+                if (prod) {
+                    const newStock = prod.stock - item.quantity;
+                    if (newStock < 0) console.warn("Stock negatif terdeteksi untuk", prod.name, "- kemungkinan race condition");
+                    prod.stock = Math.max(0, newStock);
+                }
             });
 
             // Sync ke Supabase dalam satu batch
@@ -4870,6 +4874,7 @@
             previewEl.innerHTML = `<div style="font-family:monospace;font-size:1.4rem;font-weight:800;letter-spacing:2px;padding:10px;background:white;border-radius:var(--radius-sm);color:#000;border:1px solid var(--border-hover);">${barcode}</div>
                 <div style="font-size:0.65rem;color:var(--text-muted);margin-top:4px;"><i class="fas fa-check-circle" style="color:var(--success);"></i> Barcode auto-generated</div>`;
         }
+            window.generateNewProdBarcode = generateNewProdBarcode;
 
         function generateSKU() {
             const cat = document.getElementById("newProdCat").value;
@@ -4881,6 +4886,7 @@
             const num = String(maxNum + 1).padStart(4, "0");
             document.getElementById("newProdSKU").value = prefix + "-" + num;
         }
+            window.generateSKU = generateSKU;
 
         let pendingPhotoData = null;
         function previewPhoto(event) {
@@ -4897,6 +4903,7 @@
             };
             reader.readAsDataURL(file);
         }
+            window.previewPhoto = previewPhoto;
 
         document.getElementById("addProductForm").addEventListener("submit", function(e) {
                 e.preventDefault();

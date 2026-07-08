@@ -41,9 +41,10 @@ async function updateShopeeStock(itemId, sku, newStock) {
     sign,
     shop_id: SHOPEE_SHOP_ID,
     item_id: String(itemId),
-    stock_list: JSON.stringify([{
-      model_id: 0,
-      normal_stock: newStock
+      stock_list: JSON.stringify([{
+        model_id: 0,
+        // model_id: 0 = default variation. Produk dengan variasi (2-tier) perlu mapping model_id terpisah.
+        normal_stock: newStock
     }])
   });
 
