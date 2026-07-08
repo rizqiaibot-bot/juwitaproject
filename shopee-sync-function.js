@@ -20,13 +20,12 @@ const SHOPEE_API_URL = "https://partner.shopeemobile.com/api/v2";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-function signShopee(path, timestamp) {
+async function signShopee(path, timestamp) {
   const base = SHOPEE_PARTNER_ID + path + timestamp;
-  // Gunakan HMAC-SHA256
   const encoder = new TextEncoder();
-  const key = encoder.encode(SHOPEE_PARTNER_KEY);
-  // Implementasi signing sesuai Shopee Open Platform docs
-  return "";
+  const key = await crypto.subtle.importKey("raw", encoder.encode(SHOPEE_PARTNER_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(base));
+  return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
 async function updateShopeeStock(itemId, sku, newStock) {
@@ -34,7 +33,7 @@ async function updateShopeeStock(itemId, sku, newStock) {
 
   const timestamp = Math.floor(Date.now() / 1000);
   const path = "/api/v2/product/update_stock";
-  const sign = signShopee(path, timestamp);
+  const sign = await signShopee(path, timestamp);
 
   const params = new URLSearchParams({
     partner_id: SHOPEE_PARTNER_ID,
@@ -60,7 +59,7 @@ async function updateShopeeBatch(items) {
 
   const timestamp = Math.floor(Date.now() / 1000);
   const path = "/api/v2/product/update_stock";
-  const sign = signShopee(path, timestamp);
+  const sign = await signShopee(path, timestamp);
 
   const params = new URLSearchParams({
     partner_id: SHOPEE_PARTNER_ID,
@@ -71,60 +70,65 @@ async function updateShopeeBatch(items) {
 
   // Batch update - kirim array
   for (const item of items) {
-    if (item.shopee_item_id) {
+    if (item.shopee_item_id != null) {
       const stockParams = new URLSearchParams(params);
       stockParams.set("item_id", String(item.shopee_item_id));
       stockParams.set("stock_list", JSON.stringify([{ model_id: 0, normal_stock: item.qty_after }]));
-      await fetch(`${SHOPEE_API_URL}/product/update_stock?${stockParams}`, { method: "POST" });
+      const res = await fetch(`${SHOPEE_API_URL}/product/update_stock?${stockParams}`, { method: "POST" });
+      if (!res.ok) console.error("Shopee batch sync error:", await res.text());
     }
   }
 }
 
 Deno.serve(async (req) => {
   try {
-    // Ambil mutasi yang belum disync
-    const { data: mutations, error } = await supabase
-      .from("stock_mutations")
-      .select("*")
-      .eq("sync_status", "pending")
-      .order("created_at", { ascending: true })
-      .limit(50);
+    let totalSynced = 0;
+    let page = 0;
+    const pageSize = 100;
 
-    if (error) throw error;
-    if (!mutations.length) {
-      return new Response(JSON.stringify({ synced: 0, message: "No pending mutations" }), {
-        headers: { "Content-Type": "application/json" }
-      });
-    }
+    while (true) {
+      const { data: mutations, error } = await supabase
+        .from("stock_mutations")
+        .select("*")
+        .eq("sync_status", "pending")
+        .order("created_at", { ascending: true })
+        .range(page * pageSize, (page + 1) * pageSize - 1);
 
-    // Hitung stok terbaru per produk dari mutations
-    const productStocks = {};
-    for (const m of mutations) {
-      if (!productStocks[m.product_id]) {
-        productStocks[m.product_id] = {
-          product_id: m.product_id,
-          product_name: m.product_name,
-          shopee_item_id: m.shopee_item_id,
-          shopee_sku: m.shopee_sku,
-          qty_after: m.qty_after,
-          mutation_ids: []
-        };
+      if (error) throw error;
+      if (!mutations.length) break;
+
+      // Hitung stok terbaru per produk dari mutations
+      const productStocks = {};
+      for (const m of mutations) {
+        if (!productStocks[m.product_id]) {
+          productStocks[m.product_id] = {
+            product_id: m.product_id,
+            product_name: m.product_name,
+            shopee_item_id: m.shopee_item_id,
+            shopee_sku: m.shopee_sku,
+            qty_after: m.qty_after,
+            mutation_ids: []
+          };
+        }
+        productStocks[m.product_id].mutation_ids.push(m.id);
+        productStocks[m.product_id].qty_after = m.qty_after;
       }
-      productStocks[m.product_id].mutation_ids.push(m.id);
-      productStocks[m.product_id].qty_after = m.qty_after; // ambil yang terbaru
+
+      const items = Object.values(productStocks);
+      await updateShopeeBatch(items);
+
+      // Tandai semua sebagai synced
+      const allMutationIds = items.flatMap(i => i.mutation_ids);
+      await supabase
+        .from("stock_mutations")
+        .update({ sync_status: "synced", shopee_sync_at: new Date().toISOString() })
+        .in("id", allMutationIds);
+
+      totalSynced += allMutationIds.length;
+      page++;
     }
 
-    const items = Object.values(productStocks);
-    await updateShopeeBatch(items);
-
-    // Tandai semua sebagai synced
-    const allMutationIds = items.flatMap(i => i.mutation_ids);
-    await supabase
-      .from("stock_mutations")
-      .update({ sync_status: "synced", shopee_sync_at: new Date().toISOString() })
-      .in("id", allMutationIds);
-
-    return new Response(JSON.stringify({ synced: allMutationIds.length, items }), {
+    return new Response(JSON.stringify({ synced: totalSynced, message: totalSynced ? "Synced" : "No pending mutations" }), {
       headers: { "Content-Type": "application/json" }
     });
 

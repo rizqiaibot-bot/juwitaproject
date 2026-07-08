@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS warehouse_receiving (
   id BIGINT PRIMARY KEY,
   po_number TEXT,
-  product_id INT,
+  product_id BIGINT,
   product_name TEXT,
   supplier TEXT,
   quantity INT,
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS warehouse_racks (
   id BIGINT PRIMARY KEY,
   zone TEXT NOT NULL,
   rack_name TEXT NOT NULL,
-  product_id INT,
+  product_id BIGINT,
   capacity INT DEFAULT 100,
   filled INT DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW()

@@ -2992,7 +2992,7 @@
                 if (wRecRes.data && wRecRes.data.length > 0) warehouseReceiving = wRecRes.data;
                 if (wRackRes.data && wRackRes.data.length > 0) warehouseRacks = wRackRes.data;
                 if (wOpRes.data && wOpRes.data.length > 0) warehouseOpname = wOpRes.data;
-                if (wRecRes.error || wRackRes.error || wOpRes.error) {
+                if (pRes.error || oRes.error || wRecRes.error || wRackRes.error || wOpRes.error) {
                     seedWarehouseData();
                 }
                 console.log("Supabase: data loaded");
@@ -3235,10 +3235,10 @@
                         </div>`;
             }).join('');
 
-            const discountAmount = parseInt(document.getElementById("discountInput").value) || 0;
+            const discountAmount = parseInt(document.getElementById("discountInput").value.replace(/\D/g, "")) || 0;
             const disc = Math.min(discountAmount, subtotal);
             const total = subtotal - disc;
-            const pay = parseInt(document.getElementById("payAmount").value) || 0;
+            const pay = parseInt(document.getElementById("payAmount").value.replace(/\D/g, "")) || 0;
             const change = Math.max(0, pay - total);
 
             document.getElementById("subtotal").innerText = subtotal.toLocaleString('id-ID');
@@ -3282,7 +3282,7 @@
 
         function saveCart() {
             if (cart.length === 0) { showToast("Keranjang kosong, tidak ada yang disimpan"); return; }
-            const disc = parseInt(document.getElementById("discountInput").value) || 0;
+            const disc = parseInt(document.getElementById("discountInput").value.replace(/\D/g, "")) || 0;
             const customer = document.getElementById("customerName").value.trim() || "Tanpa Nama";
             savedOrders.push({ items: JSON.parse(JSON.stringify(cart)), discount: disc, time: new Date().toLocaleTimeString(
                     'id-ID'), customer: customer });
@@ -3329,8 +3329,8 @@
 
         function updateSplit() {
             const total = parseInt((document.getElementById("total").innerText || "0").replace(/\./g, "")) || 0;
-            const cash = parseInt(document.getElementById("splitCash").value) || 0;
-            const nonCash = parseInt(document.getElementById("splitNonCash").value) || 0;
+            const cash = parseInt(document.getElementById("splitCash").value.replace(/\D/g, "")) || 0;
+            const nonCash = parseInt(document.getElementById("splitNonCash").value.replace(/\D/g, "")) || 0;
             document.getElementById("splitRemain").textContent = (total - cash - nonCash).toLocaleString('id-ID');
         }
 
@@ -3453,9 +3453,8 @@
             const idx = products.findIndex(p => p.id === id);
             if (idx > -1) {
                 const deleted = products.splice(idx, 1)[0];
-                sb.from('products').delete().eq('id', id).then(r => {
-                    if (r.error) console.warn("Supabase delete product error:", r.error.message);
-                });
+                const r = await sb.from('products').delete().eq('id', id);
+                if (r.error) console.warn("Supabase delete product error:", r.error.message);
                 renderCatalogTable();
                 renderProducts();
                 renderPricingTables();
@@ -3662,7 +3661,7 @@
             if (!pid || !qty) { showToast("Isi produk dan jumlah"); return; }
 
             const record = {
-                id: warehouseReceiving.length + 1,
+                id: warehouseReceiving.length ? Math.max(...warehouseReceiving.map(r => r.id)) + 1 : 1,
                 po_number: po || ("PO-" + Date.now().toString(36).toUpperCase()),
                 product_id: pid, product_name: prod ? prod.name : '', supplier, quantity: qty,
                 received_date: date, notes
@@ -3672,7 +3671,8 @@
             if (prod) {
                 const qtyBefore = prod.stock;
                 prod.stock += qty;
-                sb.from('products').update({ stock: prod.stock }).eq('id', pid);
+                prod.maxStock = Math.max(prod.maxStock || 0, prod.stock * 2);
+                sb.from('products').update({ stock: prod.stock, maxStock: prod.maxStock }).eq('id', pid);
                 logStockMutation(prod.id, prod.name, 'IN', qty, qtyBefore, prod.stock, 'Penerimaan: ' + (po || record.po_number));
             }
             sb.from('warehouse_receiving').insert(record).then(r => { if (r.error) console.warn(r.error.message); });
@@ -3706,7 +3706,7 @@
                 return;
             }
             tbody.innerHTML = filtered.map(o => {
-                const rack = warehouseRacks.length ? warehouseRacks[Math.floor(Math.random() * warehouseRacks.length)] : null;
+                const rack = warehouseRacks.length ? warehouseRacks[(o.orderId || "").split("").reduce((a, c) => a + c.charCodeAt(0), 0) % warehouseRacks.length] : null;
                 const isDone = o.wmsStatus === 'Dipick';
                 return `<tr>
                     <td><strong>${o.orderId}</strong></td>
@@ -3868,6 +3868,7 @@
             const cap = parseInt(document.getElementById("rackCap").value) || 0;
             const filled = parseInt(document.getElementById("rackFilled").value) || 0;
             if (!zone || !rackName) { showToast("Isi zona dan nama rak"); return; }
+            const isEdit = !!editingRackId;
 
             if (editingRackId) {
                 const r = warehouseRacks.find(x => x.id === editingRackId);
@@ -3876,13 +3877,13 @@
                     sb.from('warehouse_racks').update(r).eq('id', editingRackId);
                 }
             } else {
-                const newRack = { id: warehouseRacks.length + 1, zone, rack_name: rackName, product_id: pid, capacity: cap, filled };
+                const newRack = { id: warehouseRacks.length ? Math.max(...warehouseRacks.map(r => r.id)) + 1 : 1, zone, rack_name: rackName, product_id: pid, capacity: cap, filled };
                 warehouseRacks.push(newRack);
                 sb.from('warehouse_racks').insert(newRack);
             }
             closeRackForm();
             renderWarehouseRacks();
-            showToast(editingRackId ? "Rak diperbarui" : "Rak ditambahkan");
+            showToast(isEdit ? "Rak diperbarui" : "Rak ditambahkan");
         }
 
         async function deleteRack(id) {
@@ -4133,12 +4134,13 @@
             const penyewa = document.getElementById("kPenyewa").value.trim() || "-";
             const harga = parseInt(document.getElementById("kHarga").value) || 0;
             if (!pintu || !harga) { showToast("Isi nama pintu dan harga sewa"); return; }
-            if (!editingKontrakanId && (!penyewa || penyewa === "-")) { showToast("Isi nama penyewa"); return; }
+            if (!editingKontrakanId && !isVacant && (!penyewa || penyewa === "-")) { showToast("Isi nama penyewa"); return; }
             const tipe = document.getElementById("kTipe").value;
             const tempo = parseInt(document.getElementById("kTempo").value) || 20;
             const kontak = document.getElementById("kKontak").value.trim() || "-";
             const deposit = parseInt(document.getElementById("kDeposit").value) || 0;
             const isVacant = document.getElementById("kStatus").value === "Vacant";
+            const isEdit = !!editingKontrakanId;
 
             if (editingKontrakanId) {
                 const k = kontrakanData.find(x => x.id === editingKontrakanId);
@@ -4150,7 +4152,8 @@
                     });
                 }
             } else {
-                const newId = "K" + String(kontrakanData.length + 1).padStart(3, "0");
+                const maxNum = kontrakanData.length ? Math.max(...kontrakanData.map(k => parseInt(k.id.replace("K","")) || 0)) : 0;
+                const newId = "K" + String(maxNum + 1).padStart(3, "0");
                 const newK = {
                     id: newId, pintu, penyewa, tipe, harga, tempo, kontak, deposit,
                     tglMasuk: new Date().toISOString().split("T")[0], catatan: "", persentase: 0,
@@ -4163,7 +4166,7 @@
             }
             closeKontrakanModal();
             renderAssets();
-            showToast(editingKontrakanId ? "Unit diperbarui" : "Unit ditambahkan");
+            showToast(isEdit ? "Unit diperbarui" : "Unit ditambahkan");
         }
 
         function closeKontrakanModal() {
@@ -4496,7 +4499,7 @@
         // ============================================================
         // CHECKOUT
         // ============================================================
-        function processCheckout() {
+        async function processCheckout() {
             if (cart.length === 0) { showToast("Keranjang masih kosong"); return; }
             for (const item of cart) {
                 const prod = products.find(p => p.id === item.id);
@@ -4504,7 +4507,7 @@
                 if (prod.stock < item.quantity) { showToast(`Stok ${prod.name} tidak cukup (tersedia: ${prod.stock})`); return; }
             }
             let subtotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
-            let disc = Math.min(parseInt(document.getElementById("discountInput").value) || 0, subtotal);
+            let disc = Math.min(parseInt(document.getElementById("discountInput").value.replace(/\D/g, "")) || 0, subtotal);
             let total = subtotal - disc;
             let customer = document.getElementById("customerName").value.trim() || "Walk-in Customer";
             let method = document.getElementById("paymentMethod").value;
@@ -4512,50 +4515,76 @@
             let pay, change, methodLabel;
 
             if (isSplit) {
-                let cash = parseInt(document.getElementById("splitCash").value) || 0;
-                let nonCash = parseInt(document.getElementById("splitNonCash").value) || 0;
+                let cash = parseInt(document.getElementById("splitCash").value.replace(/\D/g, "")) || 0;
+                let nonCash = parseInt(document.getElementById("splitNonCash").value.replace(/\D/g, "")) || 0;
                 if (cash + nonCash < total) { showToast("Jumlah split kurang!"); return; }
                 pay = cash + nonCash;
                 change = pay - total;
                 methodLabel = "Split (Cash + Non-Tunai)";
                 method = cash > 0 && nonCash > 0 ? "Split" : nonCash > 0 ? "QRIS" : "Cash";
             } else {
-                pay = parseInt(document.getElementById("payAmount").value) || 0;
+                pay = parseInt(document.getElementById("payAmount").value.replace(/\D/g, "")) || 0;
                 if (pay < total) { showToast("Jumlah bayar kurang!"); return; }
                 change = pay - total;
                 methodLabel = method;
             }
 
-            const todayStamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+            const now = new Date();
+            const todayStamp = now.toISOString().slice(0, 10).replace(/-/g, "");
             const todayCount = ordersData.filter(o => o.orderId && o.orderId.startsWith("ORD-" + todayStamp)).length;
             const orderId = "ORD-" + todayStamp + "-" + String(todayCount + 1).padStart(2, "0");
-            const now = new Date();
             const dateStr = now.toISOString().slice(0, 10) + " " + now.toTimeString().slice(0, 5);
             const channel = method === "QRIS" || method === "EDC" || method === "Split" ? "POS2" : "POS1";
 
             const items = cart.map(i => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity, subtotal: i.price * i.quantity }));
-            ordersData.unshift({ orderId, date: dateStr, channel, customer, total, payStatus: "Lunas",
-                wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-", items });
+            const order = { orderId, date: dateStr, channel, customer, total, payStatus: "Lunas",
+                wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-", items };
 
-            // Sync order ke Supabase
-            sb.from('orders').insert({ orderId, date: dateStr, channel, customer, total, payStatus: "Lunas",
-                wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-", items }).then(r => {
-                if (r.error) console.warn("Supabase insert order error:", r.error.message);
+            // Stock backup untuk rollback
+            const stockBackup = {};
+            cart.forEach(item => {
+                const prod = products.find(p => p.id === item.id);
+                if (prod) stockBackup[item.id] = prod.stock;
             });
 
-            // Kurangi stok & catat mutasi
+            // Kurangi stok lokal dulu
+            cart.forEach(item => {
+                const prod = products.find(p => p.id === item.id);
+                if (prod) prod.stock = Math.max(0, prod.stock - item.quantity);
+            });
+
+            // Sync ke Supabase dalam satu batch
+            const promises = [];
+            promises.push(sb.from('orders').insert(order).then(r => {
+                if (r.error) throw new Error("Order sync: " + r.error.message);
+            }));
+
             cart.forEach(item => {
                 const prod = products.find(p => p.id === item.id);
                 if (prod) {
-                    const qtyBefore = prod.stock;
-                    prod.stock = Math.max(0, prod.stock - item.quantity);
+                    const qtyBefore = stockBackup[item.id];
                     const qtyAfter = prod.stock;
-                    sb.from('products').update({ stock: prod.stock }).eq('id', prod.id).then(r => {
-                        if (r.error) console.warn("Stock update error:", r.error.message);
-                    });
-                    logStockMutation(prod.id, prod.name, 'OUT', item.quantity, qtyBefore, qtyAfter, 'POS: ' + orderId);
+                    promises.push(sb.from('products').update({ stock: prod.stock }).eq('id', prod.id).then(r => {
+                        if (r.error) throw new Error("Stock update: " + r.error.message);
+                    }));
+                    promises.push(logStockMutation(prod.id, prod.name, 'OUT', item.quantity, qtyBefore, qtyAfter, 'POS: ' + orderId));
                 }
             });
+
+            try {
+                await Promise.all(promises);
+            } catch (err) {
+                console.error("Checkout sync failed:", err);
+                showToast("Gagal sync ke server: " + err.message);
+                // Rollback stok lokal
+                Object.keys(stockBackup).forEach(id => {
+                    const prod = products.find(p => p.id === parseInt(id));
+                    if (prod) prod.stock = stockBackup[id];
+                });
+                return;
+            }
+
+            ordersData.unshift(order);
 
             renderPenjualanTable();
             renderPosHistory();
@@ -4845,7 +4874,11 @@
         function generateSKU() {
             const cat = document.getElementById("newProdCat").value;
             const prefix = { "Frozen Food": "FRZ", "Roti": "ROT", "Snack": "SNC", "Minuman": "MIN" }[cat] || "PRD";
-            const num = String(products.length + 1).padStart(4, "0");
+            const maxNum = products.length ? Math.max(...products.map(p => {
+                const m = (p.sku || "").match(/\d+/);
+                return m ? parseInt(m[0]) : 0;
+            })) : 0;
+            const num = String(maxNum + 1).padStart(4, "0");
             document.getElementById("newProdSKU").value = prefix + "-" + num;
         }
 
