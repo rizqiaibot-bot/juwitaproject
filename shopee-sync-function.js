@@ -6,77 +6,62 @@
 //   1. npm install -g supabase
 //   2. supabase login
 //   3. supabase functions deploy shopee-stock-sync
-//   4. Set ENV: SHOPEE_PARTNER_ID, SHOPEE_PARTNER_KEY, SHOPEE_SHOP_ID
+//   4. Set ENV:
+//      Toko 1: SHOPEE_PARTNER_ID, SHOPEE_PARTNER_KEY, SHOPEE_SHOP_ID
+//      Toko 2: SHOPEE_PARTNER_ID_2, SHOPEE_PARTNER_KEY_2, SHOPEE_SHOP_ID_2
 // ============================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const SHOPEE_PARTNER_ID = Deno.env.get("SHOPEE_PARTNER_ID") || "";
-const SHOPEE_PARTNER_KEY = Deno.env.get("SHOPEE_PARTNER_KEY") || "";
-const SHOPEE_SHOP_ID = Deno.env.get("SHOPEE_SHOP_ID") || "";
 const SHOPEE_API_URL = "https://partner.shopeemobile.com/api/v2";
+
+const ACCOUNTS = {
+  toko_1: {
+    partner_id: Deno.env.get("SHOPEE_PARTNER_ID") || "",
+    partner_key: Deno.env.get("SHOPEE_PARTNER_KEY") || "",
+    shop_id: Deno.env.get("SHOPEE_SHOP_ID") || "",
+  },
+  toko_2: {
+    partner_id: Deno.env.get("SHOPEE_PARTNER_ID_2") || "",
+    partner_key: Deno.env.get("SHOPEE_PARTNER_KEY_2") || "",
+    shop_id: Deno.env.get("SHOPEE_SHOP_ID_2") || "",
+  },
+};
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-async function signShopee(path, timestamp) {
-  const base = SHOPEE_PARTNER_ID + path + timestamp;
+async function signShopee(account, path, timestamp) {
+  const base = account.partner_id + path + timestamp;
   const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey("raw", encoder.encode(SHOPEE_PARTNER_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const key = await crypto.subtle.importKey("raw", encoder.encode(account.partner_key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(base));
   return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function updateShopeeStock(itemId, sku, newStock) {
-  if (!SHOPEE_PARTNER_ID) return { error: "Shopee not configured" };
+async function updateShopeeBatch(accountName, items) {
+  const account = ACCOUNTS[accountName];
+  if (!account || !account.partner_id) return { error: "Shopee not configured for " + accountName };
 
   const timestamp = Math.floor(Date.now() / 1000);
   const path = "/api/v2/product/update_stock";
-  const sign = await signShopee(path, timestamp);
+  const sign = await signShopee(account, path, timestamp);
 
   const params = new URLSearchParams({
-    partner_id: SHOPEE_PARTNER_ID,
+    partner_id: account.partner_id,
     timestamp: String(timestamp),
     sign,
-    shop_id: SHOPEE_SHOP_ID,
-    item_id: String(itemId),
-      stock_list: JSON.stringify([{
-        model_id: 0,
-        // model_id: 0 = default variation. Produk dengan variasi (2-tier) perlu mapping model_id terpisah.
-        normal_stock: newStock
-    }])
+    shop_id: account.shop_id,
   });
 
-  const res = await fetch(`${SHOPEE_API_URL}/product/update_stock?${params}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" }
-  });
-  return await res.json();
-}
-
-async function updateShopeeBatch(items) {
-  if (!SHOPEE_PARTNER_ID) return { error: "Shopee not configured" };
-
-  const timestamp = Math.floor(Date.now() / 1000);
-  const path = "/api/v2/product/update_stock";
-  const sign = await signShopee(path, timestamp);
-
-  const params = new URLSearchParams({
-    partner_id: SHOPEE_PARTNER_ID,
-    timestamp: String(timestamp),
-    sign,
-    shop_id: SHOPEE_SHOP_ID,
-  });
-
-  // Batch update - kirim array
   for (const item of items) {
     if (item.shopee_item_id != null) {
       const stockParams = new URLSearchParams(params);
       stockParams.set("item_id", String(item.shopee_item_id));
       stockParams.set("stock_list", JSON.stringify([{ model_id: 0, normal_stock: item.qty_after }]));
       const res = await fetch(`${SHOPEE_API_URL}/product/update_stock?${stockParams}`, { method: "POST" });
-      if (!res.ok) console.error("Shopee batch sync error:", await res.text());
+      if (!res.ok) console.error(`Shopee ${accountName} sync error:`, await res.text());
     }
   }
 }
@@ -98,34 +83,40 @@ Deno.serve(async (req) => {
       if (error) throw error;
       if (!mutations.length) break;
 
-      // Hitung stok terbaru per produk dari mutations
-      const productStocks = {};
+      // Group by shopee_account
+      const grouped = {};
       for (const m of mutations) {
-        if (!productStocks[m.product_id]) {
-          productStocks[m.product_id] = {
-            product_id: m.product_id,
-            product_name: m.product_name,
-            shopee_item_id: m.shopee_item_id,
-            shopee_sku: m.shopee_sku,
-            qty_after: m.qty_after,
-            mutation_ids: []
-          };
-        }
-        productStocks[m.product_id].mutation_ids.push(m.id);
-        productStocks[m.product_id].qty_after = m.qty_after;
+        const acc = m.shopee_account || "toko_1";
+        if (!grouped[acc]) grouped[acc] = [];
+        grouped[acc].push(m);
       }
 
-      const items = Object.values(productStocks);
-      await updateShopeeBatch(items);
+      // Sync per account
+      for (const [acc, accMutations] of Object.entries(grouped)) {
+        // Dedupe: ambil qty_after terbaru per product per account
+        const productStocks = {};
+        for (const m of accMutations) {
+          const key = m.product_id;
+          if (!productStocks[key]) {
+            productStocks[key] = { shopee_item_id: m.shopee_item_id, qty_after: m.qty_after, mutation_ids: [] };
+          }
+          productStocks[key].mutation_ids.push(m.id);
+          productStocks[key].qty_after = m.qty_after;
+        }
 
-      // Tandai semua sebagai synced
-      const allMutationIds = items.flatMap(i => i.mutation_ids);
-      await supabase
-        .from("stock_mutations")
-        .update({ sync_status: "synced", shopee_sync_at: new Date().toISOString() })
-        .in("id", allMutationIds);
+        const items = Object.values(productStocks);
+        await updateShopeeBatch(acc, items);
 
-      totalSynced += allMutationIds.length;
+        // Tandai synced
+        const allIds = items.flatMap(i => i.mutation_ids);
+        await supabase
+          .from("stock_mutations")
+          .update({ sync_status: "synced", shopee_sync_at: new Date().toISOString() })
+          .in("id", allIds);
+
+        totalSynced += allIds.length;
+      }
+
       page++;
     }
 

@@ -2302,6 +2302,29 @@
                         <div id="barcodePreview" style="text-align:center;margin-top:12px;display:none;"></div>
                     </div>
 
+                    <!-- CARD: SHOPEE SYNC -->
+                    <div class="form-card" style="background:var(--bg-primary);border:2px dashed #f97316;margin-bottom:18px;padding:18px 20px;">
+                        <h4 style="font-size:0.9rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--text-primary);"><i class="fas fa-store" style="color:#f97316;"></i> Integrasi Shopee (2 Toko)</h4>
+                        <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+                            <div class="form-group">
+                                <label>Shopee Item ID (Toko 1)</label>
+                                <input type="number" id="newProdShopeeId" class="form-control" placeholder="ID produk di Shopee" />
+                            </div>
+                            <div class="form-group">
+                                <label>Shopee SKU (Toko 1)</label>
+                                <input type="text" id="newProdShopeeSku" class="form-control" placeholder="SKU di Shopee toko 1" />
+                            </div>
+                            <div class="form-group">
+                                <label>Shopee Item ID (Toko 2)</label>
+                                <input type="number" id="newProdShopeeId2" class="form-control" placeholder="ID produk di Shopee toko 2" />
+                            </div>
+                            <div class="form-group">
+                                <label>Shopee SKU (Toko 2)</label>
+                                <input type="text" id="newProdShopeeSku2" class="form-control" placeholder="SKU di Shopee toko 2" />
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="form-actions">
                         <button type="button" class="btn-secondary" onclick="showPage('daftar-produk')">Batal</button>
                         <button type="submit" class="checkout-btn" style="width:auto;padding:10px 28px;">Simpan Produk</button>
@@ -3900,18 +3923,26 @@
         // STOCK MUTATION LOGGER (untuk sync stok ke Shopee)
         // ============================================================
         function logStockMutation(productId, productName, type, qty, qtyBefore, qtyAfter, source) {
-            const mutation = {
-                product_id: productId,
-                product_name: productName,
-                type: type,
-                quantity: qty,
-                qty_before: qtyBefore,
-                qty_after: qtyAfter,
-                source: source,
-                sync_status: 'pending',
-                created_at: new Date().toISOString()
-            };
-            sb.from('stock_mutations').insert(mutation).then(r => {
+            const prod = products.find(p => p.id === productId);
+            const mutations = [];
+            if (prod && prod.shopee_item_id) {
+                mutations.push({
+                    product_id: productId, product_name: productName, type, quantity: qty,
+                    qty_before: qtyBefore, qty_after: qtyAfter, source,
+                    shopee_account: 'toko_1', shopee_item_id: prod.shopee_item_id, shopee_sku: prod.shopee_sku || '',
+                    sync_status: 'pending', created_at: new Date().toISOString()
+                });
+            }
+            if (prod && prod.shopee_item_id_2) {
+                mutations.push({
+                    product_id: productId, product_name: productName, type, quantity: qty,
+                    qty_before: qtyBefore, qty_after: qtyAfter, source,
+                    shopee_account: 'toko_2', shopee_item_id: prod.shopee_item_id_2, shopee_sku: prod.shopee_sku_2 || '',
+                    sync_status: 'pending', created_at: new Date().toISOString()
+                });
+            }
+            if (mutations.length === 0) return;
+            sb.from('stock_mutations').insert(mutations).then(r => {
                 if (r.error) console.warn("Stock mutation log error:", r.error.message);
             });
         }
@@ -4869,6 +4900,10 @@
                 const height = parseFloat(document.getElementById("newProdHeight").value) || 0;
                 const weight = parseFloat(document.getElementById("newProdWeight").value) || 0;
                 const barcode = document.getElementById("newProdBarcode").value.trim();
+                const shopee_item_id = parseInt(document.getElementById("newProdShopeeId").value) || null;
+                const shopee_sku = document.getElementById("newProdShopeeSku").value.trim() || null;
+                const shopee_item_id_2 = parseInt(document.getElementById("newProdShopeeId2").value) || null;
+                const shopee_sku_2 = document.getElementById("newProdShopeeSku2").value.trim() || null;
                 const photo = pendingPhotoData || null;
                 if (!name || !modal || !price || !stock) { showToast("Isi semua field wajib"); return; }
                 const nextId = products.length ? Math.max(...products.map(p => p.id)) + 1 : 1;
@@ -4887,7 +4922,9 @@
                     length, width, height, weight,
                     imageIcon: "fa-box",
                     photo,
-                    barcode: barcode || ("899" + String(Math.floor(Math.random() * 10000000000)).padStart(10, "0"))
+                    barcode: barcode || ("899" + String(Math.floor(Math.random() * 10000000000)).padStart(10, "0")),
+                    shopee_item_id, shopee_sku,
+                    shopee_item_id_2, shopee_sku_2
                 };
                 products.push(newProduct);
 
