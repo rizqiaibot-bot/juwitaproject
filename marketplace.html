@@ -1,0 +1,893 @@
+﻿<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marketplace Dashboard — Juwita One</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+  :root {
+    --primary: #6366f1;
+    --primary-hover: #4f46e5;
+    --primary-light: #e0e7ff;
+    --success: #10b981;
+    --success-light: #d1fae5;
+    --warning: #f59e0b;
+    --warning-light: #fef3c7;
+    --danger: #ef4444;
+    --danger-light: #fee2e2;
+    --info: #3b82f6;
+    --info-light: #dbeafe;
+    --bg-body: #f1f5f9;
+    --bg-card: #ffffff;
+    --bg-primary: #f8fafc;
+    --text-primary: #0f172a;
+    --text-muted: #64748b;
+    --border-color: #e2e8f0;
+    --border-hover: #cbd5e1;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+    --radius-sm: 6px;
+    --radius: 8px;
+    --radius-lg: 12px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg-body);
+    color: var(--text-primary);
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+  .container { max-width: 1280px; margin: 0 auto; padding: 16px 24px; }
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 0; margin-bottom: 8px;
+  }
+  .header h1 { font-size: 1.5rem; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .header h1 i { color: var(--primary); font-size: 1.3rem; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: var(--radius-sm); font-size: 0.8rem;
+    font-weight: 600; border: none; cursor: pointer; transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+  .btn-outline { background: transparent; color: var(--primary); border: 1px solid var(--border-color); }
+  .btn-outline:hover:not(:disabled) { background: var(--primary-light); border-color: var(--primary); }
+  .btn-success { background: var(--success); color: #fff; }
+  .btn-warning { background: var(--warning); color: #fff; }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-sm { padding: 4px 10px; font-size: 0.7rem; }
+  .summary-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px; margin-bottom: 24px;
+  }
+  .summary-card {
+    background: var(--bg-card); border-radius: var(--radius-lg);
+    padding: 18px 20px; border: 1px solid var(--border-color); box-shadow: var(--shadow-sm);
+    display: flex; align-items: center; gap: 14px;
+    transition: box-shadow 0.2s;
+  }
+  .summary-card:hover { box-shadow: var(--shadow); }
+  .summary-icon {
+    width: 44px; height: 44px; border-radius: var(--radius);
+    display: flex; align-items: center; justify-content: center; font-size: 1.2rem;
+  }
+  .summary-icon.green { background: var(--success-light); color: var(--success); }
+  .summary-icon.yellow { background: var(--warning-light); color: var(--warning); }
+  .summary-icon.red { background: var(--danger-light); color: var(--danger); }
+  .summary-icon.blue { background: var(--info-light); color: var(--info); }
+  .summary-value { font-size: 1.5rem; font-weight: 800; line-height: 1.2; }
+  .summary-label { font-size: 0.72rem; color: var(--text-muted); font-weight: 600; }
+  .section { margin-bottom: 28px; }
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .section-title { font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .section-title i { color: var(--primary); }
+  .table-wrapper {
+    background: var(--bg-card); border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color); overflow-x: auto;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  th {
+    background: var(--bg-primary); text-align: left; padding: 10px 14px;
+    font-weight: 700; color: var(--text-muted); font-size: 0.7rem;
+    text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap;
+    border-bottom: 1px solid var(--border-color);
+  }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover { background: #fafbfc; }
+  .badge {
+    display: inline-flex; align-items: center; padding: 2px 10px;
+    border-radius: 20px; font-size: 0.68rem; font-weight: 700;
+  }
+  .badge-success { background: var(--success-light); color: #065f46; }
+  .badge-warning { background: var(--warning-light); color: #92400e; }
+  .badge-danger { background: var(--danger-light); color: #991b1b; }
+  .badge-info { background: var(--info-light); color: #1e40af; }
+  .badge-muted { background: #f1f5f9; color: var(--text-muted); }
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    display: none; align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal-box {
+    background: var(--bg-card); border-radius: var(--radius-lg);
+    padding: 24px; width: 90%; max-width: 440px;
+    box-shadow: var(--shadow-lg);
+  }
+  .modal-box h3 { font-size: 1rem; margin-bottom: 16px; font-weight: 700; }
+  .modal-box label { display: block; font-size: 0.75rem; font-weight: 700; margin-bottom: 4px; color: var(--text-muted); }
+  .modal-box input {
+    width: 100%; padding: 8px 12px; border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm); font-size: 0.85rem; outline: none;
+    margin-bottom: 14px;
+  }
+  .modal-box input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .toast-container {
+    position: fixed; bottom: 20px; right: 20px; z-index: 2000;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .toast {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 18px; border-radius: var(--radius); font-size: 0.78rem;
+    font-weight: 600; box-shadow: var(--shadow-lg);
+    animation: slideUp 0.3s ease;
+    background: var(--bg-card); border: 1px solid var(--border-color);
+  }
+  .toast.success { border-left: 3px solid var(--success); }
+  .toast.error { border-left: 3px solid var(--danger); }
+  .toast.success i { color: var(--success); }
+  .toast.error i { color: var(--danger); }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .loading-spinner {
+    display: inline-block; width: 16px; height: 16px;
+    border: 2px solid var(--border-color); border-top-color: var(--primary);
+    border-radius: 50%; animation: spin 0.5s linear infinite;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty-state { text-align: center; padding: 28px; color: var(--text-muted); font-size: 0.8rem; }
+  .action-group { display: flex; gap: 4px; }
+  @media (max-width: 768px) {
+    .container { padding: 12px; }
+    .summary-grid { grid-template-columns: repeat(2, 1fr); }
+    .header { flex-direction: column; align-items: flex-start; gap: 10px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1><i class="fas fa-store-alt"></i> Marketplace Dashboard</h1>
+    <button class="btn btn-outline" onclick="refreshDashboard()" id="refreshBtn">
+      <i class="fas fa-sync-alt"></i> Refresh Dashboard
+    </button>
+  </div>
+
+  <div class="summary-grid" id="summaryCards">
+    <div class="summary-card"><div class="summary-icon green"><i class="fas fa-plug"></i></div><div><div class="summary-value" id="cardConnected">-</div><div class="summary-label">Shopee Connected</div></div></div>
+    <div class="summary-card"><div class="summary-icon yellow"><i class="fas fa-clock"></i></div><div><div class="summary-value" id="cardPending">-</div><div class="summary-label">Pending Sync</div></div></div>
+    <div class="summary-card"><div class="summary-icon red"><i class="fas fa-exclamation-triangle"></i></div><div><div class="summary-value" id="cardFailed">-</div><div class="summary-label">Failed Sync</div></div></div>
+    <div class="summary-card"><div class="summary-icon blue"><i class="fas fa-shopping-bag"></i></div><div><div class="summary-value" id="cardOrders">-</div><div class="summary-label">MP Orders Today</div></div></div>
+    <div class="summary-card"><div class="summary-icon green" style="background:#d1fae5;color:#059669;"><i class="fas fa-check-double"></i></div><div><div class="summary-value" id="cardReadyImport">-</div><div class="summary-label">Ready Import</div></div></div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><div class="section-title"><i class="fas fa-link"></i> Marketplace Accounts</div></div>
+    <div class="table-wrapper"><table>
+      <thead><tr><th>Platform</th><th>Account Label</th><th>Shop ID</th><th>Shop Name</th><th>Connection</th><th>Last Sync</th><th>Action</th></tr></thead>
+      <tbody id="accountsTableBody"><tr><td colspan="7" class="empty-state"><span class="loading-spinner"></span> Loading...</td></tr></tbody>
+    </table></div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><div class="section-title"><i class="fas fa-history"></i> Recent Activity</div></div>
+    <div class="table-wrapper"><table>
+      <thead><tr><th>Time</th><th>Event</th><th>Platform</th><th>Status</th><th>Reference</th><th>Duration</th></tr></thead>
+      <tbody id="activityTableBody"><tr><td colspan="6" class="empty-state"><span class="loading-spinner"></span> Loading...</td></tr></tbody>
+    </table></div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><div class="section-title"><i class="fas fa-hourglass-half" style="color:var(--warning);"></i> Pending Stock Mutations</div></div>
+    <div class="table-wrapper"><table>
+      <thead><tr><th>Created</th><th>Product</th><th>Qty Before</th><th>Qty After</th><th>Marketplace</th><th>Status</th></tr></thead>
+      <tbody id="pendingTableBody"><tr><td colspan="6" class="empty-state"><span class="loading-spinner"></span> Loading...</td></tr></tbody>
+    </table></div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><div class="section-title"><i class="fas fa-times-circle" style="color:var(--danger);"></i> Failed Stock Mutations</div></div>
+    <div class="table-wrapper"><table>
+      <thead><tr><th>Created</th><th>Product</th><th>Qty Before</th><th>Qty After</th><th>Marketplace</th><th>Status</th><th>Action</th></tr></thead>
+      <tbody id="failedTableBody"><tr><td colspan="7" class="empty-state"><span class="loading-spinner"></span> Loading...</td></tr></tbody>
+    </table></div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title"><i class="fas fa-shopping-cart"></i> Marketplace Orders</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap;">
+      <div class="action-group" id="orderFilterBtns">
+        <button class="btn btn-sm btn-primary" onclick="filterMarketplaceOrders('all')" data-filter="all">All</button>
+        <button class="btn btn-sm btn-outline" onclick="filterMarketplaceOrders('pending')" data-filter="pending">Pending</button>
+        <button class="btn btn-sm btn-outline" onclick="filterMarketplaceOrders('processing')" data-filter="processing">Processing</button>
+        <button class="btn btn-sm btn-outline" onclick="filterMarketplaceOrders('ready_import')" data-filter="ready_import">Ready Import</button>
+        <button class="btn btn-sm btn-outline" onclick="filterMarketplaceOrders('processed')" data-filter="processed">Completed</button>
+        <button class="btn btn-sm btn-outline" onclick="filterMarketplaceOrders('failed')" data-filter="failed">Failed</button>
+      </div>
+      <input type="text" id="orderSearchInput" placeholder="Cari Order Number / Buyer..." style="padding:6px 10px;border:1px solid var(--border-color);border-radius:var(--radius-sm);font-size:0.75rem;width:200px;outline:none;" oninput="searchMarketplaceOrders()">
+    </div>
+    <div class="table-wrapper"><table>
+      <thead><tr><th>Order Number</th><th>Buyer</th><th>Order Status</th><th>Total</th><th>Created</th><th>Sync Status</th><th>Action</th></tr></thead>
+      <tbody id="ordersTableBody"><tr><td colspan="7" class="empty-state"><span class="loading-spinner"></span> Loading...</td></tr></tbody>
+    </table></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="connectModal">
+  <div class="modal-box">
+    <h3>Hubungkan Shopee</h3>
+    <label for="inputShopId">Shop ID</label>
+    <input type="text" id="inputShopId" placeholder="Masukkan Shop ID dari Shopee Seller Center">
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeConnectModal()">Batal</button>
+      <button class="btn btn-primary" onclick="connectShopee()" id="connectBtn">Hubungkan</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="processModal">
+  <div class="modal-box">
+    <h3>Proses Order Marketplace</h3>
+    <div id="processModalContent" style="font-size:0.8rem;line-height:1.6;margin-bottom:16px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeProcessModal()">Batal</button>
+      <button class="btn btn-primary" onclick="updateOrderStatus()" id="processBtn">Proses</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="orderDetailModal">
+  <div class="modal-box" style="max-width:640px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h3 id="detailTitle" style="margin-bottom:0;">Order Detail</h3>
+      <button class="btn btn-outline btn-sm" onclick="closeOrderDetail()"><i class="fas fa-times"></i></button>
+    </div>
+    <div id="orderDetailContent" style="font-size:0.78rem;line-height:1.6;"></div>
+    <div class="modal-actions" style="margin-top:14px;">
+      <button class="btn btn-outline" onclick="closeOrderDetail()">Tutup</button>
+      <button class="btn btn-primary" onclick="markReadyImport()" id="markReadyBtn" style="display:none;">
+        <i class="fas fa-check-double"></i> Mark Ready Import
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// ============================================================
+// SUPABASE CLIENT
+// ============================================================
+const SUPABASE_URL = "https://vivgzxitlikpgnppgeqn.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpdmd6eGl0bGlrcGducHBnZXFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3NTI4MjAsImV4cCI6MjA5NzMyODgyMH0.BpLLNrSnuufGLOb21zKp-f6luz7e3olpOkx7SNazCW8";
+const SB = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ============================================================
+// TOAST
+// ============================================================
+function showToast(msg, type) {
+  type = type || "success";
+  var c = document.getElementById("toastContainer");
+  var t = document.createElement("div");
+  var icon = type === "success" ? "fa-check-circle" : "fa-times-circle";
+  t.className = "toast " + type;
+  t.innerHTML = '<i class="fas ' + icon + '"></i> ' + msg;
+  c.appendChild(t);
+  setTimeout(function() { t.style.opacity = "0"; t.style.transition = "opacity 0.3s"; setTimeout(function() { t.remove(); }, 300); }, 3000);
+}
+
+// ============================================================
+// LOADING
+// ============================================================
+function showLoading(id) {
+  var el = document.getElementById(id);
+  if (el) { el.disabled = true; var i = el.querySelector("i"); if (i) i.classList.add("fa-spin"); }
+}
+function hideLoading(id) {
+  var el = document.getElementById(id);
+  if (el) { el.disabled = false; var i = el.querySelector("i"); if (i) i.classList.remove("fa-spin"); }
+}
+
+// ============================================================
+// HELPER
+// ============================================================
+function formatTime(ts) {
+  if (!ts) return "-";
+  return new Date(ts).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+function formatRupiah(n) { return (n || 0).toLocaleString("id-ID"); }
+function statusBadge(status) {
+  var map = { success: "badge-success", failed: "badge-danger", pending: "badge-warning", synced: "badge-success", connected: "badge-success", disconnected: "badge-muted", expired: "badge-warning", error: "badge-danger", processing: "badge-info", ready_import: "badge-success", processed: "badge-success", completed: "badge-success", ignored: "badge-muted" };
+  var cls = map[status] || "badge-muted";
+  return '<span class="badge ' + cls + '">' + status + '</span>';
+}
+
+// ============================================================
+// EDGE FUNCTION CALL
+// ============================================================
+async function callEdgeFunction(name, body) {
+  var url = "https://vivgzxitlikpgnppgeqn.supabase.co/functions/v1/" + name;
+  var opts = {
+    method: body ? "POST" : "GET",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + SUPABASE_KEY }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  var res = await fetch(url, opts);
+  return res.json();
+}
+
+// ============================================================
+// LOAD SUMMARY
+// ============================================================
+async function loadSummary() {
+  try {
+    var results = await Promise.all([
+      SB.from("marketplace_config").select("id", { count: "exact", head: true }).eq("connection_status", "connected"),
+      SB.from("stock_mutations").select("id", { count: "exact", head: true }).eq("sync_status", "pending"),
+      SB.from("stock_mutations").select("id", { count: "exact", head: true }).eq("sync_status", "failed"),
+      SB.from("marketplace_orders").select("id", { count: "exact", head: true }).gte("created_at", new Date().toISOString().slice(0, 10)),
+      SB.from("marketplace_orders").select("id", { count: "exact", head: true }).eq("sync_status", "ready_import")
+    ]);
+    document.getElementById("cardConnected").textContent = results[0].count || 0;
+    document.getElementById("cardPending").textContent = results[1].count || 0;
+    document.getElementById("cardFailed").textContent = results[2].count || 0;
+    document.getElementById("cardOrders").textContent = results[3].count || 0;
+    document.getElementById("cardReadyImport").textContent = results[4].count || 0;
+  } catch (err) {
+    console.error("loadSummary:", err);
+  }
+}
+
+// ============================================================
+// LOAD ACCOUNTS
+// ============================================================
+async function loadAccounts() {
+  var tbody = document.getElementById("accountsTableBody");
+  try {
+    var res = await SB.from("marketplace_config").select("*").order("created_at", { ascending: false });
+    var data = res.data;
+    if (!data || !data.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Belum ada akun marketplace terhubung.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(function(r) {
+      return '<tr>' +
+        '<td><i class="fab fa-shopify" style="color:#ee4d2d;"></i> ' + r.platform + '</td>' +
+        '<td>' + (r.account_label || "-") + '</td>' +
+        '<td>' + r.shop_id + '</td>' +
+        '<td>' + (r.shop_name || "-") + '</td>' +
+        '<td>' + statusBadge(r.connection_status) + '</td>' +
+        '<td>' + (r.last_sync_at ? formatTime(r.last_sync_at) : "-") + '</td>' +
+        '<td><div class="action-group">' +
+          '<button class="btn btn-primary btn-sm" onclick="openConnectModal()"><i class="fas fa-plug"></i> Connect</button> ' +
+          '<button class="btn btn-warning btn-sm" onclick="syncStock()"><i class="fas fa-sync-alt"></i> Sync</button> ' +
+          '<button class="btn btn-outline btn-sm" onclick="pullOrders()"><i class="fas fa-download"></i> Pull</button>' +
+        '</div></td>' +
+        '</tr>';
+    }).join("");
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state" style="color:var(--danger);">Gagal memuat data: ' + err.message + '</td></tr>';
+  }
+}
+
+// ============================================================
+// LOAD ACTIVITY
+// ============================================================
+async function loadActivity() {
+  var tbody = document.getElementById("activityTableBody");
+  try {
+    var res = await SB.from("activity_log").select("*").order("created_at", { ascending: false }).limit(20);
+    var data = res.data;
+    if (!data || !data.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Belum ada aktivitas marketplace.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(function(r) {
+      return '<tr>' +
+        '<td>' + formatTime(r.created_at) + '</td>' +
+        '<td><strong>' + (r.event_type || "-") + '</strong></td>' +
+        '<td>' + (r.platform || "-") + '</td>' +
+        '<td>' + statusBadge(r.status) + '</td>' +
+        '<td>' + (r.reference_id || r.shop_id || "-") + '</td>' +
+        '<td>' + (r.duration_ms != null ? r.duration_ms + "ms" : "-") + '</td>' +
+        '</tr>';
+    }).join("");
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state" style="color:var(--danger);">Gagal memuat data: ' + err.message + '</td></tr>';
+  }
+}
+
+// ============================================================
+// LOAD PENDING MUTATIONS
+// ============================================================
+async function loadPendingMutations() {
+  var tbody = document.getElementById("pendingTableBody");
+  try {
+    var res = await SB.from("stock_mutations").select("*").eq("sync_status", "pending").order("created_at", { ascending: false }).limit(20);
+    var data = res.data;
+    if (!data || !data.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Tidak ada mutasi pending. Sinkronisasi lancar.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(function(r) {
+      var skuTag = r.shopee_sku ? ' <span style="font-size:0.65rem;color:var(--text-muted);">' + r.shopee_sku + '</span>' : '';
+      return '<tr>' +
+        '<td>' + formatTime(r.created_at) + '</td>' +
+        '<td>' + (r.product_name || "-") + skuTag + '</td>' +
+        '<td>' + (r.qty_before != null ? r.qty_before : "-") + '</td>' +
+        '<td><strong>' + (r.qty_after != null ? r.qty_after : "-") + '</strong></td>' +
+        '<td>' + (r.shopee_account || "-") + '</td>' +
+        '<td>' + statusBadge("pending") + '</td>' +
+        '</tr>';
+    }).join("");
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state" style="color:var(--danger);">Gagal memuat data: ' + err.message + '</td></tr>';
+  }
+}
+
+// ============================================================
+// LOAD FAILED MUTATIONS
+// ============================================================
+async function loadFailedMutations() {
+  var tbody = document.getElementById("failedTableBody");
+  try {
+    var res = await SB.from("stock_mutations").select("*").eq("sync_status", "failed").order("created_at", { ascending: false }).limit(20);
+    var data = res.data;
+    if (!data || !data.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Tidak ada mutasi gagal.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(function(r) {
+      var skuTag = r.shopee_sku ? ' <span style="font-size:0.65rem;color:var(--text-muted);">' + r.shopee_sku + '</span>' : '';
+      return '<tr>' +
+        '<td>' + formatTime(r.created_at) + '</td>' +
+        '<td>' + (r.product_name || "-") + skuTag + '</td>' +
+        '<td>' + (r.qty_before != null ? r.qty_before : "-") + '</td>' +
+        '<td><strong>' + (r.qty_after != null ? r.qty_after : "-") + '</strong></td>' +
+        '<td>' + (r.shopee_account || "-") + '</td>' +
+        '<td>' + statusBadge("failed") + '</td>' +
+        '<td><button class="btn btn-warning btn-sm" onclick="retryMutation(' + r.id + ')"><i class="fas fa-redo"></i> Retry</button></td>' +
+        '</tr>';
+    }).join("");
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state" style="color:var(--danger);">Gagal memuat data: ' + err.message + '</td></tr>';
+  }
+}
+
+// ============================================================
+// MARKETPLACE ORDERS STATE
+// ============================================================
+var mpOrdersFilter = "all";
+var mpOrdersSearch = "";
+var currentProcessOrder = null;
+
+// ============================================================
+// LOAD MARKETPLACE ORDERS
+// ============================================================
+async function loadMarketplaceOrders() {
+  var tbody = document.getElementById("ordersTableBody");
+  try {
+    var query = SB.from("marketplace_orders").select("*").order("created_at", { ascending: false }).limit(100);
+    var res = await query;
+    var data = res.data;
+    if (!data || !data.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Belum ada order dari marketplace.</td></tr>';
+      return;
+    }
+    renderMarketplaceOrders(data);
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state" style="color:var(--danger);">Gagal memuat data: ' + err.message + '</td></tr>';
+  }
+}
+
+// ============================================================
+// RENDER MARKETPLACE ORDERS (dengan filter + search frontend)
+// ============================================================
+function renderMarketplaceOrders(data) {
+  var tbody = document.getElementById("ordersTableBody");
+  var filtered = data;
+
+  if (mpOrdersFilter !== "all") {
+    filtered = filtered.filter(function(r) { return r.sync_status === mpOrdersFilter; });
+  }
+
+  if (mpOrdersSearch) {
+    var s = mpOrdersSearch.toLowerCase();
+    filtered = filtered.filter(function(r) {
+      return (r.mp_order_id && r.mp_order_id.toLowerCase().indexOf(s) !== -1) ||
+             (r.customer_name && r.customer_name.toLowerCase().indexOf(s) !== -1);
+    });
+  }
+
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Tidak ada order yang cocok dengan filter.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(function(r) {
+    var isPending = r.sync_status === "pending";
+    var isProcessing = r.sync_status === "processing";
+    var actionHtml = '<button class="btn btn-outline btn-sm" onclick="openOrderDetail(\'' + r.mp_order_id + '\')"><i class="fas fa-eye"></i> Detail</button>';
+    if (isPending) {
+      actionHtml += ' <button class="btn btn-primary btn-sm" onclick="openProcessModal(\'' + r.mp_order_id + '\',\'' + (r.customer_name || "-") + '\',' + r.total + ')"><i class="fas fa-arrow-right"></i> Proses</button>';
+    }
+    return '<tr>' +
+      '<td><strong>' + r.mp_order_id + '</strong></td>' +
+      '<td>' + (r.customer_name || "-") + '</td>' +
+      '<td>' + statusBadge((r.order_status || "").toLowerCase()) + ' ' + r.order_status + '</td>' +
+      '<td><strong>Rp ' + formatRupiah(r.total) + '</strong></td>' +
+      '<td>' + formatTime(r.created_at) + '</td>' +
+      '<td>' + statusBadge(r.sync_status) + '</td>' +
+      '<td>' + actionHtml + '</td>' +
+      '</tr>';
+  }).join("");
+}
+
+// ============================================================
+// FILTER MARKETPLACE ORDERS
+// ============================================================
+function filterMarketplaceOrders(filter) {
+  mpOrdersFilter = filter;
+  var btns = document.querySelectorAll("#orderFilterBtns button");
+  btns.forEach(function(b) {
+    if (b.dataset.filter === filter) { b.className = "btn btn-sm btn-primary"; }
+    else { b.className = "btn btn-sm btn-outline"; }
+  });
+  loadMarketplaceOrders();
+}
+
+// ============================================================
+// SEARCH MARKETPLACE ORDERS
+// ============================================================
+function searchMarketplaceOrders() {
+  mpOrdersSearch = document.getElementById("orderSearchInput").value.trim();
+  loadMarketplaceOrders();
+}
+
+// ============================================================
+// OPEN PROCESS MODAL
+// ============================================================
+function openProcessModal(orderId, buyer, total) {
+  currentProcessOrder = { orderId: orderId, buyer: buyer, total: total };
+  var content = document.getElementById("processModalContent");
+  content.innerHTML =
+    '<div style="margin-bottom:8px;"><strong>Order Number:</strong> ' + orderId + '</div>' +
+    '<div style="margin-bottom:8px;"><strong>Buyer:</strong> ' + buyer + '</div>' +
+    '<div style="margin-bottom:8px;"><strong>Total:</strong> Rp ' + formatRupiah(total) + '</div>' +
+    '<div style="background:var(--warning-light);padding:10px;border-radius:var(--radius-sm);color:#92400e;font-size:0.75rem;margin-top:10px;">' +
+    '<i class="fas fa-info-circle"></i> Order ini akan diproses menjadi transaksi internal.' +
+    '</div>';
+  document.getElementById("processModal").classList.add("active");
+}
+
+// ============================================================
+// CLOSE PROCESS MODAL
+// ============================================================
+function closeProcessModal() {
+  document.getElementById("processModal").classList.remove("active");
+  currentProcessOrder = null;
+}
+
+// ============================================================
+// UPDATE ORDER STATUS (pending → processing)
+// ============================================================
+async function updateOrderStatus() {
+  if (!currentProcessOrder) return;
+  showLoading("processBtn");
+  try {
+    var res = await SB.from("marketplace_orders")
+      .update({ sync_status: "processing", updated_at: new Date().toISOString() })
+      .eq("mp_order_id", currentProcessOrder.orderId);
+    if (res.error) {
+      showToast("Gagal: " + res.error.message, "error");
+    } else {
+      showToast("Order " + currentProcessOrder.orderId + " diproses");
+      closeProcessModal();
+      refreshDashboard();
+    }
+  } catch (err) {
+    showToast("Gagal: " + err.message, "error");
+  }
+  hideLoading("processBtn");
+}
+
+// ============================================================
+// ORDER DETAIL STATE
+// ============================================================
+var currentDetailOrder = null;
+
+// ============================================================
+// OPEN ORDER DETAIL (load + tampilkan)
+// ============================================================
+async function openOrderDetail(orderId) {
+  document.getElementById("orderDetailContent").innerHTML = '<div class="empty-state"><span class="loading-spinner"></span> Memuat detail order...</div>';
+  document.getElementById("markReadyBtn").style.display = "none";
+  document.getElementById("orderDetailModal").classList.add("active");
+
+  try {
+    var res = await SB.from("marketplace_orders").select("*").eq("mp_order_id", orderId).single();
+    if (res.error) {
+      document.getElementById("orderDetailContent").innerHTML = '<div class="empty-state" style="color:var(--danger);">Gagal memuat: ' + res.error.message + '</div>';
+      return;
+    }
+    currentDetailOrder = res.data;
+
+    // Load produk Juwita untuk validasi mapping
+    var prodRes = await SB.from("products").select("id,name,sku,shopee_item_id,shopee_item_id_2").not("shopee_item_id", "is", null);
+    var productsMap = {};
+    if (prodRes.data) {
+      prodRes.data.forEach(function(p) {
+        if (p.shopee_item_id) productsMap[p.shopee_item_id] = p;
+        if (p.shopee_item_id_2) productsMap[p.shopee_item_id_2] = p;
+      });
+    }
+
+    renderOrderDetail(res.data, productsMap);
+  } catch (err) {
+    document.getElementById("orderDetailContent").innerHTML = '<div class="empty-state" style="color:var(--danger);">Error: ' + err.message + '</div>';
+  }
+}
+
+// ============================================================
+// RENDER ORDER DETAIL (timeline + items + validasi)
+// ============================================================
+function renderOrderDetail(order, productsMap) {
+  var statuses = ["pending", "processing", "ready_import", "processed", "failed"];
+  var statusIdx = statuses.indexOf(order.sync_status);
+  if (statusIdx < 0) statusIdx = 0;
+
+  var timelineHtml = '<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;">';
+  statuses.forEach(function(s, i) {
+    var cls = i <= statusIdx ? "badge-success" : "badge-muted";
+    timelineHtml += '<span class="badge ' + cls + '" style="font-size:0.68rem;">' + s + '</span>';
+    if (i < statuses.length - 1) timelineHtml += '<span style="color:var(--text-muted);">→</span>';
+  });
+  timelineHtml += '</div>';
+
+  var infoHtml =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;margin-bottom:14px;">' +
+    '<div><strong style="font-size:0.65rem;color:var(--text-muted);">Order Number</strong><br>' + order.mp_order_id + '</div>' +
+    '<div><strong style="font-size:0.65rem;color:var(--text-muted);">Platform</strong><br>' + order.platform + '</div>' +
+    '<div><strong style="font-size:0.65rem;color:var(--text-muted);">Buyer</strong><br>' + (order.customer_name || "-") + '</div>' +
+    '<div><strong style="font-size:0.65rem;color:var(--text-muted);">Tanggal Order</strong><br>' + formatTime(order.created_at) + '</div>' +
+    '<div><strong style="font-size:0.65rem;color:var(--text-muted);">Order Status</strong><br>' + statusBadge((order.order_status || "").toLowerCase()) + ' ' + order.order_status + '</div>' +
+    '<div><strong style="font-size:0.65rem;color:var(--text-muted);">Sync Status</strong><br>' + statusBadge(order.sync_status) + '</div>' +
+    '<div><strong style="font-size:0.65rem;color:var(--text-muted);">Total</strong><br><strong>Rp ' + formatRupiah(order.total) + '</strong></div>' +
+    '</div>';
+
+  // Parse item dari raw_payload
+  var items = [];
+  var raw = order.raw_payload;
+  if (raw && raw.item_list && raw.item_list.length) {
+    items = raw.item_list;
+  } else if (typeof raw === "string") {
+    try { var p = JSON.parse(raw); if (p.item_list) items = p.item_list; } catch(e) {}
+  }
+
+  var itemsHtml = "";
+  var totalMapped = 0;
+  var totalUnmapped = 0;
+
+  if (items.length) {
+    itemsHtml = '<table style="width:100%;font-size:0.72rem;margin-top:8px;">' +
+      '<thead><tr><th>SKU Shopee</th><th>Item ID</th><th>Nama Produk</th><th>Qty</th><th>Subtotal</th><th>Mapping</th></tr></thead><tbody>';
+
+    items.forEach(function(item) {
+      var modelPrice = parseFloat(item.model_original_price) || 0;
+      var qty = item.model_quantity_purchased || 1;
+      var rawModelPrice = item.model_original_price;
+      if (typeof rawModelPrice === "string" && rawModelPrice.indexOf(".") !== -1) {
+        modelPrice = rawModelPrice;
+      }
+      var subtotal = parseFloat(modelPrice) * qty;
+      if (isNaN(subtotal)) subtotal = 0;
+
+      var mapped = productsMap[item.item_id] || null;
+      var mapBadge, mapText;
+      if (mapped) {
+        totalMapped++;
+        mapBadge = "badge-success";
+        mapText = mapped.name + " (" + (mapped.sku || "-") + ")";
+      } else {
+        totalUnmapped++;
+        mapBadge = "badge-danger";
+        mapText = "Belum dimapping";
+      }
+
+      itemsHtml += '<tr>' +
+        '<td>' + (item.model_sku || "-") + '</td>' +
+        '<td>' + (item.item_id || "-") + '</td>' +
+        '<td>' + (item.item_name || "-") + '</td>' +
+        '<td>' + qty + '</td>' +
+        '<td>' + (isNaN(subtotal) ? "-" : "Rp " + Math.round(subtotal).toLocaleString("id-ID")) + '</td>' +
+        '<td><span class="badge ' + mapBadge + '" style="font-size:0.6rem;">' + mapText + '</span></td>' +
+        '</tr>';
+    });
+    itemsHtml += '</tbody></table>';
+  } else {
+    itemsHtml = '<div class="empty-state" style="padding:12px;">Item detail tidak tersedia di raw_payload</div>';
+  }
+
+  var summaryHtml =
+    '<div style="display:flex;gap:14px;margin-top:10px;padding:10px;background:var(--bg-primary);border-radius:var(--radius-sm);">' +
+    '<div><strong style="font-size:0.6rem;color:var(--text-muted);">Total Item</strong><br><strong>' + items.length + '</strong></div>' +
+    '<div><strong style="font-size:0.6rem;color:var(--text-muted);">Mapped</strong><br><strong style="color:var(--success);">' + totalMapped + '</strong></div>' +
+    '<div><strong style="font-size:0.6rem;color:var(--text-muted);">Belum Mapped</strong><br><strong style="color:var(--danger);">' + totalUnmapped + '</strong></div>' +
+    '</div>';
+
+  document.getElementById("detailTitle").textContent = "Order Detail — " + order.mp_order_id;
+  document.getElementById("orderDetailContent").innerHTML = timelineHtml + infoHtml + summaryHtml + '<div style="margin-top:12px;"><strong style="font-size:0.72rem;">Items</strong></div>' + itemsHtml;
+
+  // Tampilkan tombol Mark Ready Import jika status = processing
+  if (order.sync_status === "processing") {
+    document.getElementById("markReadyBtn").style.display = "inline-flex";
+  } else {
+    document.getElementById("markReadyBtn").style.display = "none";
+  }
+}
+
+// ============================================================
+// CLOSE ORDER DETAIL
+// ============================================================
+function closeOrderDetail() {
+  document.getElementById("orderDetailModal").classList.remove("active");
+  currentDetailOrder = null;
+}
+
+// ============================================================
+// MARK READY IMPORT (processing → ready_import)
+// ============================================================
+async function markReadyImport() {
+  if (!currentDetailOrder) return;
+  showLoading("markReadyBtn");
+  try {
+    var res = await SB.from("marketplace_orders")
+      .update({ sync_status: "ready_import", updated_at: new Date().toISOString() })
+      .eq("mp_order_id", currentDetailOrder.mp_order_id);
+    if (res.error) {
+      showToast("Gagal: " + res.error.message, "error");
+    } else {
+      showToast(currentDetailOrder.mp_order_id + " siap diimport");
+      closeOrderDetail();
+      refreshDashboard();
+    }
+  } catch (err) {
+    showToast("Gagal: " + err.message, "error");
+  }
+  hideLoading("markReadyBtn");
+}
+// ============================================================
+function openConnectModal() {
+  document.getElementById("inputShopId").value = "";
+  document.getElementById("connectModal").classList.add("active");
+}
+function closeConnectModal() {
+  document.getElementById("connectModal").classList.remove("active");
+}
+async function connectShopee() {
+  var shopId = document.getElementById("inputShopId").value.trim();
+  if (!shopId) { showToast("Shop ID wajib diisi", "error"); return; }
+  showLoading("connectBtn");
+  try {
+    var result = await callEdgeFunction("shopee-connect", { shop_id: shopId });
+    if (result.success) {
+      showToast("Berhasil terhubung ke " + (result.shop_name || shopId));
+      closeConnectModal();
+    } else {
+      showToast("Gagal: " + (result.error || "Unknown error"), "error");
+    }
+  } catch (err) {
+    showToast("Gagal: " + err.message, "error");
+  }
+  hideLoading("connectBtn");
+  refreshDashboard();
+}
+
+// ============================================================
+// SYNC STOCK
+// ============================================================
+async function syncStock() {
+  showToast("Sinkronisasi stok dimulai...");
+  try {
+    var result = await callEdgeFunction("shopee-stock-sync");
+    if (result.error) {
+      showToast("Sync gagal: " + result.error, "error");
+    } else if (result.message === "Sync already running") {
+      showToast("Sync sedang berjalan, tunggu sebentar", "error");
+    } else {
+      showToast("Sync selesai: " + (result.synced || 0) + " sukses, " + (result.failed || 0) + " gagal");
+    }
+  } catch (err) {
+    showToast("Gagal: " + err.message, "error");
+  }
+  refreshDashboard();
+}
+
+// ============================================================
+// PULL ORDERS
+// ============================================================
+async function pullOrders() {
+  showToast("Mengambil pesanan dari Shopee...");
+  try {
+    var result = await callEdgeFunction("shopee-pull-orders");
+    if (result.success) {
+      showToast("Selesai: " + (result.inserted || 0) + " baru, " + (result.skipped || 0) + " dilewati, " + (result.failed || 0) + " gagal");
+    } else {
+      showToast("Gagal: " + (result.error || "Unknown error"), "error");
+    }
+  } catch (err) {
+    showToast("Gagal: " + err.message, "error");
+  }
+  refreshDashboard();
+}
+
+// ============================================================
+// RETRY FAILED MUTATION
+// ============================================================
+async function retryMutation(id) {
+  try {
+    var res = await SB.from("stock_mutations").update({ sync_status: "pending" }).eq("id", id);
+    if (res.error) {
+      showToast("Gagal retry: " + res.error.message, "error");
+    } else {
+      showToast("Mutasi dijadwalkan ulang untuk sinkronisasi");
+    }
+  } catch (err) {
+    showToast("Gagal: " + err.message, "error");
+  }
+  refreshDashboard();
+}
+
+// ============================================================
+// REFRESH DASHBOARD
+// ============================================================
+function refreshDashboard() {
+  showLoading("refreshBtn");
+  Promise.all([
+    loadSummary(),
+    loadAccounts(),
+    loadActivity(),
+    loadPendingMutations(),
+    loadFailedMutations(),
+    loadMarketplaceOrders()
+  ]).finally(function() {
+    hideLoading("refreshBtn");
+  });
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function init() {
+  refreshDashboard();
+}
+
+document.addEventListener("DOMContentLoaded", init);
+</script>
+
+</body>
+</html>

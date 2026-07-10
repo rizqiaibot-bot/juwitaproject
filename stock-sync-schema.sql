@@ -1,3 +1,6 @@
+-- ============================================================
+-- ⚠️  DEPRECATED — Gunakan shopee-sync-schema.sql yang lebih lengkap
+-- ============================================================
 -- Tabel log mutasi stok (untuk sync ke Shopee)
 CREATE TABLE IF NOT EXISTS stock_mutations (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

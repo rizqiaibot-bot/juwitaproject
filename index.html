@@ -1879,6 +1879,7 @@
                     </ul>
                 </li>
 
+                <li class="nav-item"><a href="marketplace.html"><i class="fas fa-store"></i> Marketplace</a></li>
                 <li class="nav-item" data-page="pengaturan"><a href="#"><i class="fas fa-cog"></i> Pengaturan</a></li>
             </ul>
 
@@ -4114,12 +4115,12 @@
             const penyewa = document.getElementById("kPenyewa").value.trim() || "-";
             const harga = parseInt(document.getElementById("kHarga").value) || 0;
             if (!pintu || !harga) { showToast("Isi nama pintu dan harga sewa"); return; }
+            const isVacant = document.getElementById("kStatus").value === "Vacant";
             if (!editingKontrakanId && !isVacant && (!penyewa || penyewa === "-")) { showToast("Isi nama penyewa"); return; }
             const tipe = document.getElementById("kTipe").value;
             const tempo = parseInt(document.getElementById("kTempo").value) || 20;
             const kontak = document.getElementById("kKontak").value.trim() || "-";
             const deposit = parseInt(document.getElementById("kDeposit").value) || 0;
-            const isVacant = document.getElementById("kStatus").value === "Vacant";
             const isEdit = !!editingKontrakanId;
 
             if (editingKontrakanId) {
