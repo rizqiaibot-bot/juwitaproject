@@ -45,3 +45,14 @@ INSERT INTO warehouse_receiving (id, po_number, product_id, product_name, suppli
   (1, 'PO-2026-001', 18, 'ROTI TAWAR GANDUM', 'PT Sinar Roti', 200, '2026-06-15', 'Kondisi baik'),
   (2, 'PO-2026-002', 23, 'SUSU SEGAR UHT 1L', 'UD Niaga Bersama', 150, '2026-06-14', 'Segel utuh')
 ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================
+-- RLS + POLICIES (konsisten dengan tabel lain)
+-- ============================================================
+ALTER TABLE warehouse_receiving ENABLE ROW LEVEL SECURITY;
+ALTER TABLE warehouse_racks      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE warehouse_opname     ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY IF NOT EXISTS "Allow all warehouse_receiving" ON warehouse_receiving FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY IF NOT EXISTS "Allow all warehouse_racks"      ON warehouse_racks      FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY IF NOT EXISTS "Allow all warehouse_opname"     ON warehouse_opname     FOR ALL USING (true) WITH CHECK (true);

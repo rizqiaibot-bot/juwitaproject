@@ -274,6 +274,7 @@ Deno.serve(async (req) => {
     for (const sid of shopIds) {
       await supabase.from("marketplace_config")
         .update({ last_sync_at: new Date().toISOString() })
+        .eq("platform", "shopee")
         .eq("shop_id", sid);
     }
 

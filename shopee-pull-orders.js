@@ -178,28 +178,16 @@ async function saveOrder(account, orderDetail) {
   const mpOrderId = orderDetail.order_sn;
   if (!mpOrderId) return { status: "failed", error: "order_sn tidak ditemukan di response" };
 
-  const existing = await supabase
-    .from("marketplace_orders")
-    .select("id")
-    .eq("platform", "shopee")
-    .eq("mp_order_id", mpOrderId)
-    .maybeSingle();
-
-  if (existing.data) {
-    return { status: "skipped", order_sn: mpOrderId };
-  }
-
   const customerName = orderDetail.buyer_user_name ||
     orderDetail.recipient_address?.name ||
     null;
 
   const total = parseFloat(orderDetail.total_amount) || 0;
-
   const orderStatus = orderDetail.order_status || "READY_TO_SHIP";
 
-  const { error } = await supabase
+  const { error: upsertErr } = await supabase
     .from("marketplace_orders")
-    .insert({
+    .upsert({
       platform: "shopee",
       mp_order_id: mpOrderId,
       customer_name: customerName,
@@ -207,10 +195,14 @@ async function saveOrder(account, orderDetail) {
       order_status: orderStatus,
       sync_status: "pending",
       raw_payload: orderDetail,
-    });
+    }, { onConflict: "platform, mp_order_id", ignoreDuplicates: true });
 
-  if (error) {
-    return { status: "failed", order_sn: mpOrderId, error: error.message };
+  if (upsertErr) {
+    // Jika error bukan duplicate violation
+    if (upsertErr.code === "23505") {
+      return { status: "skipped", order_sn: mpOrderId };
+    }
+    return { status: "failed", order_sn: mpOrderId, error: upsertErr.message };
   }
 
   return { status: "inserted", order_sn: mpOrderId };
