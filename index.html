@@ -1248,88 +1248,6 @@
             align-self: flex-start;
         }
 
-        /* ===== GRID ASSETS ===== */
-        .grid-assets {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-        }
-        .asset-card {
-            background: var(--bg-card);
-            border-radius: var(--radius-xl);
-            border: 1px solid var(--border-color);
-            padding: 20px;
-            box-shadow: var(--card-shadow);
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-            transition: var(--transition);
-        }
-        .asset-card:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--hover-shadow);
-        }
-        .asset-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 12px;
-        }
-        .asset-title {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .asset-title i {
-            width: 40px;
-            height: 40px;
-            border-radius: var(--radius-md);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 1rem;
-            flex-shrink: 0;
-        }
-        .asset-name {
-            font-weight: 800;
-            font-size: 0.95rem;
-            color: var(--text-primary);
-        }
-        .asset-meta {
-            font-size: 0.7rem;
-            color: var(--text-muted);
-            font-weight: 600;
-        }
-        .asset-body {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        .asset-info-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.82rem;
-            font-weight: 600;
-            color: var(--text-secondary);
-        }
-        .asset-info-row span:last-child {
-            color: var(--text-primary);
-            font-weight: 700;
-        }
-        .progress-container {
-            height: 6px;
-            background: var(--border-color);
-            border-radius: 10px;
-            overflow: hidden;
-            margin-top: 2px;
-        }
-        .progress-bar {
-            height: 100%;
-            background: var(--primary-gradient);
-            border-radius: 10px;
-        }
 
         /* ===== MODAL ===== */
         .modal-overlay {
@@ -1725,9 +1643,6 @@
             .emp-grid {
                 grid-template-columns: 1fr;
             }
-            .grid-assets {
-                grid-template-columns: 1fr;
-            }
             .stats-inline-grid {
                 grid-template-columns: 1fr;
             }
@@ -1869,15 +1784,7 @@
                     </ul>
                 </li>
 
-                <!-- LAIN-LAIN -->
-                <li class="dropdown">
-                    <a href="#"><i class="fas fa-bars"></i> Lain-lain <i class="fas fa-chevron-down"></i></a>
-                    <ul class="dropdown-menu">
-                        <li data-page="kontrakan"><a href="#"><i class="fas fa-home"></i> Kontrakan</a></li>
-                        <li data-page="peternakan-lele"><a href="#"><i class="fas fa-fish"></i> Peternakan Lele</a></li>
-                        <li data-page="kandang-ayam"><a href="#"><i class="fas fa-egg"></i> Kandang Ayam</a></li>
-                    </ul>
-                </li>
+
 
                 <li class="nav-item"><a href="marketplace.html"><i class="fas fa-store"></i> Marketplace</a></li>
                 <li class="nav-item" data-page="pengaturan"><a href="#"><i class="fas fa-cog"></i> Pengaturan</a></li>
@@ -2337,85 +2244,6 @@
             <div class="emp-grid" id="employeeGrid"></div>
         </div>
 
-        <!-- ===== HALAMAN KONTRAKAN ===== -->
-        <div id="page-kontrakan" class="page-content">
-            <div class="page-header">
-                <div>
-                    <h1>Manajemen Kontrakan</h1>
-                    <div class="page-header-desc">Pantau keterisian sewa, pembayaran bulanan, dan jatuh tempo pintu kontrakan</div>
-                </div>
-                <button class="checkout-btn" onclick="openAddKontrakan()" style="width:auto;padding:10px 24px;"><i class="fas fa-plus"></i> Penyewa</button>
-            </div>
-            <div class="stats-row" id="kontrakanStats"></div>
-            <div class="filter-tabs" id="kontrakanFilter">
-                <button class="filter-tab active" data-filter="all">Semua</button>
-                <button class="filter-tab" data-filter="terisi">Terisi</button>
-                <button class="filter-tab" data-filter="vacant">Kosong</button>
-                <button class="filter-tab" data-filter="tunggakan">Tunggakan</button>
-            </div>
-            <div class="grid-assets" id="rentalGrid"></div>
-        </div>
-
-        <!-- ===== KONTRAKAN MODAL ===== -->
-        <div id="kontrakanModal" class="modal-overlay" onclick="if(event.target===this)closeKontrakanModal()">
-            <div class="modal-card" style="max-width:95vw;text-align:left;padding:0;overflow:hidden;">
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border-color);">
-                    <h2 id="kontrakanModalTitle" style="margin:0;font-size:1.1rem;">Tambah Penyewa</h2>
-                    <button onclick="closeKontrakanModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-muted);">&times;</button>
-                </div>
-                <div style="padding:20px 24px;">
-                    <div class="form-grid">
-                        <div class="form-group"><label>Nama Pintu</label><input id="kPintu" class="form-control" placeholder="Contoh: Pintu A1" /></div>
-                        <div class="form-group"><label>Penyewa</label><input id="kPenyewa" class="form-control" placeholder="Nama penyewa" /></div>
-                        <div class="form-group"><label>Harga Sewa</label><input id="kHarga" type="number" class="form-control" placeholder="850000" /></div>
-                        <div class="form-group"><label>Tipe Unit</label><select id="kTipe" class="form-control"><option>Standar</option><option>Khusus</option><option>Ruko</option></select></div>
-                        <div class="form-group"><label>Tgl Jatuh Tempo</label><input id="kTempo" type="number" class="form-control" placeholder="20" min="1" max="31" /></div>
-                        <div class="form-group"><label>Kontak Penyewa</label><input id="kKontak" class="form-control" placeholder="0812xxxx" /></div>
-                        <div class="form-group"><label>Deposit</label><input id="kDeposit" type="number" class="form-control" placeholder="500000" value="500000" /></div>
-                        <div class="form-group"><label>Status</label><select id="kStatus" class="form-control"><option>Terisi</option><option>Vacant</option></select></div>
-                    </div>
-                </div>
-                <div style="display:flex;gap:12px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border-color);">
-                    <button class="btn-secondary" onclick="closeKontrakanModal()">Batal</button>
-                    <button class="checkout-btn" onclick="saveKontrakan()" style="width:auto;padding:10px 28px;"><i class="fas fa-save"></i> Simpan</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- ===== PEMBAYARAN MODAL ===== -->
-        <div id="pembayaranModal" class="modal-overlay" onclick="if(event.target===this)closePembayaranModal()">
-            <div class="modal-card" style="max-width:95vw;text-align:left;padding:0;overflow:hidden;">
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border-color);">
-                    <h2 style="margin:0;font-size:1.1rem;">Riwayat Pembayaran</h2>
-                    <button onclick="closePembayaranModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-muted);">&times;</button>
-                </div>
-                <div style="padding:20px 24px;" id="pembayaranBody"></div>
-            </div>
-        </div>
-
-        <!-- ===== HALAMAN PETERNAKAN LELE ===== -->
-        <div id="page-peternakan-lele" class="page-content">
-            <div class="page-header">
-                <div>
-                    <h1>Budidaya Peternakan Lele</h1>
-                    <div class="page-header-desc">Monitoring suhu air kolam, pH, jumlah tebar bibit, dan pakan berkala</div>
-                </div>
-            </div>
-            <div class="grid-assets" id="leleGrid"></div>
-        </div>
-
-        <!-- ===== HALAMAN KANDANG AYAM ===== -->
-        <div id="page-kandang-ayam" class="page-content">
-            <div class="page-header">
-                <div>
-                    <h1>Kandang Ayam Petelur</h1>
-                    <div class="page-header-desc">Statistik kesehatan ayam, suhu kandang, dan panen telur harian</div>
-                </div>
-            </div>
-            <div class="grid-assets" id="ayamGrid"></div>
-        </div>
-
-        <!-- ===== HALAMAN PECEL LELE ===== -->
         <!-- ===== PLACEHOLDER HALAMAN LAINNYA ===== -->
         <div id="page-monitor-stok" class="page-content">
             <div class="page-header"><h1>Monitor Stok</h1><div class="page-header-desc">Pantau ketersediaan stok semua produk secara real-time</div></div>
@@ -2820,8 +2648,6 @@
             { name: "Dewi Lestari", role: "Kasir", status: "Aktif", theme: "badge-lunas" }
         ];
 
-        let kontrakanData = [
-            { id: "K001", pintu: "Pintu 01", penyewa: "Rendi Pratama", tipe: "Standar", harga: 1000000, tempo: 20,
                 kontak: "0812-3456-7890", listrik: 0, air: 0, deposit: 500000, tglMasuk: "2024-01-15",
                 catatan: "Bayar rutin", persentase: 75, status: "Sudah Bayar",
                 tagihan: [{ bulan: "Juni 2026", nominal: 1000000, tglBayar: "2026-06-18" }, { bulan: "Mei 2026",
@@ -2876,32 +2702,17 @@
                 status: "Vacant", tagihan: [] }
         ];
 
-        const leleData = [
-            { kolam: "Kolam A (Bibit Sangkuriang)", tebar: "5000 Ekor", suhu: "27.5 °C", ph: "7.1",
-            pakan: "Karet Pagi & Sore" },
-            { kolam: "Kolam B (Konsumsi)", tebar: "3200 Ekor", suhu: "28.1 °C", ph: "6.9",
-            pakan: "Pelet L-3 Dua Kali Sehari" }
-        ];
-
         // --- ACCOUNTS & PERMISSIONS ---
         const userAccounts = [
-            { username: "admin", password: "admin123", name: "Ahmad Hidayat", role: "Manager", roleLabel: "Manager Operasional", menus: ["pos","penjualan","katalog","persediaan","pembelian","gudang","pricing","hr","lain-lain","pengaturan"] },
+            { username: "admin", password: "admin123", name: "Ahmad Hidayat", role: "Manager", roleLabel: "Manager Operasional", menus: ["pos","penjualan","katalog","persediaan","pembelian","gudang","pricing","hr","pengaturan"] },
             { username: "siti", password: "siti123", name: "Siti Aminah", role: "Kasir", roleLabel: "Kasir POS Utama", menus: ["pos","penjualan"] },
             { username: "doni", password: "doni123", name: "Doni Setiawan", role: "Gudang", roleLabel: "Staf Gudang / WMS", menus: ["pos","penjualan","katalog","persediaan","gudang"] },
-            { username: "fitri", password: "fitri123", name: "Fitri Handayani", role: "Keuangan", roleLabel: "Admin Keuangan", menus: ["penjualan","pembelian","pricing","lain-lain"] },
+            { username: "fitri", password: "fitri123", name: "Fitri Handayani", role: "Keuangan", roleLabel: "Admin Keuangan", menus: ["penjualan","pembelian","pricing"] },
             { username: "budi", password: "budi123", name: "Budi Utomo", role: "Kurir", roleLabel: "Kurir Pengiriman", menus: ["pos","gudang"] },
             { username: "eko", password: "eko123", name: "Eko Prasetyo", role: "Gudang", roleLabel: "Staf Gudang", menus: ["pos","penjualan","katalog","persediaan","gudang"] },
             { username: "dewi", password: "dewi123", name: "Dewi Lestari", role: "Kasir", roleLabel: "Kasir", menus: ["pos","penjualan"] }
         ];
 
-        const ayamData = [
-            { kandang: "Kandang Flamboyan 1", populasi: "450 Ekor", suhu: "29.2 °C", panen: "410 Butir Hari Ini",
-                kesehatan: "Prima (98%)" },
-            { kandang: "Kandang Flamboyan 2", populasi: "380 Ekor", suhu: "28.5 °C", panen: "350 Butir Hari Ini",
-                kesehatan: "Dalam Pengawasan (92%)" }
-        ];
-
-        // --- PECEL LELE DATA ---
         // ============================================================
         // STATE
         let cart = [];
@@ -2911,8 +2722,6 @@
         let filterStatus = "all";
         let filterChannel = "all";
         let filterSearchText = "";
-        let kontrakanFilter = "all";
-        let editingKontrakanId = null;
         let rekapBulan = new Date().getMonth();
         let rekapTahun = new Date().getFullYear();
         let currentUser = null;
@@ -2941,11 +2750,10 @@
         // ============================================================
         async function initSupabaseData() {
             try {
-                const [pRes, oRes, kRes, ktRes, wRecRes, wRackRes, wOpRes] = await Promise.all([
+                const [pRes, oRes, kRes, wRecRes, wRackRes, wOpRes] = await Promise.all([
                     sb.from('products').select('*'),
                     sb.from('orders').select('*').order('date', { ascending: false }),
                     sb.from('karyawan').select('*'),
-                    sb.from('kontrakan').select('*'),
                     sb.from('warehouse_receiving').select('*').order('received_date', { ascending: false }),
                     sb.from('warehouse_racks').select('*'),
                     sb.from('warehouse_opname').select('*').order('session_date', { ascending: false })
@@ -2953,7 +2761,6 @@
                 if (pRes.data && pRes.data.length > 0) products = pRes.data;
                 if (oRes.data && oRes.data.length > 0) ordersData = oRes.data;
                 if (kRes.data && kRes.data.length > 0) karyawanData = kRes.data;
-                if (ktRes.data && ktRes.data.length > 0) kontrakanData = ktRes.data;
                 if (wRecRes.data && wRecRes.data.length > 0) warehouseReceiving = wRecRes.data;
                 if (wRackRes.data && wRackRes.data.length > 0) warehouseRacks = wRackRes.data;
                 if (wOpRes.data && wOpRes.data.length > 0) warehouseOpname = wOpRes.data;
@@ -2976,7 +2783,6 @@
             renderCatalogTable();
             renderMonitorStok();
             renderEmployees();
-            renderAssets();
             renderPricingTables();
             renderWarehouseReceiving();
             renderWarehousePicking();
@@ -3004,11 +2810,9 @@
                 "gudang": ".dropdown:nth-of-type(5)",
                 "pricing": ".dropdown:nth-of-type(6)",
                 "hr": ".dropdown:nth-of-type(7)",
-                "lain-lain": ".dropdown:nth-of-type(8)",
                 "pengaturan": "[data-page=\"pengaturan\"]"
             };
 
-            const allGroups = ["pos","penjualan","katalog","persediaan","pembelian","gudang","pricing","hr","lain-lain","pengaturan"];
 
             allGroups.forEach(group => {
                 const selector = menuMap[group];
@@ -3068,11 +2872,11 @@
             if (!container) return;
             if (totalEl) totalEl.textContent = `Total: ${userAccounts.length} Akun`;
 
-            const allMenus = ["pos","penjualan","katalog","persediaan","pembelian","gudang","pricing","hr","lain-lain","pengaturan"];
+            const allMenus = ["pos","penjualan","katalog","persediaan","pembelian","gudang","pricing","hr","pengaturan"];
             const menuLabels = {
                 pos: "POS", penjualan: "Penjualan", katalog: "Katalog",
                 persediaan: "Persediaan", pembelian: "Pembelian", gudang: "Gudang",
-                pricing: "Pricing", hr: "HR", "lain-lain": "Lain-lain", pengaturan: "Pengaturan"
+                pricing: "Pricing", hr: "HR", pengaturan: "Pengaturan"
             };
 
             container.innerHTML = userAccounts.map((a, i) => {
@@ -3933,253 +3737,12 @@
         }
 
         // ============================================================
-        // ASSETS (Kontrakan, Lele, Ayam)
-        // ============================================================
-        function renderAssets() {
-            // Kontrakan
-            const rentalGrid = document.getElementById("rentalGrid");
-            if (rentalGrid) {
-                const filtered = kontrakanFilter === "all" ? kontrakanData :
-                    kontrakanFilter === "terisi" ? kontrakanData.filter(k => k.status !== "Vacant") :
-                    kontrakanFilter === "vacant" ? kontrakanData.filter(k => k.status === "Vacant") :
-                    kontrakanData.filter(k => k.status.includes("Tunggakan"));
-                rentalGrid.innerHTML = filtered.map(k => {
-                    const badgeClass = k.status === "Sudah Bayar" ? "badge-lunas" : k.status === "Vacant" ?
-                        "badge-batal" : "badge-belum";
-                    const isVacant = k.status === "Vacant";
-                    return `<div class="asset-card">
-                                <div class="asset-header">
-                                    <div class="asset-title">
-                                        <i class="fas fa-door-open" style="background:var(--primary-gradient);"></i>
-                                        <div>
-                                            <div class="asset-name">${k.pintu}</div>
-                                            <div class="asset-meta">${isVacant ? "Kosong" : k.penyewa}</div>
-                                        </div>
-                                    </div>
-                                    <span class="badge-status ${badgeClass}">${k.status}</span>
-                                </div>
-                                <div class="asset-body">
-                                    <div class="asset-info-row"><span>Tipe Unit</span><span>${k.tipe}</span></div>
-                                    <div class="asset-info-row"><span>Harga Sewa</span><span>Rp ${k.harga.toLocaleString('id-ID')}</span></div>
-                                    ${isVacant ? '' : `
-                                        <div class="asset-info-row"><span>Kontak</span><span>${k.kontak}</span></div>
-                                    `}
-                                    <div class="asset-info-row"><span>Progress Pembayaran</span><span>${k.persentase}%</span></div>
-                                    <div class="progress-container"><div class="progress-bar" style="width:${k.persentase}%"></div></div>
-                                </div>
-                                <div class="asset-actions" style="display:flex;gap:8px;margin-top:6px;">
-                                    ${isVacant ? `<button class="aksi-btn" onclick="editKontrakan('${k.id}')" title="Edit"><i class="fas fa-pen"></i></button>` :
-                                    `<button class="aksi-btn" onclick="lihatPembayaran('${k.id}')" title="Riwayat Bayar"><i class="fas fa-receipt"></i></button>
-                                     <button class="aksi-btn" onclick="bayarSewa('${k.id}')" title="Bayar"><i class="fas fa-check"></i></button>
-                                     <button class="aksi-btn" onclick="editKontrakan('${k.id}')" title="Edit"><i class="fas fa-pen"></i></button>`}
-                                    <button class="aksi-btn" onclick="hapusKontrakan('${k.id}')" title="Hapus" style="color:#ef4444;"><i class="fas fa-trash"></i></button>
-                                </div>
-                            </div>`;
-                }).join('');
-            }
-
-            // Stats Kontrakan
-            const statsContainer = document.getElementById("kontrakanStats");
-            if (statsContainer) {
-                const total = kontrakanData.length;
-                const terisi = kontrakanData.filter(k => k.status !== "Vacant").length;
-                const kosong = kontrakanData.filter(k => k.status === "Vacant").length;
-                const totalPendapatan = kontrakanData.filter(k => k.status !== "Vacant").reduce((s, k) => s + k.harga, 0);
-                statsContainer.innerHTML = `
-                            <div class="stat-item active" data-filter="all"><div><div class="stat-number">${total}</div><div class="stat-label">Total Unit</div></div><div class="stat-icon-wrapper"><i class="fas fa-building"></i></div></div>
-                            <div class="stat-item" data-filter="terisi"><div><div class="stat-number">${terisi}</div><div class="stat-label">Terisi</div></div><div class="stat-icon-wrapper"><i class="fas fa-user-check"></i></div></div>
-                            <div class="stat-item" data-filter="vacant"><div><div class="stat-number">${kosong}</div><div class="stat-label">Kosong</div></div><div class="stat-icon-wrapper"><i class="fas fa-door-open"></i></div></div>
-                            <div class="stat-item" data-filter="tunggakan"><div><div class="stat-number">${kontrakanData.filter(k=>k.status.includes("Tunggakan")).length}</div><div class="stat-label">Tunggakan</div></div><div class="stat-icon-wrapper"><i class="fas fa-exclamation-triangle"></i></div></div>
-                            <div class="stat-item"><div><div class="stat-number">Rp ${totalPendapatan.toLocaleString('id-ID')}</div><div class="stat-label">Total Sewa/bln</div></div><div class="stat-icon-wrapper"><i class="fas fa-money-bill"></i></div></div>
-                        `;
-                statsContainer.querySelectorAll(".stat-item").forEach(el => {
-                    el.addEventListener("click", function() {
-                        kontrakanFilter = this.dataset.filter || "all";
-                        statsContainer.querySelectorAll(".stat-item").forEach(s => s.classList.remove("active"));
-                        this.classList.add("active");
-                        renderAssets();
-                    });
-                });
-            }
-
-            // Filter tabs Kontrakan
-            const filterTabs = document.getElementById("kontrakanFilter");
-            if (filterTabs) {
-                filterTabs.querySelectorAll(".filter-tab").forEach(tab => {
-                    tab.addEventListener("click", function() {
-                        kontrakanFilter = this.dataset.filter;
-                        filterTabs.querySelectorAll(".filter-tab").forEach(t => t.classList.remove("active"));
-                        this.classList.add("active");
-                        renderAssets();
-                    });
-                });
-            }
-
-            // Lele
-            const leleGrid = document.getElementById("leleGrid");
-            if (leleGrid) {
-                leleGrid.innerHTML = leleData.map(l =>
-                    `<div class="asset-card">
-                                <div class="asset-header">
-                                    <div class="asset-title">
-                                        <i class="fas fa-fish" style="background:var(--accent-gradient);"></i>
-                                        <div>
-                                            <div class="asset-name">${l.kolam}</div>
-                                            <div class="asset-meta">Tebar: ${l.tebar}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="asset-body">
-                                    <div class="asset-info-row"><span>Suhu Air</span><span>${l.suhu}</span></div>
-                                    <div class="asset-info-row"><span>pH Air</span><span>${l.ph}</span></div>
-                                    <div class="asset-info-row"><span>Pakan</span><span>${l.pakan}</span></div>
-                                </div>
-                            </div>`
-                ).join('');
-            }
-
-            // Ayam
-            const ayamGrid = document.getElementById("ayamGrid");
-            if (ayamGrid) {
-                ayamGrid.innerHTML = ayamData.map(a =>
-                    `<div class="asset-card">
-                                <div class="asset-header">
-                                    <div class="asset-title">
-                                        <i class="fas fa-egg" style="background:var(--warning-gradient);"></i>
-                                        <div>
-                                            <div class="asset-name">${a.kandang}</div>
-                                            <div class="asset-meta">Populasi: ${a.populasi}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="asset-body">
-                                    <div class="asset-info-row"><span>Suhu Kandang</span><span>${a.suhu}</span></div>
-                                    <div class="asset-info-row"><span>Panen Telur</span><span>${a.panen}</span></div>
-                                    <div class="asset-info-row"><span>Kesehatan</span><span>${a.kesehatan}</span></div>
-                                </div>
-                            </div>`
-                ).join('');
-            }
-        }
+        // TRANSAKSI PENJUALAN
 
         // ============================================================
-        // KONTRAKAN CRUD
+        // TRANSAKSI PENJUALAN
         // ============================================================
-        function openAddKontrakan() {
-            editingKontrakanId = null;
-            document.getElementById("kontrakanModalTitle").textContent = "Tambah Penyewa";
-            ["kPintu", "kPenyewa", "kKontak"].forEach(id => { const el = document.getElementById(id); if (el) el.value =
-                ""; });
-            document.getElementById("kHarga").value = "";
-            document.getElementById("kDeposit").value = "500000";
-            document.getElementById("kTempo").value = "20";
-            document.getElementById("kTipe").value = "Standar";
-            document.getElementById("kStatus").value = "Terisi";
-            document.getElementById("kontrakanModal").classList.add("active");
-        }
 
-        function editKontrakan(id) {
-            const k = kontrakanData.find(x => x.id === id);
-            if (!k) return;
-            editingKontrakanId = id;
-            document.getElementById("kontrakanModalTitle").textContent = "Edit Unit Kontrakan";
-            document.getElementById("kPintu").value = k.pintu;
-            document.getElementById("kPenyewa").value = k.penyewa === "-" ? "" : k.penyewa;
-            document.getElementById("kKontak").value = k.kontak === "-" ? "" : k.kontak;
-            document.getElementById("kHarga").value = k.harga;
-            document.getElementById("kDeposit").value = k.deposit;
-            document.getElementById("kTempo").value = k.tempo;
-            document.getElementById("kTipe").value = k.tipe;
-            document.getElementById("kStatus").value = k.status === "Vacant" ? "Vacant" : "Terisi";
-            document.getElementById("kontrakanModal").classList.add("active");
-        }
-
-        function saveKontrakan() {
-            const pintu = document.getElementById("kPintu").value.trim();
-            const penyewa = document.getElementById("kPenyewa").value.trim() || "-";
-            const harga = parseInt(document.getElementById("kHarga").value) || 0;
-            if (!pintu || !harga) { showToast("Isi nama pintu dan harga sewa"); return; }
-            const isVacant = document.getElementById("kStatus").value === "Vacant";
-            if (!editingKontrakanId && !isVacant && (!penyewa || penyewa === "-")) { showToast("Isi nama penyewa"); return; }
-            const tipe = document.getElementById("kTipe").value;
-            const tempo = parseInt(document.getElementById("kTempo").value) || 20;
-            const kontak = document.getElementById("kKontak").value.trim() || "-";
-            const deposit = parseInt(document.getElementById("kDeposit").value) || 0;
-            const isEdit = !!editingKontrakanId;
-
-            if (editingKontrakanId) {
-                const k = kontrakanData.find(x => x.id === editingKontrakanId);
-                if (k) {
-                    Object.assign(k, { pintu, penyewa, harga, tipe, tempo, kontak, deposit,
-                        status: isVacant ? "Vacant" : "Belum Bayar" });
-                    sb.from('kontrakan').update(k).eq('id', editingKontrakanId).then(r => {
-                        if (r.error) console.warn("Supabase update kontrakan error:", r.error.message);
-                    });
-                }
-            } else {
-                const maxNum = kontrakanData.length ? Math.max(...kontrakanData.map(k => parseInt(k.id.replace("K","")) || 0)) : 0;
-                const newId = "K" + String(maxNum + 1).padStart(3, "0");
-                const newK = {
-                    id: newId, pintu, penyewa, tipe, harga, tempo, kontak, deposit,
-                    tglMasuk: new Date().toISOString().split("T")[0], catatan: "", persentase: 0,
-                    status: isVacant ? "Vacant" : "Belum Bayar", tagihan: []
-                };
-                kontrakanData.push(newK);
-                sb.from('kontrakan').insert(newK).then(r => {
-                    if (r.error) console.warn("Supabase insert kontrakan error:", r.error.message);
-                });
-            }
-            closeKontrakanModal();
-            renderAssets();
-            showToast(isEdit ? "Unit diperbarui" : "Unit ditambahkan");
-        }
-
-        function closeKontrakanModal() {
-            document.getElementById("kontrakanModal").classList.remove("active");
-            editingKontrakanId = null;
-        }
-
-        function lihatPembayaran(id) {
-            const k = kontrakanData.find(x => x.id === id);
-            if (!k || !k.tagihan.length) { showToast("Belum ada riwayat pembayaran"); return; }
-            document.getElementById("pembayaranBody").innerHTML = `
-                        <div style="margin-bottom:12px;"><strong>${k.pintu}</strong> — ${k.penyewa}</div>
-                        <div class="table-wrapper"><table><thead><tr><th>Bulan</th><th>Nominal</th><th>Tgl Bayar</th><th>Status</th></tr></thead><tbody>
-                            ${k.tagihan.map(t => `<tr><td>${t.bulan}</td><td>Rp ${t.nominal.toLocaleString('id-ID')}</td><td>${t.tglBayar || '-'}</td><td><span class="badge-status ${t.tglBayar ? 'badge-lunas' : 'badge-batal'}">${t.tglBayar ? 'Lunas' : 'Belum'}</span></td></tr>`).join('')}
-                        </tbody></table></div>
-                    `;
-            document.getElementById("pembayaranModal").classList.add("active");
-        }
-
-        function closePembayaranModal() {
-            document.getElementById("pembayaranModal").classList.remove("active");
-        }
-
-        function bayarSewa(id) {
-            const k = kontrakanData.find(x => x.id === id);
-            if (!k || k.status === "Vacant") return;
-            const now = new Date();
-            const bulan = now.toLocaleDateString('id-ID', { year: 'numeric', month: 'long' });
-            k.tagihan.push({ bulan, nominal: k.harga, tglBayar: now.toISOString().split("T")[0] });
-            k.persentase = 100;
-            k.status = "Sudah Bayar";
-            sb.from('kontrakan').update({ tagihan: k.tagihan, persentase: k.persentase, status: k.status }).eq('id', id).then(r => {
-                if (r.error) console.warn("Supabase update kontrakan error:", r.error.message);
-            });
-            renderAssets();
-            showToast(`Pembayaran ${k.pintu} dicatat`);
-        }
-
-        function hapusKontrakan(id) {
-            const idx = kontrakanData.findIndex(x => x.id === id);
-            if (idx > -1 && confirm(`Hapus ${kontrakanData[idx].pintu}?`)) {
-                kontrakanData.splice(idx, 1);
-                sb.from('kontrakan').delete().eq('id', id).then(r => {
-                    if (r.error) console.warn("Supabase delete kontrakan error:", r.error.message);
-                });
-                renderAssets();
-                showToast("Unit dihapus");
-            }
         }
 
         // ============================================================
@@ -4713,7 +4276,7 @@
                     penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "rak-lokasi": "gudang", "opname-gudang": "gudang",
                     "harga-belanja": "pricing", "harga-jual": "pricing", "ubah-harga": "pricing", "diskon-promo": "pricing", "margin-keuntungan": "pricing",
                     karyawan: "hr", absensi: "hr", "rekap-kehadiran": "hr", cuti: "hr", "jadwal-kerja": "hr", penggajian: "hr", "slip-gaji": "hr",
-                    kontrakan: "lain-lain", "peternakan-lele": "lain-lain", "kandang-ayam": "lain-lain",
+
                     pengaturan: "pengaturan"
                 };
                 const group = menuMap[pageId];
@@ -4752,7 +4315,6 @@
             renderPenjualanTable();
             renderCatalogTable();
             renderEmployees();
-            renderAssets();
             renderPosHistory();
             renderMonitorStok();
             renderPricingTables();
@@ -5067,14 +4629,6 @@
         window.deleteRack = deleteRack;
         window.startOpname = startOpname;
         window.finishOpname = finishOpname;
-        window.openAddKontrakan = openAddKontrakan;
-        window.editKontrakan = editKontrakan;
-        window.saveKontrakan = saveKontrakan;
-        window.closeKontrakanModal = closeKontrakanModal;
-        window.lihatPembayaran = lihatPembayaran;
-        window.bayarSewa = bayarSewa;
-        window.hapusKontrakan = hapusKontrakan;
-        window.closePembayaranModal = closePembayaranModal;
 
         window.renderRekapKehadiran = renderRekapKehadiran;
         window.ubahBulanRekap = ubahBulanRekap;
