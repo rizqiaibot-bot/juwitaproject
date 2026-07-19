@@ -369,6 +369,10 @@ async function loadAccounts() {
   var tbody = document.getElementById("accountsTableBody");
   try {
     var res = await SB.from("marketplace_config").select("*").order("created_at", { ascending: false });
+    if (res.error) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state" style="color:var(--danger);">Gagal memuat: ' + res.error.message + '</td></tr>';
+      return;
+    }
     var data = res.data;
     if (!data || !data.length) {
       tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Belum ada akun marketplace terhubung.</td></tr>';
@@ -401,6 +405,10 @@ async function loadActivity() {
   var tbody = document.getElementById("activityTableBody");
   try {
     var res = await SB.from("activity_log").select("*").order("created_at", { ascending: false }).limit(20);
+    if (res.error) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-state" style="color:var(--danger);">Gagal memuat: ' + res.error.message + '</td></tr>';
+      return;
+    }
     var data = res.data;
     if (!data || !data.length) {
       tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Belum ada aktivitas marketplace.</td></tr>';
@@ -428,6 +436,10 @@ async function loadPendingMutations() {
   var tbody = document.getElementById("pendingTableBody");
   try {
     var res = await SB.from("stock_mutations").select("*").eq("sync_status", "pending").order("created_at", { ascending: false }).limit(20);
+    if (res.error) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-state" style="color:var(--danger);">Gagal memuat: ' + res.error.message + '</td></tr>';
+      return;
+    }
     var data = res.data;
     if (!data || !data.length) {
       tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Tidak ada mutasi pending. Sinkronisasi lancar.</td></tr>';
@@ -456,6 +468,10 @@ async function loadFailedMutations() {
   var tbody = document.getElementById("failedTableBody");
   try {
     var res = await SB.from("stock_mutations").select("*").eq("sync_status", "failed").order("created_at", { ascending: false }).limit(20);
+    if (res.error) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state" style="color:var(--danger);">Gagal memuat: ' + res.error.message + '</td></tr>';
+      return;
+    }
     var data = res.data;
     if (!data || !data.length) {
       tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Tidak ada mutasi gagal.</td></tr>';
@@ -470,7 +486,7 @@ async function loadFailedMutations() {
         '<td><strong>' + (r.qty_after != null ? r.qty_after : "-") + '</strong></td>' +
         '<td>' + (r.shopee_account || "-") + '</td>' +
         '<td>' + statusBadge("failed") + '</td>' +
-        '<td><button class="btn btn-warning btn-sm" onclick="retryMutation(' + r.id + ')"><i class="fas fa-redo"></i> Retry</button></td>' +
+        '<td><button class="btn btn-warning btn-sm" onclick="retryMutation(\'' + r.id + '\')"><i class="fas fa-redo"></i> Retry</button></td>' +
         '</tr>';
     }).join("");
   } catch (err) {
@@ -493,6 +509,10 @@ async function loadMarketplaceOrders() {
   try {
     var query = SB.from("marketplace_orders").select("*").order("created_at", { ascending: false }).limit(100);
     var res = await query;
+    if (res.error) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state" style="color:var(--danger);">Gagal memuat: ' + res.error.message + '</td></tr>';
+      return;
+    }
     var data = res.data;
     if (!data || !data.length) {
       tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Belum ada order dari marketplace.</td></tr>';
@@ -533,7 +553,9 @@ function renderMarketplaceOrders(data) {
     var isProcessing = r.sync_status === "processing";
     var actionHtml = '<button class="btn btn-outline btn-sm" onclick="openOrderDetail(\'' + r.mp_order_id + '\')"><i class="fas fa-eye"></i> Detail</button>';
     if (isPending) {
-      actionHtml += ' <button class="btn btn-primary btn-sm" onclick="openProcessModal(\'' + r.mp_order_id + '\',\'' + (r.customer_name || "-") + '\',' + r.total + ')"><i class="fas fa-arrow-right"></i> Proses</button>';
+      var escOrderId = r.mp_order_id.replace(/'/g, "\\'");
+      var escCustName = (r.customer_name || "-").replace(/'/g, "\\'");
+      actionHtml += ' <button class="btn btn-primary btn-sm" onclick="openProcessModal(\'' + escOrderId + '\',\'' + escCustName + '\',' + r.total + ')"><i class="fas fa-arrow-right"></i> Proses</button>';
     }
     return '<tr>' +
       '<td><strong>' + r.mp_order_id + '</strong></td>' +
@@ -639,7 +661,9 @@ async function openOrderDetail(orderId) {
     // Load produk Juwita untuk validasi mapping
     var prodRes = await SB.from("products").select("id,name,sku,shopee_item_id").not("shopee_item_id", "is", null);
     var productsMap = {};
-    if (prodRes.data) {
+    if (prodRes.error) {
+      console.warn("Gagal load produk mapping:", prodRes.error.message);
+    } else if (prodRes.data) {
       prodRes.data.forEach(function(p) {
         if (p.shopee_item_id) productsMap[p.shopee_item_id] = p;
       });
