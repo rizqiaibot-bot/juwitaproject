@@ -22,7 +22,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const SHOPEE_API_URL = "https://partner.shopeemobile.com/api/v2";
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+  throw new Error("SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY wajib di-set di environment variables");
+}
+
+const SHOPEE_API_URL = "https://partner.shopeemobile.com";
+
+const FETCH_TIMEOUT_MS = 15000;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
@@ -60,7 +67,10 @@ async function testShopeeConnection(partnerId, partnerKey, shopId) {
     shop_id: shopId,
   });
 
-  const res = await fetch(`${SHOPEE_API_URL}${path}?${params}`, { method: "GET" });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const res = await fetch(`${SHOPEE_API_URL}${path}?${params}`, { method: "GET", signal: controller.signal });
+  clearTimeout(timeoutId);
   const body = await res.json();
 
   if (!res.ok || body.error) {
@@ -126,7 +136,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (existing) {
-        await supabase
+        const { error: updErr } = await supabase
           .from("marketplace_config")
           .update({
             shop_name: result.shop_name,
@@ -136,8 +146,9 @@ Deno.serve(async (req) => {
             updated_at: new Date().toISOString()
           })
           .eq("id", existing.id);
+        if (updErr) console.error("marketplace_config update failed:", updErr.message);
       } else {
-        await supabase
+        const { error: insErr } = await supabase
           .from("marketplace_config")
           .insert({
             platform: "shopee",
@@ -147,6 +158,7 @@ Deno.serve(async (req) => {
             is_active: true,
             connection_status: "connected"
           });
+        if (insErr) console.error("marketplace_config insert failed:", insErr.message);
       }
 
       // Activity log
@@ -186,7 +198,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (failExisting) {
-        await supabase
+        const { error: updErr } = await supabase
           .from("marketplace_config")
           .update({
             is_active: false,
@@ -194,8 +206,9 @@ Deno.serve(async (req) => {
             updated_at: new Date().toISOString()
           })
           .eq("id", failExisting.id);
+        if (updErr) console.error("marketplace_config update failed:", updErr.message);
       } else {
-        await supabase
+        const { error: insErr } = await supabase
           .from("marketplace_config")
           .insert({
             platform: "shopee",
@@ -204,6 +217,7 @@ Deno.serve(async (req) => {
             is_active: false,
             connection_status: "error"
           });
+        if (insErr) console.error("marketplace_config insert failed:", insErr.message);
       }
 
       // Activity log

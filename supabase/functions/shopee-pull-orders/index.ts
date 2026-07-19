@@ -18,7 +18,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const SHOPEE_API_URL = "https://partner.shopeemobile.com/api/v2";
+const SHOPEE_API_URL = "https://partner.shopeemobile.com";
 
 const REQUEST_TIMEOUT_MS = 10000;
 const MAX_RETRIES = 2;
@@ -40,7 +40,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 // ============================================================
 // SHOPEE HMAC SIGNATURE
 // ============================================================
-async function signShopee(partnerId, partnerKey, path, timestamp) {
+async function signShopee(partnerId: string, partnerKey: string, path: string, timestamp: number) {
   const base = partnerId + path + timestamp;
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -59,8 +59,8 @@ async function signShopee(partnerId, partnerKey, path, timestamp) {
 // ============================================================
 // FETCH DENGAN TIMEOUT & RETRY
 // ============================================================
-async function fetchWithRetry(url, options = {}, retries = MAX_RETRIES) {
-  let lastError;
+async function fetchWithRetry(url: string, options: Record<string, unknown> = {}, retries = MAX_RETRIES) {
+  let lastError: Error;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -83,7 +83,7 @@ async function fetchWithRetry(url, options = {}, retries = MAX_RETRIES) {
 
       const body = await res.text();
       throw new Error(`HTTP ${res.status}: ${body}`);
-    } catch (err) {
+    } catch (err: any) {
       lastError = err;
 
       if (err.name === "AbortError") {
@@ -98,13 +98,13 @@ async function fetchWithRetry(url, options = {}, retries = MAX_RETRIES) {
     }
   }
 
-  throw lastError;
+  throw lastError!;
 }
 
 // ============================================================
 // GET ORDER LIST dari Shopee
 // ============================================================
-async function getOrderList(account, timeFrom, timeTo, offset = 0) {
+async function getOrderList(account: typeof ACCOUNTS[0], timeFrom: number, timeTo: number, offset = 0) {
   const timestamp = Math.floor(Date.now() / 1000);
   const path = "/api/v2/order/get_order_list";
   const sign = await signShopee(account.partner_id, account.partner_key, path, timestamp);
@@ -123,7 +123,7 @@ async function getOrderList(account, timeFrom, timeTo, offset = 0) {
   });
 
   const res = await fetchWithRetry(`${SHOPEE_API_URL}${path}?${params}`, { method: "GET" });
-  const body = await res.json();
+  const body: any = await res.json();
 
   if (body.error) {
     throw new Error(`Shopee API error: ${body.error} - ${body.message || ""}`);
@@ -138,7 +138,7 @@ async function getOrderList(account, timeFrom, timeTo, offset = 0) {
 // ============================================================
 // GET ORDER DETAIL dari Shopee (batch, support multiple order_sn)
 // ============================================================
-async function getOrderDetailBatch(account, orderSns) {
+async function getOrderDetailBatch(account: typeof ACCOUNTS[0], orderSns: string[]) {
   if (!orderSns.length) return { orderDetails: [] };
 
   const timestamp = Math.floor(Date.now() / 1000);
@@ -155,7 +155,7 @@ async function getOrderDetailBatch(account, orderSns) {
   });
 
   const res = await fetchWithRetry(`${SHOPEE_API_URL}${path}?${params}`, { method: "GET" });
-  const body = await res.json();
+  const body: any = await res.json();
 
   if (body.error) {
     throw new Error(`Shopee API error: ${body.error} - ${body.message || ""}`);
@@ -167,7 +167,7 @@ async function getOrderDetailBatch(account, orderSns) {
 // ============================================================
 // SAVE ORDER ke marketplace_orders
 // ============================================================
-async function saveOrder(account, orderDetail) {
+async function saveOrder(account: typeof ACCOUNTS[0], orderDetail: any) {
   const mpOrderId = orderDetail.order_sn;
   if (!mpOrderId) return { status: "failed", error: "order_sn tidak ditemukan di response" };
 
@@ -204,8 +204,10 @@ async function saveOrder(account, orderDetail) {
 // ============================================================
 // MAIN — pull orders untuk satu akun
 // ============================================================
-async function pullOrdersForAccount(account) {
-  const results = { pulled: 0, inserted: 0, skipped: 0, failed: 0, errors: [] };
+async function pullOrdersForAccount(account: typeof ACCOUNTS[0]) {
+  const results: { pulled: number; inserted: number; skipped: number; failed: number; errors: any[] } = {
+    pulled: 0, inserted: 0, skipped: 0, failed: 0, errors: []
+  };
   const now = Math.floor(Date.now() / 1000);
   const timeFrom = now - PULL_HOURS_BACK * 3600;
   const timeTo = now;
@@ -218,7 +220,7 @@ async function pullOrdersForAccount(account) {
     hasMore = more;
     offset += orderList.length;
 
-    const newOrderSns = orderList.map(o => o.order_sn).filter(Boolean);
+    const newOrderSns = orderList.map((o: any) => o.order_sn).filter(Boolean);
     results.pulled += newOrderSns.length;
 
     if (!newOrderSns.length) break;
@@ -240,7 +242,7 @@ async function pullOrdersForAccount(account) {
               results.failed++;
               results.errors.push(result);
             }
-          } catch (err) {
+          } catch (err: any) {
             results.failed++;
             results.errors.push({
               order_sn: detail.order_sn || "unknown",
@@ -248,7 +250,7 @@ async function pullOrdersForAccount(account) {
             });
           }
         }
-      } catch (err) {
+      } catch (err: any) {
         // Satu batch gagal, lanjut ke batch berikutnya
         results.failed += batch.length;
         results.errors.push({
@@ -271,8 +273,8 @@ Deno.serve(async (_req) => {
   let totalInserted = 0;
   let totalSkipped = 0;
   let totalFailed = 0;
-  const accountResults = [];
-  let globalError = null;
+  const accountResults: any[] = [];
+  let globalError: string | null = null;
 
   try {
     const activeAccounts = ACCOUNTS.filter(a => a.partner_id && a.shop_id);
@@ -300,7 +302,7 @@ Deno.serve(async (_req) => {
           shop_id: account.shop_id,
           ...results
         });
-      } catch (err) {
+      } catch (err: any) {
         // Satu akun gagal, akun lain tetap diproses
         accountResults.push({
           account: account.label,
@@ -334,7 +336,7 @@ Deno.serve(async (_req) => {
           accounts: accountResults.length
         }
       });
-    } catch (logErr) {
+    } catch (logErr: any) {
       console.error("Activity log insert failed:", logErr.message);
     }
 
@@ -348,7 +350,7 @@ Deno.serve(async (_req) => {
       headers: { "Content-Type": "application/json" }
     });
 
-  } catch (err) {
+  } catch (err: any) {
     globalError = err.message;
     const duration = Date.now() - startedAt;
 
@@ -364,7 +366,7 @@ Deno.serve(async (_req) => {
         error_detail: err.stack || null,
         duration_ms: duration
       });
-    } catch (logErr) {
+    } catch (logErr: any) {
       console.error("Activity log insert failed:", logErr.message);
     }
 

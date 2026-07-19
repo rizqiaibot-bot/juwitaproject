@@ -27,6 +27,7 @@ const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const SHOPEE_API_URL = "https://partner.shopeemobile.com/api/v2";
 
 const REQUEST_DELAY_MS = 100;
+const FETCH_TIMEOUT_MS = 15000;
 
 const ACCOUNTS = {
   toko_1: {
@@ -76,7 +77,10 @@ async function updateShopeeBatch(accountName, items) {
         const stockParams = new URLSearchParams(params);
         stockParams.set("item_id", String(item.shopee_item_id));
         stockParams.set("stock_list", JSON.stringify([{ model_id: 0, normal_stock: item.qty_after }]));
-        const res = await fetch(`${SHOPEE_API_URL}/product/update_stock?${stockParams}`, { method: "POST" });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+        const res = await fetch(`${SHOPEE_API_URL}/product/update_stock?${stockParams}`, { method: "POST", signal: controller.signal });
+        clearTimeout(timeoutId);
         if (!res.ok) {
           const errText = await res.text();
           errors.push({ shopee_item_id: item.shopee_item_id, error: errText });
@@ -180,19 +184,27 @@ Deno.serve(async (req) => {
         }
 
         if (syncedIds.length > 0) {
-          await supabase
+          const { error: updErr } = await supabase
             .from("stock_mutations")
             .update({ sync_status: "synced", shopee_sync_at: new Date().toISOString() })
             .in("id", syncedIds);
-          totalSynced += syncedIds.length;
+          if (updErr) {
+            console.error("Failed to update synced stock_mutations:", updErr.message);
+          } else {
+            totalSynced += syncedIds.length;
+          }
         }
 
         if (failedIds.length > 0) {
-          await supabase
+          const { error: updErr } = await supabase
             .from("stock_mutations")
             .update({ sync_status: "failed", shopee_sync_at: null })
             .in("id", failedIds);
-          totalFailed += failedIds.length;
+          if (updErr) {
+            console.error("Failed to update failed stock_mutations:", updErr.message);
+          } else {
+            totalFailed += failedIds.length;
+          }
         }
 
         syncResults.push({ account: acc, shop_id: shopId, synced: result.synced, failed: result.failed, errors: result.errors });
