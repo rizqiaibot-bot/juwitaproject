@@ -637,12 +637,11 @@ async function openOrderDetail(orderId) {
     currentDetailOrder = res.data;
 
     // Load produk Juwita untuk validasi mapping
-    var prodRes = await SB.from("products").select("id,name,sku,shopee_item_id,shopee_item_id_2").not("shopee_item_id", "is", null);
+    var prodRes = await SB.from("products").select("id,name,sku,shopee_item_id").not("shopee_item_id", "is", null);
     var productsMap = {};
     if (prodRes.data) {
       prodRes.data.forEach(function(p) {
         if (p.shopee_item_id) productsMap[p.shopee_item_id] = p;
-        if (p.shopee_item_id_2) productsMap[p.shopee_item_id_2] = p;
       });
     }
 

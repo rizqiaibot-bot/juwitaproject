@@ -70,9 +70,7 @@ supabase functions deploy shopee-pull-orders
 | `SHOPEE_PARTNER_ID` | Partner ID Shopee Toko 1 |
 | `SHOPEE_PARTNER_KEY` | Partner Key Shopee Toko 1 |
 | `SHOPEE_SHOP_ID` | Shop ID Shopee Toko 1 |
-| `SHOPEE_PARTNER_ID_2` | Partner ID Shopee Toko 2 (opsional) |
-| `SHOPEE_PARTNER_KEY_2` | Partner Key Shopee Toko 2 (opsional) |
-| `SHOPEE_SHOP_ID_2` | Shop ID Shopee Toko 2 (opsional) |
+
 
 ## Daftar Fitur
 

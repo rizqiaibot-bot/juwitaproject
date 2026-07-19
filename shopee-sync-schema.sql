@@ -1,13 +1,11 @@
 -- ============================================================
--- SHOPEE SYNC SCHEMA — 2 TOKO
+-- SHOPEE SYNC SCHEMA — 1 TOKO
 -- Paste di SQL Editor Supabase Juwi, jalankan semua
 -- ============================================================
 
--- 1. Tambah kolom Shopee di tabel products (untuk 2 toko)
+-- 1. Tambah kolom Shopee di tabel products
 ALTER TABLE products ADD COLUMN IF NOT EXISTS shopee_item_id BIGINT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS shopee_sku TEXT;
-ALTER TABLE products ADD COLUMN IF NOT EXISTS shopee_item_id_2 BIGINT;
-ALTER TABLE products ADD COLUMN IF NOT EXISTS shopee_sku_2 TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS sku TEXT;
 
 -- 2. Tabel log mutasi stok (untuk sync ke Shopee)
