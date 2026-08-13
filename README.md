@@ -92,7 +92,7 @@ supabase functions deploy shopee-pull-orders
 - [x] Shopee Pull Orders (tarik order dari Shopee)
 - [x] Marketplace Dashboard (UI monitoring)
 - [x] Approval Marketplace Order (pending → processing → ready_import)
-- [ ] Import Order ke POS (buat transaksi internal)
+- [x] Import Order ke POS (buat transaksi internal + kurangi stok)
 - [ ] Sinkronisasi otomatis POS
 
 ## Status Development

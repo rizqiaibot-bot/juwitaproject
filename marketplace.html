@@ -551,11 +551,15 @@ function renderMarketplaceOrders(data) {
   tbody.innerHTML = filtered.map(function(r) {
     var isPending = r.sync_status === "pending";
     var isProcessing = r.sync_status === "processing";
-    var actionHtml = '<button class="btn btn-outline btn-sm" onclick="openOrderDetail(\'' + r.mp_order_id + '\')"><i class="fas fa-eye"></i> Detail</button>';
+    var isReadyImport = r.sync_status === "ready_import";
+    var escOrderId = r.mp_order_id.replace(/'/g, "\\'");
+    var actionHtml = '<button class="btn btn-outline btn-sm" onclick="openOrderDetail(\'' + escOrderId + '\')"><i class="fas fa-eye"></i> Detail</button>';
     if (isPending) {
-      var escOrderId = r.mp_order_id.replace(/'/g, "\\'");
       var escCustName = (r.customer_name || "-").replace(/'/g, "\\'");
       actionHtml += ' <button class="btn btn-primary btn-sm" onclick="openProcessModal(\'' + escOrderId + '\',\'' + escCustName + '\',' + r.total + ')"><i class="fas fa-arrow-right"></i> Proses</button>';
+    }
+    if (isReadyImport) {
+      actionHtml += ' <button class="btn btn-success btn-sm" onclick="importOrderToPos(\'' + escOrderId + '\')"><i class="fas fa-file-import"></i> Import POS</button>';
     }
     return '<tr>' +
       '<td><strong>' + r.mp_order_id + '</strong></td>' +
@@ -803,6 +807,132 @@ async function markReadyImport() {
   }
   hideLoading("markReadyBtn");
 }
+// ============================================================
+// IMPORT ORDER KE POS (ready_import → processed)
+// ============================================================
+var importLock = false;
+
+async function importOrderToPos(mpOrderId) {
+  if (importLock) { showToast("Import sedang berjalan...", "error"); return; }
+  if (!confirm("Import order " + mpOrderId + " ke POS? Stok internal akan dikurangi.")) return;
+  importLock = true;
+  try {
+    var moRes = await SB.from("marketplace_orders").select("*").eq("mp_order_id", mpOrderId).single();
+    if (moRes.error || !moRes.data) {
+      showToast("Gagal memuat order: " + (moRes.error ? moRes.error.message : "tidak ditemukan"), "error");
+      return;
+    }
+    var order = moRes.data;
+    if (order.sync_status !== "ready_import") {
+      showToast("Order belum siap diimport (status: " + order.sync_status + ")", "error");
+      return;
+    }
+
+    var prodRes = await SB.from("products").select("*").not("shopee_item_id", "is", null);
+    if (prodRes.error) {
+      showToast("Gagal memuat produk: " + prodRes.error.message, "error");
+      return;
+    }
+    var productsMap = {};
+    (prodRes.data || []).forEach(function(p) { productsMap[String(p.shopee_item_id)] = p; });
+
+    var raw = order.raw_payload;
+    var items = [];
+    if (raw && raw.item_list && raw.item_list.length) {
+      items = raw.item_list;
+    } else if (typeof raw === "string") {
+      try { var p = JSON.parse(raw); if (p && p.item_list) items = p.item_list; } catch (e) {}
+    }
+    if (!items.length) {
+      showToast("Tidak ada item di order ini", "error");
+      return;
+    }
+
+    var mappedItems = [];
+    var unmapped = [];
+    items.forEach(function(item) {
+      var prod = productsMap[String(item.item_id)];
+      var qty = item.model_quantity_purchased || 1;
+      if (prod) mappedItems.push({ prod: prod, qty: qty });
+      else unmapped.push(item.item_name || item.model_sku || item.item_id);
+    });
+    if (unmapped.length) {
+      showToast("Gagal: produk belum dimapping — " + unmapped.join(", "), "error");
+      return;
+    }
+    if (!mappedItems.length) {
+      showToast("Tidak ada item yang terpetakan", "error");
+      return;
+    }
+
+    var now = new Date();
+    var todayStamp = now.toISOString().slice(0, 10).replace(/-/g, "");
+    var cntRes = await SB.from("orders").select("orderId").like("orderId", "ORD-" + todayStamp + "%");
+    var todayCount = cntRes.data ? cntRes.data.length : 0;
+    var internalOrderId = "ORD-" + todayStamp + "-" + String(todayCount + 1).padStart(2, "0");
+    var dateStr = now.toISOString().slice(0, 10) + " " + now.toTimeString().slice(0, 5);
+
+    var orderItems = mappedItems.map(function(m) {
+      return { id: m.prod.id, name: m.prod.name, price: m.prod.price, quantity: m.qty, subtotal: m.prod.price * m.qty };
+    });
+    var total = orderItems.reduce(function(s, i) { return s + i.subtotal; }, 0);
+
+    var newOrder = {
+      orderId: internalOrderId,
+      date: dateStr,
+      channel: "Shopee",
+      customer: order.customer_name || "Marketplace Customer",
+      total: total,
+      payStatus: "Lunas",
+      wmsStatus: "Siap Kirim",
+      courier: "Shopee",
+      resi: "-",
+      items: orderItems
+    };
+
+    var insRes = await SB.from("orders").insert(newOrder);
+    if (insRes.error) {
+      showToast("Gagal buat transaksi: " + insRes.error.message, "error");
+      return;
+    }
+
+    for (var i = 0; i < mappedItems.length; i++) {
+      var m = mappedItems[i];
+      var newStock = Math.max(0, (m.prod.stock || 0) - m.qty);
+      var updRes = await SB.from("products").update({ stock: newStock }).eq("id", m.prod.id);
+      if (updRes.error) console.warn("Stock update gagal:", updRes.error.message);
+    }
+
+    var mpUpdRes = await SB.from("marketplace_orders")
+      .update({ sync_status: "processed", internal_order_id: internalOrderId, updated_at: new Date().toISOString() })
+      .eq("mp_order_id", mpOrderId);
+    if (mpUpdRes.error) {
+      showToast("Order dibuat tapi gagal update status: " + mpUpdRes.error.message, "error");
+    } else {
+      showToast("Order " + mpOrderId + " diimport sebagai " + internalOrderId);
+    }
+
+    try {
+      await SB.from("activity_log").insert({
+        event_type: "ORDER_IMPORT",
+        direction: "INTERNAL",
+        platform: "shopee",
+        reference_id: mpOrderId,
+        status: "success",
+        triggered_by: "admin",
+        action_source: "admin_dashboard",
+        metadata: { internal_order_id: internalOrderId, total: total, item_count: mappedItems.length }
+      });
+    } catch (logErr) {
+      console.warn("Activity log insert failed:", logErr.message);
+    }
+  } catch (err) {
+    showToast("Gagal import: " + err.message, "error");
+  }
+  importLock = false;
+  refreshDashboard();
+}
+
 // ============================================================
 function openConnectModal() {
   document.getElementById("inputShopId").value = "";
