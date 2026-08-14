@@ -68,7 +68,7 @@ async function signShopee(partnerId: string, partnerKey: string, path: string, t
 // ============================================================
 // TEST KONEKSI KE SHOPEE
 // ============================================================
-async function testShopeeConnection(partnerId: string, partnerKey: string, shopId: string) {
+async function testShopeeConnection(partnerId: string, partnerKey: string, shopId: string, accessToken: string) {
   const timestamp = Math.floor(Date.now() / 1000);
   const path = "/api/v2/shop/get_shop_info";
   const sign = await signShopee(partnerId, partnerKey, path, timestamp);
@@ -78,6 +78,7 @@ async function testShopeeConnection(partnerId: string, partnerKey: string, shopI
     timestamp: String(timestamp),
     sign,
     shop_id: shopId,
+    access_token: accessToken,
   });
 
   const controller = new AbortController();
@@ -94,9 +95,10 @@ async function testShopeeConnection(partnerId: string, partnerKey: string, shopI
     };
   }
 
+  const shopInfo = body.response || body;
   return {
     success: true,
-    shop_name: body.shop_name || body.data?.shop_name || null,
+    shop_name: shopInfo.shop_name || null,
     raw: body
   };
 }
@@ -113,12 +115,22 @@ Deno.serve(async (req) => {
   const startedAt = Date.now();
 
   try {
-    const { shop_id } = await req.json();
+    const { shop_id, access_token, refresh_token } = await req.json();
 
     if (!shop_id) {
       return new Response(JSON.stringify({
         success: false,
         error: "shop_id wajib diisi"
+      }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders() }
+      });
+    }
+
+    if (!access_token) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "access_token wajib diisi"
       }), {
         status: 400,
         headers: { "Content-Type": "application/json", ...corsHeaders() }
@@ -141,10 +153,22 @@ Deno.serve(async (req) => {
     }
 
     // Test koneksi
-    const result = await testShopeeConnection(partnerId, partnerKey, shop_id);
+    const result = await testShopeeConnection(partnerId, partnerKey, shop_id, access_token);
     const duration = Date.now() - startedAt;
 
     if (result.success) {
+      // Simpan token (service_role only) — jangan pernah dikembalikan ke frontend
+      const { error: credErr } = await supabase
+        .from("marketplace_credentials")
+        .upsert({
+          shop_id,
+          platform: "shopee",
+          access_token,
+          refresh_token: refresh_token || null,
+          updated_at: new Date().toISOString()
+        });
+      if (credErr) console.error("marketplace_credentials upsert failed:", credErr.message);
+
       // Upsert marketplace_config — INSERT jika belum ada, UPDATE jika sudah
       const { data: existing } = await supabase
         .from("marketplace_config")

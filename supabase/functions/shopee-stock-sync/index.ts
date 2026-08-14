@@ -47,9 +47,63 @@ async function signShopee(account, path, timestamp) {
   return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
+async function loadToken(shopId) {
+  const { data, error } = await supabase
+    .from("marketplace_credentials")
+    .select("access_token, refresh_token")
+    .eq("shop_id", shopId)
+    .maybeSingle();
+  if (error || !data) return { access_token: null, refresh_token: null };
+  return { access_token: data.access_token || null, refresh_token: data.refresh_token || null };
+}
+
+async function refreshToken(account, shopId, refreshToken) {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const path = "/api/v2/auth/access_token/get";
+  const sign = await signShopee(account, path, timestamp);
+  const params = new URLSearchParams({
+    partner_id: account.partner_id,
+    timestamp: String(timestamp),
+    sign,
+    shop_id: shopId,
+    refresh_token: refreshToken,
+  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const res = await fetch(`${SHOPEE_API_URL}/auth/access_token/get?${params}`, { method: "POST", signal: controller.signal });
+  clearTimeout(timeoutId);
+  const body = await res.json();
+  if (body.error || !body.access_token) {
+    return { error: body.error || body.message || "refresh failed", access_token: null };
+  }
+  await supabase.from("marketplace_credentials").upsert({
+    shop_id: shopId,
+    platform: "shopee",
+    access_token: body.access_token,
+    refresh_token: body.refresh_token || refreshToken,
+    updated_at: new Date().toISOString(),
+  });
+  return { error: null, access_token: body.access_token };
+}
+
+function isAuthError(text) {
+  const lower = (text || "").toLowerCase();
+  return lower.includes("access_token") || lower.includes("error_auth") || lower.includes("token_invalid") || lower.includes("token_expired");
+}
+
 async function updateShopeeBatch(accountName, items) {
   const account = ACCOUNTS[accountName];
   if (!account || !account.partner_id) return { synced: 0, failed: 0, errors: [] };
+
+  const shopId = account.shop_id || "";
+  let { access_token, refresh_token } = await loadToken(shopId);
+  if (!access_token && refresh_token) {
+    const r = await refreshToken(account, shopId, refresh_token);
+    if (r.access_token) access_token = r.access_token;
+  }
+  if (!access_token) {
+    return { synced: 0, failed: items.length, errors: [{ shopee_item_id: null, error: "access_token tidak tersedia" }] };
+  }
 
   const timestamp = Math.floor(Date.now() / 1000);
   const path = "/api/v2/product/update_stock";
@@ -59,12 +113,14 @@ async function updateShopeeBatch(accountName, items) {
     partner_id: account.partner_id,
     timestamp: String(timestamp),
     sign,
-    shop_id: account.shop_id,
+    shop_id: shopId,
+    access_token,
   });
 
   let synced = 0, failed = 0;
   const errors = [];
   let isFirstRequest = true;
+  let refreshed = false;
 
   for (const item of items) {
     if (item.shopee_item_id != null) {
@@ -81,8 +137,27 @@ async function updateShopeeBatch(accountName, items) {
         const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
         const res = await fetch(`${SHOPEE_API_URL}/product/update_stock?${stockParams}`, { method: "POST", signal: controller.signal });
         clearTimeout(timeoutId);
+
         if (!res.ok) {
           const errText = await res.text();
+          if (!refreshed && refresh_token && isAuthError(errText)) {
+            refreshed = true;
+            const r = await refreshToken(account, shopId, refresh_token);
+            if (r.access_token) {
+              const retryParams = new URLSearchParams(params);
+              retryParams.set("access_token", r.access_token);
+              retryParams.set("item_id", String(item.shopee_item_id));
+              retryParams.set("stock_list", JSON.stringify([{ model_id: 0, normal_stock: item.qty_after }]));
+              const c2 = new AbortController();
+              const t2 = setTimeout(() => c2.abort(), FETCH_TIMEOUT_MS);
+              const res2 = await fetch(`${SHOPEE_API_URL}/product/update_stock?${retryParams}`, { method: "POST", signal: c2.signal });
+              clearTimeout(t2);
+              if (res2.ok) { synced++; continue; }
+              errors.push({ shopee_item_id: item.shopee_item_id, error: "retry after refresh failed" });
+              failed++;
+              continue;
+            }
+          }
           errors.push({ shopee_item_id: item.shopee_item_id, error: errText });
           failed++;
         } else {

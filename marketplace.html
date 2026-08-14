@@ -241,9 +241,13 @@
     <h3>Hubungkan Shopee</h3>
     <label for="inputShopId">Shop ID</label>
     <input type="text" id="inputShopId" placeholder="Masukkan Shop ID dari Shopee Seller Center">
+    <label for="inputAccessToken">Access Token</label>
+    <input type="password" id="inputAccessToken" placeholder="Masukkan Access Token dari Shopee Open Platform" autocomplete="off">
+    <label for="inputRefreshToken">Refresh Token</label>
+    <input type="password" id="inputRefreshToken" placeholder="Masukkan Refresh Token (opsional)" autocomplete="off">
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeConnectModal()">Batal</button>
-      <button class="btn btn-primary" onclick="connectShopee()" id="connectBtn">Hubungkan</button>
+      <button class="btn btn-primary" onclick="connectShopee()" id="connectBtn">Test Koneksi</button>
     </div>
   </div>
 </div>
@@ -936,6 +940,8 @@ async function importOrderToPos(mpOrderId) {
 // ============================================================
 function openConnectModal() {
   document.getElementById("inputShopId").value = "";
+  document.getElementById("inputAccessToken").value = "";
+  document.getElementById("inputRefreshToken").value = "";
   document.getElementById("connectModal").classList.add("active");
 }
 function closeConnectModal() {
@@ -943,15 +949,20 @@ function closeConnectModal() {
 }
 async function connectShopee() {
   var shopId = document.getElementById("inputShopId").value.trim();
+  var accessToken = document.getElementById("inputAccessToken").value.trim();
+  var refreshToken = document.getElementById("inputRefreshToken").value.trim();
   if (!shopId) { showToast("Shop ID wajib diisi", "error"); return; }
+  if (!accessToken) { showToast("Access Token wajib diisi", "error"); return; }
   showLoading("connectBtn");
   try {
-    var result = await callEdgeFunction("shopee-connect", { shop_id: shopId });
+    var body = { shop_id: shopId, access_token: accessToken };
+    if (refreshToken) body.refresh_token = refreshToken;
+    var result = await callEdgeFunction("shopee-connect", body);
     if (result.success) {
       showToast("Berhasil terhubung ke " + (result.shop_name || shopId));
       closeConnectModal();
     } else {
-      showToast("Gagal: " + (result.error || "Unknown error"), "error");
+      showToast("Gagal menghubungkan Shopee: " + (result.error || "Unknown error"), "error");
     }
   } catch (err) {
     showToast("Gagal: " + err.message, "error");

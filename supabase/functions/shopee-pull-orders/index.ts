@@ -56,6 +56,50 @@ async function signShopee(partnerId: string, partnerKey: string, path: string, t
     .join("");
 }
 
+async function loadToken(shopId: string) {
+  const { data, error } = await supabase
+    .from("marketplace_credentials")
+    .select("access_token, refresh_token")
+    .eq("shop_id", shopId)
+    .maybeSingle();
+  if (error || !data) return { access_token: null, refresh_token: null };
+  return { access_token: data.access_token || null, refresh_token: data.refresh_token || null };
+}
+
+async function refreshToken(account: typeof ACCOUNTS[0], shopId: string, refreshToken: string) {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const path = "/api/v2/auth/access_token/get";
+  const sign = await signShopee(account.partner_id, account.partner_key, path, timestamp);
+  const params = new URLSearchParams({
+    partner_id: account.partner_id,
+    timestamp: String(timestamp),
+    sign,
+    shop_id: shopId,
+    refresh_token: refreshToken,
+  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const res = await fetch(`${SHOPEE_API_URL}${path}?${params}`, { method: "POST", signal: controller.signal });
+  clearTimeout(timeoutId);
+  const body: any = await res.json();
+  if (body.error || !body.access_token) {
+    return { error: body.error || body.message || "refresh failed", access_token: null };
+  }
+  await supabase.from("marketplace_credentials").upsert({
+    shop_id: shopId,
+    platform: "shopee",
+    access_token: body.access_token,
+    refresh_token: body.refresh_token || refreshToken,
+    updated_at: new Date().toISOString(),
+  });
+  return { error: null, access_token: body.access_token };
+}
+
+function isAuthError(text: string) {
+  const lower = (text || "").toLowerCase();
+  return lower.includes("access_token") || lower.includes("error_auth") || lower.includes("token_invalid") || lower.includes("token_expired");
+}
+
 // ============================================================
 // FETCH DENGAN TIMEOUT & RETRY
 // ============================================================
@@ -104,7 +148,7 @@ async function fetchWithRetry(url: string, options: Record<string, unknown> = {}
 // ============================================================
 // GET ORDER LIST dari Shopee
 // ============================================================
-async function getOrderList(account: typeof ACCOUNTS[0], timeFrom: number, timeTo: number, offset = 0) {
+async function getOrderList(account: typeof ACCOUNTS[0], timeFrom: number, timeTo: number, accessToken: string, offset = 0) {
   const timestamp = Math.floor(Date.now() / 1000);
   const path = "/api/v2/order/get_order_list";
   const sign = await signShopee(account.partner_id, account.partner_key, path, timestamp);
@@ -114,6 +158,7 @@ async function getOrderList(account: typeof ACCOUNTS[0], timeFrom: number, timeT
     timestamp: String(timestamp),
     sign,
     shop_id: account.shop_id,
+    access_token: accessToken,
     time_range_field: "create_time",
     time_from: String(timeFrom),
     time_to: String(timeTo),
@@ -138,7 +183,7 @@ async function getOrderList(account: typeof ACCOUNTS[0], timeFrom: number, timeT
 // ============================================================
 // GET ORDER DETAIL dari Shopee (batch, support multiple order_sn)
 // ============================================================
-async function getOrderDetailBatch(account: typeof ACCOUNTS[0], orderSns: string[]) {
+async function getOrderDetailBatch(account: typeof ACCOUNTS[0], orderSns: string[], accessToken: string) {
   if (!orderSns.length) return { orderDetails: [] };
 
   const timestamp = Math.floor(Date.now() / 1000);
@@ -150,6 +195,7 @@ async function getOrderDetailBatch(account: typeof ACCOUNTS[0], orderSns: string
     timestamp: String(timestamp),
     sign,
     shop_id: account.shop_id,
+    access_token: accessToken,
     order_sn_list: orderSns.join(","),
     response_optional_fields: "buyer_user_name,total_amount",
   });
@@ -208,6 +254,18 @@ async function pullOrdersForAccount(account: typeof ACCOUNTS[0]) {
   const results: { pulled: number; inserted: number; skipped: number; failed: number; errors: any[] } = {
     pulled: 0, inserted: 0, skipped: 0, failed: 0, errors: []
   };
+
+  const shopId = account.shop_id || "";
+  let { access_token, refresh_token } = await loadToken(shopId);
+  if (!access_token && refresh_token) {
+    const r = await refreshToken(account, shopId, refresh_token);
+    if (r.access_token) access_token = r.access_token;
+  }
+  if (!access_token) {
+    results.errors.push({ error: "access_token tidak tersedia" });
+    return results;
+  }
+
   const now = Math.floor(Date.now() / 1000);
   const timeFrom = now - PULL_HOURS_BACK * 3600;
   const timeTo = now;
@@ -216,7 +274,7 @@ async function pullOrdersForAccount(account: typeof ACCOUNTS[0]) {
   let hasMore = true;
 
   while (hasMore) {
-    const { orderList, hasMore: more } = await getOrderList(account, timeFrom, timeTo, offset);
+    const { orderList, hasMore: more } = await getOrderList(account, timeFrom, timeTo, access_token, offset);
     hasMore = more;
     offset += orderList.length;
 
@@ -231,7 +289,7 @@ async function pullOrdersForAccount(account: typeof ACCOUNTS[0]) {
       const batch = newOrderSns.slice(i, i + batchSize);
 
       try {
-        const { orderDetails } = await getOrderDetailBatch(account, batch);
+        const { orderDetails } = await getOrderDetailBatch(account, batch, access_token);
 
         for (const detail of orderDetails) {
           try {
