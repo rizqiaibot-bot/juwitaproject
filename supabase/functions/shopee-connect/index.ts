@@ -49,8 +49,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 // ============================================================
 // SHOPEE HMAC SIGNATURE
 // ============================================================
-async function signShopee(partnerId: string, partnerKey: string, path: string, timestamp: number) {
-  const base = partnerId + path + timestamp;
+async function signShopee(partnerId: string, partnerKey: string, path: string, timestamp: number, accessToken = "", shopId = "") {
+  const base = partnerId + path + timestamp + accessToken + shopId;
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
@@ -71,7 +71,7 @@ async function signShopee(partnerId: string, partnerKey: string, path: string, t
 async function testShopeeConnection(partnerId: string, partnerKey: string, shopId: string, accessToken: string) {
   const timestamp = Math.floor(Date.now() / 1000);
   const path = "/api/v2/shop/get_shop_info";
-  const sign = await signShopee(partnerId, partnerKey, path, timestamp);
+  const sign = await signShopee(partnerId, partnerKey, path, timestamp, accessToken, shopId);
 
   const params = new URLSearchParams({
     partner_id: partnerId,
@@ -127,16 +127,27 @@ async function exchangeToken(partnerId: string, partnerKey: string, code: string
   const timestamp = Math.floor(Date.now() / 1000);
   const path = "/api/v2/auth/token/get";
   const sign = await signShopee(partnerId, partnerKey, path, timestamp);
+
   const params = new URLSearchParams({
     partner_id: partnerId,
     timestamp: String(timestamp),
     sign,
-    code,
-    shop_id: shopId,
   });
+
+  const jsonBody = JSON.stringify({
+    code,
+    shop_id: Number(shopId),
+    partner_id: Number(partnerId),
+  });
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  const res = await fetch(`${SHOPEE_API_URL}${path}?${params}`, { method: "POST", signal: controller.signal });
+  const res = await fetch(`${SHOPEE_API_URL}${path}?${params}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: jsonBody,
+    signal: controller.signal,
+  });
   clearTimeout(timeoutId);
   const body = await res.json();
   if (body.error || !body.access_token) {
