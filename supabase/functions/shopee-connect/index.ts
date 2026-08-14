@@ -31,6 +31,19 @@ const SHOPEE_API_URL = "https://partner.shopeemobile.com";
 
 const FETCH_TIMEOUT_MS = 15000;
 
+// ============================================================
+// CORS — izinkan frontend production Juwita One
+// ============================================================
+const FRONTEND_ORIGIN = Deno.env.get("FRONTEND_ORIGIN") || "https://juwitaproject.vercel.app";
+
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": FRONTEND_ORIGIN,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  };
+}
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 // ============================================================
@@ -92,6 +105,11 @@ async function testShopeeConnection(partnerId: string, partnerKey: string, shopI
 // MAIN
 // ============================================================
 Deno.serve(async (req) => {
+  // Preflight CORS: jangan jalankan logic OAuth / akses database
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { status: 200, headers: corsHeaders() });
+  }
+
   const startedAt = Date.now();
 
   try {
@@ -103,7 +121,7 @@ Deno.serve(async (req) => {
         error: "shop_id wajib diisi"
       }), {
         status: 400,
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json", ...corsHeaders() }
       });
     }
 
@@ -118,7 +136,7 @@ Deno.serve(async (req) => {
         hint: "Set SHOPEE_PARTNER_ID dan SHOPEE_PARTNER_KEY di Supabase Environment Variables"
       }), {
         status: 500,
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json", ...corsHeaders() }
       });
     }
 
@@ -185,7 +203,7 @@ Deno.serve(async (req) => {
         connection_status: "connected",
         message: "Koneksi Shopee berhasil"
       }), {
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json", ...corsHeaders() }
       });
 
     } else {
@@ -246,7 +264,7 @@ Deno.serve(async (req) => {
         detail: result.detail
       }), {
         status: 200,
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json", ...corsHeaders() }
       });
     }
 
@@ -271,7 +289,7 @@ Deno.serve(async (req) => {
       error: err.message || "Internal server error"
     }), {
       status: 500,
-      headers: { "Content-Type": "application/json" }
+      headers: { "Content-Type": "application/json", ...corsHeaders() }
     });
   }
 });
