@@ -239,15 +239,22 @@
 <div class="modal-overlay" id="connectModal">
   <div class="modal-box">
     <h3>Hubungkan Shopee</h3>
-    <label for="inputShopId">Shop ID</label>
-    <input type="text" id="inputShopId" placeholder="Masukkan Shop ID dari Shopee Seller Center">
-    <label for="inputAccessToken">Access Token</label>
-    <input type="password" id="inputAccessToken" placeholder="Masukkan Access Token dari Shopee Open Platform" autocomplete="off">
-    <label for="inputRefreshToken">Refresh Token</label>
-    <input type="password" id="inputRefreshToken" placeholder="Masukkan Refresh Token (opsional)" autocomplete="off">
-    <div class="modal-actions">
-      <button class="btn btn-outline" onclick="closeConnectModal()">Batal</button>
-      <button class="btn btn-primary" onclick="connectShopee()" id="connectBtn">Test Koneksi</button>
+    <button class="btn btn-primary" onclick="authorizeShopee()" id="authorizeBtn" style="width:100%;margin-bottom:4px;">
+      <i class="fas fa-external-link-alt"></i> Authorize Shopee
+    </button>
+    <p style="font-size:0.72rem;color:var(--text-muted);text-align:center;margin-bottom:14px;">Login &amp; beri izin Shopee untuk Juwita One</p>
+    <div style="border-top:1px solid var(--border-color);padding-top:12px;margin-top:4px;">
+      <p style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px;">Atau token manual (fallback):</p>
+      <label for="inputShopId">Shop ID</label>
+      <input type="text" id="inputShopId" placeholder="Masukkan Shop ID dari Shopee Seller Center">
+      <label for="inputAccessToken">Access Token</label>
+      <input type="password" id="inputAccessToken" placeholder="Masukkan Access Token dari Shopee Open Platform" autocomplete="off">
+      <label for="inputRefreshToken">Refresh Token</label>
+      <input type="password" id="inputRefreshToken" placeholder="Masukkan Refresh Token (opsional)" autocomplete="off">
+      <div class="modal-actions">
+        <button class="btn btn-outline" onclick="closeConnectModal()">Batal</button>
+        <button class="btn btn-outline" onclick="connectShopee()" id="connectBtn">Test Koneksi</button>
+      </div>
     </div>
   </div>
 </div>
@@ -972,6 +979,50 @@ async function connectShopee() {
 }
 
 // ============================================================
+// OAUTH: AUTHORIZE SHOPEE (redirect ke Shopee Production)
+// ============================================================
+async function authorizeShopee() {
+  showLoading("authorizeBtn");
+  try {
+    var result = await callEdgeFunction("shopee-connect", { action: "authorize" });
+    if (result.success && result.auth_url) {
+      window.location.href = result.auth_url;
+    } else {
+      showToast("Gagal membuat URL authorization: " + (result.error || "Unknown error"), "error");
+    }
+  } catch (err) {
+    showToast("Gagal: " + err.message, "error");
+  }
+  hideLoading("authorizeBtn");
+}
+
+// ============================================================
+// OAUTH: CALLBACK (halaman menerima ?code=&shop_id= dari Shopee)
+// ============================================================
+function handleOAuthCallback() {
+  var params = new URLSearchParams(window.location.search);
+  var code = params.get("code");
+  var shopId = params.get("shop_id");
+  if (!code) return;
+
+  var cleanUrl = window.location.pathname + window.location.hash;
+  history.replaceState(null, "", cleanUrl);
+
+  showToast("Menukar authorization code...");
+  callEdgeFunction("shopee-connect", { action: "exchange", code: code, shop_id: shopId || "" }).then(function(result) {
+    if (result.success) {
+      showToast("Shopee Connected: " + (result.shop_name || shopId || ""));
+    } else {
+      showToast("Authorization Shopee gagal: " + (result.error || "Unknown error"), "error");
+    }
+    refreshDashboard();
+  }).catch(function(err) {
+    showToast("Authorization Shopee gagal: " + err.message, "error");
+    refreshDashboard();
+  });
+}
+
+// ============================================================
 // SYNC STOCK
 // ============================================================
 async function syncStock() {
@@ -1048,6 +1099,7 @@ function refreshDashboard() {
 // ============================================================
 function init() {
   refreshDashboard();
+  handleOAuthCallback();
 }
 
 document.addEventListener("DOMContentLoaded", init);

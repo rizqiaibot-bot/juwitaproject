@@ -104,6 +104,54 @@ async function testShopeeConnection(partnerId: string, partnerKey: string, shopI
 }
 
 // ============================================================
+// OAUTH: BUAT AUTHORIZATION URL (production)
+// ============================================================
+async function buildAuthUrl(partnerId: string, partnerKey: string) {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const path = "/api/v2/shop/auth_partner";
+  const sign = await signShopee(partnerId, partnerKey, path, timestamp);
+  const redirect = "https://juwitaproject.vercel.app/marketplace.html";
+  const params = new URLSearchParams({
+    partner_id: partnerId,
+    timestamp: String(timestamp),
+    sign,
+    redirect,
+  });
+  return `${SHOPEE_API_URL}${path}?${params}`;
+}
+
+// ============================================================
+// OAUTH: TUKAR CODE -> ACCESS_TOKEN + REFRESH_TOKEN (server-side)
+// ============================================================
+async function exchangeToken(partnerId: string, partnerKey: string, code: string, shopId: string) {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const path = "/api/v2/auth/token/get";
+  const sign = await signShopee(partnerId, partnerKey, path, timestamp);
+  const params = new URLSearchParams({
+    partner_id: partnerId,
+    timestamp: String(timestamp),
+    sign,
+    code,
+    shop_id: shopId,
+  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const res = await fetch(`${SHOPEE_API_URL}${path}?${params}`, { method: "POST", signal: controller.signal });
+  clearTimeout(timeoutId);
+  const body = await res.json();
+  if (body.error || !body.access_token) {
+    return { success: false, error: body.error || body.message || "Token Shopee gagal diperoleh." };
+  }
+  return {
+    success: true,
+    access_token: body.access_token,
+    refresh_token: body.refresh_token || null,
+    shop_id: body.shop_id || shopId,
+    expire_in: body.expire_in || null,
+  };
+}
+
+// ============================================================
 // MAIN
 // ============================================================
 Deno.serve(async (req) => {
@@ -115,8 +163,161 @@ Deno.serve(async (req) => {
   const startedAt = Date.now();
 
   try {
-    const { shop_id, access_token, refresh_token } = await req.json();
+    const { shop_id, access_token, refresh_token, action, code } = await req.json();
 
+    // Ambil credential dari environment variables (service_role key)
+    const partnerId = Deno.env.get("SHOPEE_PARTNER_ID") || "";
+    const partnerKey = Deno.env.get("SHOPEE_PARTNER_KEY") || "";
+
+    if (!partnerId || !partnerKey) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Credential Shopee belum dikonfigurasi",
+        hint: "Set SHOPEE_PARTNER_ID dan SHOPEE_PARTNER_KEY di Supabase Environment Variables"
+      }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...corsHeaders() }
+      });
+    }
+
+    // ============================================================
+    // ACTION: authorize — generate authorization URL (production)
+    // ============================================================
+    if (action === "authorize") {
+      const authUrl = await buildAuthUrl(partnerId, partnerKey);
+      return new Response(JSON.stringify({
+        success: true,
+        auth_url: authUrl
+      }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders() }
+      });
+    }
+
+    // ============================================================
+    // ACTION: exchange — code -> token -> simpan -> verifikasi -> connected
+    // ============================================================
+    if (action === "exchange") {
+      if (!code) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: "Authorization code wajib diisi"
+        }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders() }
+        });
+      }
+      if (!shop_id) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: "shop_id wajib diisi"
+        }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders() }
+        });
+      }
+
+      const expectedShopId = Deno.env.get("SHOPEE_SHOP_ID") || "724153261";
+      if (String(shop_id) !== expectedShopId) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: "Shop ID tidak sesuai dengan toko yang di-authorize."
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders() }
+        });
+      }
+
+      const exchange = await exchangeToken(partnerId, partnerKey, code, shop_id);
+      if (!exchange.success) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: exchange.error
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders() }
+        });
+      }
+
+      // Simpan token (service_role only) — jangan pernah dikembalikan ke frontend
+      const { error: credErr } = await supabase
+        .from("marketplace_credentials")
+        .upsert({
+          shop_id: exchange.shop_id,
+          platform: "shopee",
+          access_token: exchange.access_token,
+          refresh_token: exchange.refresh_token,
+          updated_at: new Date().toISOString()
+        });
+      if (credErr) console.error("marketplace_credentials upsert failed:", credErr.message);
+
+      // Verifikasi toko (get_shop_info)
+      const verify = await testShopeeConnection(partnerId, partnerKey, exchange.shop_id, exchange.access_token);
+      if (!verify.success) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: verify.error
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders() }
+        });
+      }
+
+      // Update marketplace_config -> connected
+      const { data: exExisting } = await supabase
+        .from("marketplace_config")
+        .select("id")
+        .eq("platform", "shopee")
+        .eq("shop_id", exchange.shop_id)
+        .maybeSingle();
+
+      if (exExisting) {
+        await supabase.from("marketplace_config").update({
+          shop_name: verify.shop_name,
+          is_active: true,
+          connection_status: "connected",
+          updated_at: new Date().toISOString()
+        }).eq("id", exExisting.id);
+      } else {
+        await supabase.from("marketplace_config").insert({
+          platform: "shopee",
+          account_label: "toko_1",
+          shop_id: exchange.shop_id,
+          shop_name: verify.shop_name,
+          is_active: true,
+          connection_status: "connected"
+        });
+      }
+
+      try {
+        await supabase.from("activity_log").insert({
+          event_type: "OAUTH_CONNECT",
+          direction: "INTERNAL",
+          platform: "shopee",
+          shop_id: exchange.shop_id,
+          status: "success",
+          triggered_by: "admin",
+          action_source: "admin_dashboard",
+          duration_ms: Date.now() - startedAt,
+          metadata: { shop_name: verify.shop_name }
+        });
+      } catch (logErr) {
+        console.error("Activity log insert failed:", logErr.message);
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        shop_id: exchange.shop_id,
+        shop_name: verify.shop_name,
+        connection_status: "connected",
+        message: "Koneksi Shopee berhasil"
+      }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders() }
+      });
+    }
+
+    // ============================================================
+    // DEFAULT: manual access_token test + simpan
+    // ============================================================
     if (!shop_id) {
       return new Response(JSON.stringify({
         success: false,
@@ -133,21 +334,6 @@ Deno.serve(async (req) => {
         error: "access_token wajib diisi"
       }), {
         status: 400,
-        headers: { "Content-Type": "application/json", ...corsHeaders() }
-      });
-    }
-
-    // Ambil credential dari environment variables (service_role key)
-    const partnerId = Deno.env.get("SHOPEE_PARTNER_ID") || "";
-    const partnerKey = Deno.env.get("SHOPEE_PARTNER_KEY") || "";
-
-    if (!partnerId || !partnerKey) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: "Credential Shopee belum dikonfigurasi",
-        hint: "Set SHOPEE_PARTNER_ID dan SHOPEE_PARTNER_KEY di Supabase Environment Variables"
-      }), {
-        status: 500,
         headers: { "Content-Type": "application/json", ...corsHeaders() }
       });
     }
