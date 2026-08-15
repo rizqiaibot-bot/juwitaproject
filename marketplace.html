@@ -400,7 +400,8 @@ async function loadAccounts() {
         '<td><div class="action-group">' +
           '<button class="btn btn-primary btn-sm" onclick="openConnectModal()"><i class="fas fa-plug"></i> Connect</button> ' +
           '<button class="btn btn-warning btn-sm" onclick="syncStock()"><i class="fas fa-sync-alt"></i> Sync</button> ' +
-          '<button class="btn btn-outline btn-sm" onclick="pullOrders()"><i class="fas fa-download"></i> Pull</button>' +
+          '<button class="btn btn-outline btn-sm" onclick="pullOrders()"><i class="fas fa-download"></i> Pull</button> ' +
+          '<button class="btn btn-outline btn-sm" onclick="pullProducts()"><i class="fas fa-boxes"></i> Pull Produk</button>' +
         '</div></td>' +
         '</tr>';
     }).join("");
@@ -1056,6 +1057,24 @@ async function pullOrders() {
     }
   } catch (err) {
     showToast("Gagal: " + err.message, "error");
+  }
+  refreshDashboard();
+}
+
+// ============================================================
+// PULL PRODUK
+// ============================================================
+async function pullProducts() {
+  showToast("Menarik produk dari Shopee...");
+  try {
+    var result = await callEdgeFunction("shopee-pull-products", {});
+    if (result.success) {
+      showToast("Pull Produk selesai: " + (result.fetched || 0) + " produk, " + (result.inserted || 0) + " ditambahkan, " + (result.updated || 0) + " diperbarui" + (result.failed ? ", " + result.failed + " gagal" : ""));
+    } else {
+      showToast("Pull Produk gagal: " + (result.error || "Unknown error"), "error");
+    }
+  } catch (err) {
+    showToast("Pull Produk gagal: " + err.message, "error");
   }
   refreshDashboard();
 }
