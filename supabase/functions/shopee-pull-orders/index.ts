@@ -38,6 +38,19 @@ const ACCOUNTS = [
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 // ============================================================
+// CORS — izinkan frontend production Juwita One
+// ============================================================
+const FRONTEND_ORIGIN = Deno.env.get("FRONTEND_ORIGIN") || "https://juwitaproject.vercel.app";
+
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": FRONTEND_ORIGIN,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  };
+}
+
+// ============================================================
 // SHOPEE HMAC SIGNATURE
 // ============================================================
 async function signShopee(partnerId: string, partnerKey: string, path: string, timestamp: number) {
@@ -325,7 +338,12 @@ async function pullOrdersForAccount(account: typeof ACCOUNTS[0]) {
 // ============================================================
 // DENO SERVE
 // ============================================================
-Deno.serve(async (_req) => {
+Deno.serve(async (req) => {
+  // Preflight CORS: jangan jalankan logic Shopee / akses database
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { status: 200, headers: corsHeaders() });
+  }
+
   const startedAt = Date.now();
   let totalPulled = 0;
   let totalInserted = 0;
@@ -343,7 +361,7 @@ Deno.serve(async (_req) => {
         error: "Tidak ada akun Shopee yang dikonfigurasi"
       }), {
         status: 400,
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json", ...corsHeaders() }
       });
     }
 
@@ -405,7 +423,7 @@ Deno.serve(async (_req) => {
       skipped: totalSkipped,
       failed: totalFailed
     }), {
-      headers: { "Content-Type": "application/json" }
+      headers: { "Content-Type": "application/json", ...corsHeaders() }
     });
 
   } catch (err: any) {
@@ -433,7 +451,7 @@ Deno.serve(async (_req) => {
       error: globalError
     }), {
       status: 500,
-      headers: { "Content-Type": "application/json" }
+      headers: { "Content-Type": "application/json", ...corsHeaders() }
     });
   }
 });
