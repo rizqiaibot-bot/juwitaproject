@@ -39,6 +39,19 @@ const ACCOUNTS = {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
+// ============================================================
+// CORS — izinkan frontend production Juwita One
+// ============================================================
+const FRONTEND_ORIGIN = Deno.env.get("FRONTEND_ORIGIN") || "https://juwitaproject.vercel.app";
+
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": FRONTEND_ORIGIN,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  };
+}
+
 async function signShopee(account, path, timestamp) {
   const base = account.partner_id + path + timestamp;
   const encoder = new TextEncoder();
@@ -174,6 +187,11 @@ async function updateShopeeBatch(accountName, items) {
 }
 
 Deno.serve(async (req) => {
+  // Preflight CORS: jangan jalankan logic Shopee / akses database
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { status: 200, headers: corsHeaders() });
+  }
+
   const startedAt = Date.now();
   const syncBatchId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
   let totalSynced = 0;
@@ -193,7 +211,7 @@ Deno.serve(async (req) => {
         hint: "Another sync process is in progress. Try again in 5 minutes."
       }), {
         status: 429,
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json", ...corsHeaders() }
       });
     }
     lockAcquired = true;
@@ -365,7 +383,7 @@ Deno.serve(async (req) => {
       batch_id: syncBatchId,
       message: totalSynced || totalFailed ? `Synced: ${totalSynced}, Failed: ${totalFailed}` : "No pending mutations"
     }), {
-      headers: { "Content-Type": "application/json" }
+      headers: { "Content-Type": "application/json", ...corsHeaders() }
     });
 
   } catch (err) {
@@ -391,7 +409,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
-      headers: { "Content-Type": "application/json" }
+      headers: { "Content-Type": "application/json", ...corsHeaders() }
     });
 
   } finally {
