@@ -22,7 +22,9 @@ const SHOPEE_API_URL = "https://partner.shopeemobile.com";
 
 const REQUEST_TIMEOUT_MS = 10000;
 const MAX_RETRIES = 2;
-const PULL_HOURS_BACK = 24;
+// Window pull diperluas ke 7 hari agar order READY_TO_SHIP yang baru dibuat
+// tetap ditemukan (sebelumnya 24 jam sering menghasilkan pulled=0).
+const PULL_HOURS_BACK = 168;
 
 const RETRYABLE_STATUSES = [500, 502, 503, 504];
 
@@ -230,6 +232,16 @@ async function saveOrder(account: typeof ACCOUNTS[0], orderDetail: any) {
   const mpOrderId = orderDetail.order_sn;
   if (!mpOrderId) return { status: "failed", error: "order_sn tidak ditemukan di response" };
 
+  // Idempotent: cek dulu apakah order sudah pernah ditarik.
+  const { data: existing } = await supabase
+    .from("marketplace_orders")
+    .select("id")
+    .eq("platform", "shopee")
+    .eq("mp_order_id", mpOrderId)
+    .maybeSingle();
+
+  if (existing) return { status: "skipped", order_sn: mpOrderId };
+
   const customerName = orderDetail.buyer_user_name ||
     orderDetail.recipient_address?.name ||
     null;
@@ -237,9 +249,9 @@ async function saveOrder(account: typeof ACCOUNTS[0], orderDetail: any) {
   const total = parseFloat(orderDetail.total_amount) || 0;
   const orderStatus = orderDetail.order_status || "READY_TO_SHIP";
 
-  const { error: upsertErr } = await supabase
+  const { error: insertErr } = await supabase
     .from("marketplace_orders")
-    .upsert({
+    .insert({
       platform: "shopee",
       mp_order_id: mpOrderId,
       customer_name: customerName,
@@ -247,25 +259,157 @@ async function saveOrder(account: typeof ACCOUNTS[0], orderDetail: any) {
       order_status: orderStatus,
       sync_status: "pending",
       raw_payload: orderDetail,
-    }, { onConflict: "platform, mp_order_id", ignoreDuplicates: true });
+    });
 
-  if (upsertErr) {
-    // Jika error bukan duplicate violation
-    if (upsertErr.code === "23505") {
+  if (insertErr) {
+    // Duplicate violation (race antar concurrent pull) → dianggap skipped.
+    if (insertErr.code === "23505") {
       return { status: "skipped", order_sn: mpOrderId };
     }
-    return { status: "failed", order_sn: mpOrderId, error: upsertErr.message };
+    return { status: "failed", order_sn: mpOrderId, error: insertErr.message };
   }
 
-  return { status: "inserted", order_sn: mpOrderId };
+  return { status: "inserted", order_sn: mpOrderId, order_status: orderStatus };
+}
+
+// ============================================================
+// AUTO-IMPORT: marketplace_orders → orders + order_items
+// Idempotent: 1 mp_order_id hanya menghasilkan 1 orders.
+// Guard: marketplace_orders.internal_order_id.
+// wmsstatus awal = "Baru" (masuk Picking, BUKAN langsung Siap Kirim).
+// ============================================================
+async function autoImportOrder(account: typeof ACCOUNTS[0], orderDetail: any) {
+  const mpOrderId = orderDetail.order_sn;
+  if (!mpOrderId) return { status: "failed", order_sn: mpOrderId, error: "order_sn tidak ditemukan" };
+
+  // Guard idempotency
+  const { data: moRow, error: moErr } = await supabase
+    .from("marketplace_orders")
+    .select("id, sync_status, internal_order_id")
+    .eq("platform", "shopee")
+    .eq("mp_order_id", mpOrderId)
+    .maybeSingle();
+
+  if (moErr) return { status: "failed", order_sn: mpOrderId, error: moErr.message };
+  if (!moRow) return { status: "failed", order_sn: mpOrderId, error: "marketplace_orders row tidak ditemukan" };
+  if (moRow.internal_order_id) {
+    return { status: "skipped", order_sn: mpOrderId, reason: "already_imported" };
+  }
+
+  // Tandai processing
+  await supabase.from("marketplace_orders")
+    .update({ sync_status: "processing", updated_at: new Date().toISOString() })
+    .eq("id", moRow.id);
+
+  try {
+    const items = Array.isArray(orderDetail.item_list) ? orderDetail.item_list : [];
+    if (!items.length) throw new Error("item_list kosong");
+
+    const { data: prods, error: prodErr } = await supabase
+      .from("products")
+      .select("id, name, price, stock, shopee_item_id")
+      .not("shopee_item_id", "is", null);
+    if (prodErr) throw new Error("gagal load produk: " + prodErr.message);
+
+    const prodMap: Record<string, any> = {};
+    (prods || []).forEach((p: any) => { prodMap[String(p.shopee_item_id)] = p; });
+
+    const mapped: any[] = [];
+    const stockById: Record<string, number> = {};
+    const unmapped: any[] = [];
+    for (const item of items) {
+      const qty = item.model_quantity_purchased || 1;
+      const prod = prodMap[String(item.item_id)];
+      if (!prod) {
+        unmapped.push({ shopee_item_id: item.item_id, name: item.item_name || item.model_sku || item.item_id });
+        continue;
+      }
+      const price = prod.price || 0;
+      mapped.push({ product_id: prod.id, product_name: prod.name, qty, price, subtotal: price * qty });
+      stockById[String(prod.id)] = prod.stock || 0;
+    }
+
+    if (unmapped.length) {
+      throw new Error("produk belum dimapping: " + JSON.stringify(unmapped));
+    }
+    if (!mapped.length) throw new Error("tidak ada item yang terpetakan");
+
+    const total = mapped.reduce((s, i) => s + i.subtotal, 0);
+    const now = new Date();
+    const todayStamp = now.toISOString().slice(0, 10).replace(/-/g, "");
+    const dateStr = now.toISOString().slice(0, 10) + " " + now.toTimeString().slice(0, 5);
+    const customer = orderDetail.buyer_user_name || orderDetail.recipient_address?.name || "Marketplace Customer";
+
+    // Generate orderid unik (retry bila tabrakan PK orders.orderid)
+    let orderId = "";
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { count } = await supabase
+        .from("orders")
+        .select("orderid", { count: "exact", head: true })
+        .like("orderid", "ORD-" + todayStamp + "%");
+      orderId = "ORD-" + todayStamp + "-" + String((count || 0) + 1).padStart(2, "0");
+
+      const { error: insErr } = await supabase.from("orders").insert({
+        orderid: orderId,
+        date: dateStr,
+        channel: "Shopee",
+        customer,
+        total,
+        paystatus: "Lunas",
+        wmsstatus: "Baru",
+        courier: "Shopee",
+        resi: "-",
+      });
+      if (!insErr) break;
+      if (insErr.code === "23505") continue; // tabrakan orderid → coba angka berikutnya
+      throw new Error("insert orders gagal: " + insErr.message);
+    }
+    if (!orderId) throw new Error("gagal generate orderid");
+
+    // Insert order_items
+    const oiRows = mapped.map((m) => ({
+      orderid: orderId,
+      product_id: m.product_id,
+      product_name: m.product_name,
+      qty: m.qty,
+      price: m.price,
+      subtotal: m.subtotal,
+    }));
+    const { error: oiErr } = await supabase.from("order_items").insert(oiRows);
+    if (oiErr) {
+      // rollback order agar retry tidak membuat duplikat
+      await supabase.from("orders").delete().eq("orderid", orderId);
+      throw new Error("insert order_items gagal: " + oiErr.message);
+    }
+
+    // Kurangi stok SATU KALI (langsung ke products, TANPA stock_mutations
+    // agar tidak masuk antrean shopee-stock-sync / tidak push kembali ke Shopee)
+    for (const m of mapped) {
+      const cur = stockById[String(m.product_id)] || 0;
+      const newStock = Math.max(0, cur - m.qty);
+      await supabase.from("products").update({ stock: newStock }).eq("id", m.product_id);
+    }
+
+    // Tandai processed + internal_order_id
+    await supabase.from("marketplace_orders")
+      .update({ sync_status: "processed", internal_order_id: orderId, updated_at: new Date().toISOString() })
+      .eq("id", moRow.id);
+
+    return { status: "imported", order_sn: mpOrderId, internal_order_id: orderId };
+  } catch (err: any) {
+    await supabase.from("marketplace_orders")
+      .update({ sync_status: "failed", error_message: err.message, updated_at: new Date().toISOString() })
+      .eq("id", moRow.id);
+    return { status: "failed", order_sn: mpOrderId, error: err.message };
+  }
 }
 
 // ============================================================
 // MAIN — pull orders untuk satu akun
 // ============================================================
 async function pullOrdersForAccount(account: typeof ACCOUNTS[0]) {
-  const results: { pulled: number; inserted: number; skipped: number; failed: number; errors: any[] } = {
-    pulled: 0, inserted: 0, skipped: 0, failed: 0, errors: []
+  const results: { pulled: number; inserted: number; skipped: number; imported: number; failed: number; errors: any[]; status_distribution: Record<string, number> } = {
+    pulled: 0, inserted: 0, skipped: 0, imported: 0, failed: 0, errors: [], status_distribution: {}
   };
 
   const shopId = account.shop_id || "";
@@ -305,10 +449,19 @@ async function pullOrdersForAccount(account: typeof ACCOUNTS[0]) {
         const { orderDetails } = await getOrderDetailBatch(account, batch, access_token);
 
         for (const detail of orderDetails) {
+          const st = detail.order_status || "UNKNOWN";
+          results.status_distribution[st] = (results.status_distribution[st] || 0) + 1;
           try {
             const result = await saveOrder(account, detail);
-            if (result.status === "inserted") results.inserted++;
-            else if (result.status === "skipped") results.skipped++;
+            if (result.status === "inserted") {
+              results.inserted++;
+              const imp = await autoImportOrder(account, detail);
+              if (imp.status === "imported") results.imported++;
+              else if (imp.status === "failed") {
+                results.failed++;
+                results.errors.push(imp);
+              }
+            } else if (result.status === "skipped") results.skipped++;
             else {
               results.failed++;
               results.errors.push(result);
@@ -348,6 +501,7 @@ Deno.serve(async (req) => {
   let totalPulled = 0;
   let totalInserted = 0;
   let totalSkipped = 0;
+  let totalImported = 0;
   let totalFailed = 0;
   const accountResults: any[] = [];
   let globalError: string | null = null;
@@ -371,6 +525,7 @@ Deno.serve(async (req) => {
         totalPulled += results.pulled;
         totalInserted += results.inserted;
         totalSkipped += results.skipped;
+        totalImported += results.imported;
         totalFailed += results.failed;
 
         accountResults.push({
@@ -386,6 +541,7 @@ Deno.serve(async (req) => {
           pulled: 0,
           inserted: 0,
           skipped: 0,
+          imported: 0,
           failed: 0,
           error: err.message
         });
@@ -408,8 +564,10 @@ Deno.serve(async (req) => {
           pulled: totalPulled,
           inserted: totalInserted,
           skipped: totalSkipped,
+          imported: totalImported,
           failed: totalFailed,
-          accounts: accountResults.length
+          accounts: accountResults.length,
+          status_distribution: (accountResults.length === 1 ? accountResults[0].status_distribution : undefined) || {}
         }
       });
     } catch (logErr: any) {
@@ -421,7 +579,9 @@ Deno.serve(async (req) => {
       pulled: totalPulled,
       inserted: totalInserted,
       skipped: totalSkipped,
-      failed: totalFailed
+      imported: totalImported,
+      failed: totalFailed,
+      status_distribution: (accountResults.length === 1 ? accountResults[0].status_distribution : undefined) || {}
     }), {
       headers: { "Content-Type": "application/json", ...corsHeaders() }
     });
