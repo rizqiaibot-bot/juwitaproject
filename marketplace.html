@@ -879,7 +879,7 @@ async function importOrderToPos(mpOrderId) {
 
     var now = new Date();
     var todayStamp = now.toISOString().slice(0, 10).replace(/-/g, "");
-    var cntRes = await SB.from("orders").select("orderId").like("orderId", "ORD-" + todayStamp + "%");
+    var cntRes = await SB.from("orders").select("orderid").like("orderid", "ORD-" + todayStamp + "%");
     var todayCount = cntRes.data ? cntRes.data.length : 0;
     var internalOrderId = "ORD-" + todayStamp + "-" + String(todayCount + 1).padStart(2, "0");
     var dateStr = now.toISOString().slice(0, 10) + " " + now.toTimeString().slice(0, 5);
@@ -890,16 +890,15 @@ async function importOrderToPos(mpOrderId) {
     var total = orderItems.reduce(function(s, i) { return s + i.subtotal; }, 0);
 
     var newOrder = {
-      orderId: internalOrderId,
+      orderid: internalOrderId,
       date: dateStr,
       channel: "Shopee",
       customer: order.customer_name || "Marketplace Customer",
       total: total,
-      payStatus: "Lunas",
-      wmsStatus: "Siap Kirim",
+      paystatus: "Lunas",
+      wmsstatus: "Siap Kirim",
       courier: "Shopee",
-      resi: "-",
-      items: orderItems
+      resi: "-"
     };
 
     var insRes = await SB.from("orders").insert(newOrder);

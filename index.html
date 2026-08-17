@@ -2705,7 +2705,10 @@
                     sb.from('warehouse_opname').select('*').order('session_date', { ascending: false })
                 ]);
                 if (pRes.data && pRes.data.length > 0) products = pRes.data;
-                if (oRes.data && oRes.data.length > 0) ordersData = oRes.data;
+                if (oRes.data && oRes.data.length > 0) ordersData = oRes.data.map(o => ({
+                    orderId: o.orderid, date: o.date, channel: o.channel, customer: o.customer,
+                    total: o.total, payStatus: o.paystatus, wmsStatus: o.wmsstatus, courier: o.courier, resi: o.resi
+                }));
                 if (kRes.data && kRes.data.length > 0) karyawanData = kRes.data;
                 if (wRecRes.data && wRecRes.data.length > 0) warehouseReceiving = wRecRes.data;
                 if (wRackRes.data && wRackRes.data.length > 0) warehouseRacks = wRackRes.data;
@@ -3442,7 +3445,7 @@
             const o = ordersData.find(x => x.orderId === orderId);
             if (!o) return;
             o.wmsStatus = 'Dipick';
-            sb.from('orders').update({ wmsStatus: 'Dipick' }).eq('orderId', orderId);
+            sb.from('orders').update({ wmsstatus: 'Dipick' }).eq('orderid', orderId);
             renderWarehousePicking();
             renderWarehousePacking();
             showToast(`${orderId} ditandai sudah dipick`);
@@ -3479,7 +3482,7 @@
             const o = ordersData.find(x => x.orderId === orderId);
             if (!o) return;
             o.wmsStatus = 'Siap Kirim';
-            sb.from('orders').update({ wmsStatus: 'Siap Kirim' }).eq('orderId', orderId);
+            sb.from('orders').update({ wmsstatus: 'Siap Kirim' }).eq('orderid', orderId);
             renderWarehousePacking();
             renderWarehouseShipping();
             showToast(`${orderId} siap dikirim`);
@@ -3516,7 +3519,7 @@
                 const o = ordersData.find(x => x.orderId === orderId);
                 if (o) {
                     o.courier = courier; o.resi = resi; o.wmsStatus = 'Dikirim';
-                    sb.from('orders').update({ courier, resi, wmsStatus: 'Dikirim' }).eq('orderId', orderId);
+                    sb.from('orders').update({ courier, resi, wmsstatus: 'Dikirim' }).eq('orderid', orderId);
                     renderWarehouseShipping();
                     renderPenjualanTable();
                     showToast(`${orderId} dikirim via ${courier}`);
@@ -4008,6 +4011,8 @@
 
             const order = { orderId, date: dateStr, channel, customer, total, payStatus: "Lunas",
                 wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-" };
+            const orderRow = { orderid: orderId, date: dateStr, channel, customer, total,
+                paystatus: "Lunas", wmsstatus: "Selesai", courier: "Self-Pickup", resi: "-" };
 
             // Stock backup untuk rollback
             const stockBackup = {};
@@ -4028,7 +4033,7 @@
 
             // Sync ke Supabase dalam satu batch
             const promises = [];
-            promises.push(sb.from('orders').insert(order).then(r => {
+            promises.push(sb.from('orders').insert(orderRow).then(r => {
                 if (r.error) throw new Error("Order sync: " + r.error.message);
             }));
 
