@@ -55,8 +55,10 @@ function corsHeaders() {
 // ============================================================
 // SHOPEE HMAC SIGNATURE
 // ============================================================
-async function signShopee(partnerId: string, partnerKey: string, path: string, timestamp: number) {
-  const base = partnerId + path + timestamp;
+async function signShopee(partnerId: string, partnerKey: string, path: string, timestamp: number, accessToken = "", shopId = "") {
+  // PARTNER signing (default): partner_id + path + timestamp
+  // SHOP signing (endpoint ber-access_token): + access_token + shop_id
+  const base = partnerId + path + timestamp + accessToken + shopId;
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
@@ -89,12 +91,20 @@ async function refreshToken(account: typeof ACCOUNTS[0], shopId: string, refresh
     partner_id: account.partner_id,
     timestamp: String(timestamp),
     sign,
-    shop_id: shopId,
+  });
+  const jsonBody = JSON.stringify({
     refresh_token: refreshToken,
+    shop_id: Number(shopId),
+    partner_id: Number(account.partner_id),
   });
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  const res = await fetch(`${SHOPEE_API_URL}${path}?${params}`, { method: "POST", signal: controller.signal });
+  const res = await fetch(`${SHOPEE_API_URL}${path}?${params}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: jsonBody,
+    signal: controller.signal,
+  });
   clearTimeout(timeoutId);
   const body: any = await res.json();
   if (body.error || !body.access_token) {
@@ -113,6 +123,14 @@ async function refreshToken(account: typeof ACCOUNTS[0], shopId: string, refresh
 function isAuthError(text: string) {
   const lower = (text || "").toLowerCase();
   return lower.includes("access_token") || lower.includes("error_auth") || lower.includes("token_invalid") || lower.includes("token_expired");
+}
+
+// Error terstruktur dari Shopee (aman untuk di-log: tanpa token/sign)
+function shopeeError(code: string, message: string, request_id?: string) {
+  const e: any = new Error(message);
+  e.code = code;
+  e.request_id = request_id || "";
+  return e;
 }
 
 // ============================================================
@@ -166,7 +184,7 @@ async function fetchWithRetry(url: string, options: Record<string, unknown> = {}
 async function getOrderList(account: typeof ACCOUNTS[0], timeFrom: number, timeTo: number, accessToken: string, offset = 0) {
   const timestamp = Math.floor(Date.now() / 1000);
   const path = "/api/v2/order/get_order_list";
-  const sign = await signShopee(account.partner_id, account.partner_key, path, timestamp);
+  const sign = await signShopee(account.partner_id, account.partner_key, path, timestamp, accessToken, account.shop_id);
 
   const params = new URLSearchParams({
     partner_id: account.partner_id,
@@ -186,13 +204,45 @@ async function getOrderList(account: typeof ACCOUNTS[0], timeFrom: number, timeT
   const body: any = await res.json();
 
   if (body.error) {
-    throw new Error(`Shopee API error: ${body.error} - ${body.message || ""}`);
+    throw shopeeError(body.error, `Shopee API error: ${body.error} - ${body.message || ""}`, body.request_id);
   }
 
   const orderList = body.response?.order_list || [];
   const hasMore = body.response?.more || false;
 
   return { orderList, hasMore };
+}
+
+// ============================================================
+// GET ORDER LIST + auto-refresh token saat auth error (maks 1 retry)
+// ============================================================
+async function getOrderListWithAuth(
+  account: typeof ACCOUNTS[0],
+  shopId: string,
+  timeFrom: number,
+  timeTo: number,
+  accessToken: string,
+  refreshTokenValue: string | null,
+  offset: number,
+) {
+  try {
+    const res = await getOrderList(account, timeFrom, timeTo, accessToken, offset);
+    return { orderList: res.orderList, hasMore: res.hasMore, accessToken };
+  } catch (err: any) {
+    const msg = err && err.message ? err.message : String(err);
+    const code = err && err.code ? err.code : "";
+    if (!refreshTokenValue || !(isAuthError(msg) || isAuthError(code))) {
+      throw err;
+    }
+
+    const r = await refreshToken(account, shopId, refreshTokenValue);
+    if (!r.access_token) {
+      throw shopeeError("token_refresh_failed", `Token refresh gagal: ${r.error || "unknown"}`);
+    }
+
+    const res = await getOrderList(account, timeFrom, timeTo, r.access_token, offset);
+    return { orderList: res.orderList, hasMore: res.hasMore, accessToken: r.access_token };
+  }
 }
 
 // ============================================================
@@ -203,7 +253,7 @@ async function getOrderDetailBatch(account: typeof ACCOUNTS[0], orderSns: string
 
   const timestamp = Math.floor(Date.now() / 1000);
   const path = "/api/v2/order/get_order_detail";
-  const sign = await signShopee(account.partner_id, account.partner_key, path, timestamp);
+  const sign = await signShopee(account.partner_id, account.partner_key, path, timestamp, accessToken, account.shop_id);
 
   const params = new URLSearchParams({
     partner_id: account.partner_id,
@@ -212,7 +262,7 @@ async function getOrderDetailBatch(account: typeof ACCOUNTS[0], orderSns: string
     shop_id: account.shop_id,
     access_token: accessToken,
     order_sn_list: orderSns.join(","),
-    response_optional_fields: "buyer_user_name,total_amount",
+    response_optional_fields: "buyer_user_name,total_amount,item_list,recipient_address",
   });
 
   const res = await fetchWithRetry(`${SHOPEE_API_URL}${path}?${params}`, { method: "GET" });
@@ -419,8 +469,7 @@ async function pullOrdersForAccount(account: typeof ACCOUNTS[0]) {
     if (r.access_token) access_token = r.access_token;
   }
   if (!access_token) {
-    results.errors.push({ error: "access_token tidak tersedia" });
-    return results;
+    throw shopeeError("token_unavailable", "access_token tidak tersedia dan refresh gagal");
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -431,7 +480,10 @@ async function pullOrdersForAccount(account: typeof ACCOUNTS[0]) {
   let hasMore = true;
 
   while (hasMore) {
-    const { orderList, hasMore: more } = await getOrderList(account, timeFrom, timeTo, access_token, offset);
+    const { orderList, hasMore: more, accessToken: nextToken } = await getOrderListWithAuth(
+      account, shopId, timeFrom, timeTo, access_token, refresh_token, offset
+    );
+    access_token = nextToken;
     hasMore = more;
     offset += orderList.length;
 
@@ -519,6 +571,8 @@ Deno.serve(async (req) => {
       });
     }
 
+    let hasAccountError = false;
+
     for (const account of activeAccounts) {
       try {
         const results = await pullOrdersForAccount(account);
@@ -531,19 +585,27 @@ Deno.serve(async (req) => {
         accountResults.push({
           account: account.label,
           shop_id: account.shop_id,
+          success: true,
           ...results
         });
       } catch (err: any) {
-        // Satu akun gagal, akun lain tetap diproses
+        // Satu akun gagal, akun lain tetap diproses — error DITAMPILKAN (tidak ditelan).
+        const code = err && err.code ? err.code : "account_error";
+        const message = err && err.message ? err.message : String(err);
+        const request_id = err && err.request_id ? err.request_id : "";
+        console.error(`[shopee-pull-orders] account=${account.label} endpoint=get_order_list error=${code} request_id=${request_id} message=${message}`);
+        hasAccountError = true;
+        totalFailed += 1;
         accountResults.push({
           account: account.label,
           shop_id: account.shop_id,
+          success: false,
           pulled: 0,
           inserted: 0,
           skipped: 0,
           imported: 0,
-          failed: 0,
-          error: err.message
+          failed: 1,
+          error: { code, message, request_id }
         });
       }
     }
@@ -551,15 +613,21 @@ Deno.serve(async (req) => {
     const duration = Date.now() - startedAt;
 
     // Activity log — pisah dari business logic
+    const accountErrorSummary = accountResults
+      .filter(a => a.success === false)
+      .map(a => `[${a.account}] ${a.error?.code || "account_error"}: ${a.error?.message || ""}`)
+      .join("; ");
+
     try {
       await supabase.from("activity_log").insert({
         event_type: "ORDER_PULL",
         direction: "IN",
         platform: "shopee",
-        status: totalFailed === 0 ? "success" : "failed",
+        status: (totalFailed === 0 && !hasAccountError) ? "success" : "failed",
         triggered_by: "system",
         action_source: "cron",
         duration_ms: duration,
+        error_message: accountErrorSummary || null,
         metadata: {
           pulled: totalPulled,
           inserted: totalInserted,
@@ -575,13 +643,24 @@ Deno.serve(async (req) => {
     }
 
     return new Response(JSON.stringify({
-      success: true,
+      success: !hasAccountError && totalFailed === 0,
       pulled: totalPulled,
       inserted: totalInserted,
       skipped: totalSkipped,
       imported: totalImported,
       failed: totalFailed,
-      status_distribution: (accountResults.length === 1 ? accountResults[0].status_distribution : undefined) || {}
+      status_distribution: (accountResults.length === 1 ? accountResults[0].status_distribution : undefined) || {},
+      accountResults: accountResults.map(a => ({
+        account: a.account,
+        shop_id: a.shop_id,
+        success: a.success,
+        pulled: a.pulled || 0,
+        inserted: a.inserted || 0,
+        skipped: a.skipped || 0,
+        imported: a.imported || 0,
+        failed: a.failed || 0,
+        ...(a.error ? { error: a.error } : {})
+      }))
     }), {
       headers: { "Content-Type": "application/json", ...corsHeaders() }
     });

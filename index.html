@@ -2687,6 +2687,7 @@
         let warehouseReceiving = [];
         let warehouseRacks = [];
         let warehouseOpname = [];
+        let orderItemsData = [];
 
         // Warehouse seed data
         function seedWarehouseData() {
@@ -2708,13 +2709,14 @@
         // ============================================================
         async function initSupabaseData() {
             try {
-                const [pRes, oRes, kRes, wRecRes, wRackRes, wOpRes] = await Promise.all([
+                const [pRes, oRes, kRes, wRecRes, wRackRes, wOpRes, oiRes] = await Promise.all([
                     sb.from('products').select('*'),
                     sb.from('orders').select('*').order('date', { ascending: false }),
                     sb.from('karyawan').select('*'),
                     sb.from('warehouse_receiving').select('*').order('received_date', { ascending: false }),
                     sb.from('warehouse_racks').select('*'),
-                    sb.from('warehouse_opname').select('*').order('session_date', { ascending: false })
+                    sb.from('warehouse_opname').select('*').order('session_date', { ascending: false }),
+                    sb.from('order_items').select('*').order('id')
                 ]);
                 if (pRes.data && pRes.data.length > 0) products = pRes.data;
                 if (oRes.data && oRes.data.length > 0) ordersData = oRes.data.map(o => ({
@@ -2725,6 +2727,7 @@
                 if (wRecRes.data && wRecRes.data.length > 0) warehouseReceiving = wRecRes.data;
                 if (wRackRes.data && wRackRes.data.length > 0) warehouseRacks = wRackRes.data;
                 if (wOpRes.data && wOpRes.data.length > 0) warehouseOpname = wOpRes.data;
+                if (oiRes.data && oiRes.data.length > 0) orderItemsData = oiRes.data;
                 if (pRes.error || oRes.error || wRecRes.error || wRackRes.error || wOpRes.error) {
                     seedWarehouseData();
                 }
@@ -3442,11 +3445,14 @@
             tbody.innerHTML = filtered.map(o => {
                 const rack = warehouseRacks.length ? warehouseRacks[(o.orderId || "").split("").reduce((a, c) => a + c.charCodeAt(0), 0) % warehouseRacks.length] : null;
                 const isDone = o.wmsStatus === 'Dipick';
+                const items = orderItemsData.filter(i => i.orderid === o.orderId);
+                const productHtml = items.length ? items.map(i => i.product_name).join('<br>') : '<span style="color:var(--text-muted);">-</span>';
+                const qtyHtml = items.length ? items.map(i => `${i.qty} pcs`).join('<br>') : '<span style="color:var(--text-muted);">-</span>';
                 return `<tr>
                     <td><strong>${o.orderId}</strong></td>
-                    <td>${o.customer}</td>
+                    <td>${productHtml}</td>
                     <td>${rack ? rack.zone + ' - ' + rack.rack_name : 'Belum ditentukan'}</td>
-                    <td>1 Pcs</td>
+                    <td>${qtyHtml}</td>
                     <td><span class="badge-status ${isDone ? 'badge-lunas' : 'badge-belum'}">${isDone ? 'Sudah Dipick' : 'Perlu Dipick'}</span></td>
                     <td>${!isDone ? `<button class="aksi-btn" onclick="markPicked('${o.orderId}')"><i class="fas fa-check"></i> Tandai Dipick</button>` : '-'}</td>
                 </tr>`;
@@ -3463,6 +3469,15 @@
             showToast(`${orderId} ditandai sudah dipick`);
         }
 
+        async function markPacking(orderId) {
+            const o = ordersData.find(x => x.orderId === orderId);
+            if (!o) return;
+            o.wmsStatus = 'Packing';
+            sb.from('orders').update({ wmsstatus: 'Packing' }).eq('orderid', orderId);
+            renderWarehousePacking();
+            showToast(`${orderId} mulai dipacking`);
+        }
+
         // ============================================================
         // WAREHOUSE: PACKING
         // ============================================================
@@ -3475,7 +3490,13 @@
                 return;
             }
             tbody.innerHTML = packingOrders.map(o => {
-                const statusCls = o.wmsStatus === 'Siap Kirim' ? 'badge-lunas' : o.wmsStatus === 'Packing' ? 'badge-belum' : 'badge-belum';
+                const statusCls = o.wmsStatus === 'Siap Kirim' ? 'badge-lunas' : 'badge-belum';
+                let actionHtml = '-';
+                if (o.wmsStatus === 'Dipick') {
+                    actionHtml = `<button class="aksi-btn" onclick="markPacking('${o.orderId}')"><i class="fas fa-box-open"></i> Mulai Packing</button>`;
+                } else if (o.wmsStatus === 'Packing') {
+                    actionHtml = `<button class="aksi-btn" onclick="markPacked('${o.orderId}')"><i class="fas fa-box"></i> QC OK</button>`;
+                }
                 return `<tr>
                     <td><strong>${o.orderId}</strong></td>
                     <td>${o.customer}</td>
@@ -3483,9 +3504,7 @@
                     <td>Pesanan ${o.orderId}</td>
                     <td>1</td>
                     <td><span class="badge-status ${statusCls}">${o.wmsStatus}</span></td>
-                    <td>
-                        ${o.wmsStatus !== 'Siap Kirim' ? `<button class="aksi-btn" onclick="markPacked('${o.orderId}')"><i class="fas fa-box"></i> QC OK</button>` : '-'}
-                    </td>
+                    <td>${actionHtml}</td>
                 </tr>`;
             }).join('');
         }
