@@ -52,8 +52,8 @@ function corsHeaders() {
   };
 }
 
-async function signShopee(account, path, timestamp) {
-  const base = account.partner_id + path + timestamp;
+async function signShopee(account, path, timestamp, accessToken = "", shopId = "") {
+  const base = account.partner_id + path + timestamp + accessToken + shopId;
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey("raw", encoder.encode(account.partner_key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(base));
@@ -78,12 +78,20 @@ async function refreshToken(account, shopId, refreshToken) {
     partner_id: account.partner_id,
     timestamp: String(timestamp),
     sign,
-    shop_id: shopId,
+  });
+  const jsonBody = JSON.stringify({
     refresh_token: refreshToken,
+    shop_id: Number(shopId),
+    partner_id: Number(account.partner_id),
   });
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  const res = await fetch(`${SHOPEE_API_URL}/auth/access_token/get?${params}`, { method: "POST", signal: controller.signal });
+  const res = await fetch(`${SHOPEE_API_URL}/auth/access_token/get?${params}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: jsonBody,
+    signal: controller.signal,
+  });
   clearTimeout(timeoutId);
   const body = await res.json();
   if (body.error || !body.access_token) {
@@ -120,7 +128,7 @@ async function updateShopeeBatch(accountName, items) {
 
   const timestamp = Math.floor(Date.now() / 1000);
   const path = "/api/v2/product/update_stock";
-  const sign = await signShopee(account, path, timestamp);
+  const sign = await signShopee(account, path, timestamp, access_token, shopId);
 
   const params = new URLSearchParams({
     partner_id: account.partner_id,
