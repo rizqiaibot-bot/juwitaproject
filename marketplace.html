@@ -839,6 +839,10 @@ async function importOrderToPos(mpOrderId) {
       showToast("Order belum siap diimport (status: " + order.sync_status + ")", "error");
       return;
     }
+    if (order.internal_order_id) {
+      showToast("Order sudah diimport sebagai " + order.internal_order_id, "error");
+      return;
+    }
 
     var prodRes = await SB.from("products").select("*").not("shopee_item_id", "is", null);
     if (prodRes.error) {
@@ -904,6 +908,18 @@ async function importOrderToPos(mpOrderId) {
     var insRes = await SB.from("orders").insert(newOrder);
     if (insRes.error) {
       showToast("Gagal buat transaksi: " + insRes.error.message, "error");
+      return;
+    }
+
+    var orderItemsRows = orderItems.map(function(i) {
+      return { orderid: internalOrderId, product_id: i.id, product_name: i.name, qty: i.quantity, price: i.price, subtotal: i.subtotal };
+    });
+    var oiRes = await SB.from("order_items").insert(orderItemsRows);
+    if (oiRes.error) {
+      console.error("order_items insert failed:", oiRes.error.message);
+      var delRes = await SB.from("orders").delete().eq("orderid", internalOrderId);
+      if (delRes.error) console.error("rollback order delete failed:", delRes.error.message);
+      showToast("Gagal menyimpan detail item: " + oiRes.error.message, "error");
       return;
     }
 
