@@ -4006,9 +4006,8 @@
             const dateStr = now.toISOString().slice(0, 10) + " " + now.toTimeString().slice(0, 5);
             const channel = method === "QRIS" || method === "EDC" || method === "Split" ? "POS2" : "POS1";
 
-            const items = cart.map(i => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity, subtotal: i.price * i.quantity }));
             const order = { orderId, date: dateStr, channel, customer, total, payStatus: "Lunas",
-                wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-", items };
+                wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-" };
 
             // Stock backup untuk rollback
             const stockBackup = {};
