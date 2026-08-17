@@ -2527,6 +2527,18 @@
         </div>
     </div>
 
+    <!-- ===== MODAL DETAIL TRANSAKSI ===== -->
+    <div class="modal-overlay modal-full" id="orderDetailModal" onclick="if(event.target===this)closeOrderDetail()">
+        <div class="modal-card" style="max-width:520px;text-align:left;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                <h3 style="display:flex;align-items:center;gap:8px;font-size:1.1rem;margin:0;"><i class="fas fa-receipt" style="color:var(--primary);"></i> Detail Transaksi</h3>
+                <button class="close-modal-btn" style="padding:4px 10px;" onclick="closeOrderDetail()"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="orderDetailContent" style="font-size:0.8rem;line-height:1.6;"></div>
+            <button class="close-modal-btn" style="margin-top:14px;" onclick="closeOrderDetail()">Tutup</button>
+        </div>
+    </div>
+
     <!-- ===== MODAL CLOSING ===== -->
     <div class="modal-overlay" id="closingModal">
         <div class="modal-card">
@@ -3094,7 +3106,7 @@
                     .wmsStatus === "Batal" ? "badge-batal" : "badge-belum";
                 const channelHtml = renderChannelBadge(o.channel);
                 return `<tr>
-                            <td><strong>${o.orderId}</strong><br><small style="color:var(--text-muted);">${o.date}</small></td>
+                            <td><strong style="cursor:pointer;color:var(--primary);" onclick="openOrderDetail('${o.orderId}')">${o.orderId}</strong><br><small style="color:var(--text-muted);">${o.date}</small></td>
                             <td>${channelHtml}</td>
                             <td>${o.customer}</td>
                             <td><strong>${o.total.toLocaleString('id-ID')}</strong></td>
@@ -3103,7 +3115,7 @@
                             <td>${o.courier}<br><small style="color:var(--text-muted);">${o.resi}</small></td>
                             <td>
                                 <div class="aksi-group">
-                                    <button class="aksi-btn" onclick="showToast('Detail ${o.orderId}')"><i class="fas fa-eye"></i></button>
+                                    <button class="aksi-btn" onclick="openOrderDetail('${o.orderId}')"><i class="fas fa-eye"></i></button>
                                     <button class="aksi-btn" onclick="toggleAksiMenu(this)"><i class="fas fa-print"></i></button>
                                     <div class="aksi-dropdown">
                                         <button onclick="printInvoice('${o.orderId}')"><i class="fas fa-file-invoice" style="color:var(--primary);"></i> Invoice</button>
@@ -4012,7 +4024,8 @@
             const order = { orderId, date: dateStr, channel, customer, total, payStatus: "Lunas",
                 wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-" };
             const orderRow = { orderid: orderId, date: dateStr, channel, customer, total,
-                paystatus: "Lunas", wmsstatus: "Selesai", courier: "Self-Pickup", resi: "-" };
+                paystatus: "Lunas", wmsstatus: "Selesai", courier: "Self-Pickup", resi: "-",
+                payment_method: String(method || "Cash").toLowerCase(), subtotal, diskon: disc, bayar: pay, kembalian: change };
 
             // Stock backup untuk rollback
             const stockBackup = {};
@@ -4031,12 +4044,36 @@
                 }
             });
 
-            // Sync ke Supabase dalam satu batch
-            const promises = [];
-            promises.push(sb.from('orders').insert(orderRow).then(r => {
-                if (r.error) throw new Error("Order sync: " + r.error.message);
-            }));
+            // 1. Insert order utama dulu (biar order_items bisa mereferensinya)
+            try {
+                const orderRes = await sb.from('orders').insert(orderRow);
+                if (orderRes.error) throw new Error("Order sync: " + orderRes.error.message);
+            } catch (err) {
+                console.error("Order sync failed:", err);
+                showToast("Gagal sync ke server: " + err.message);
+                Object.keys(stockBackup).forEach(id => {
+                    const prod = products.find(p => p.id === parseInt(id));
+                    if (prod) prod.stock = stockBackup[id];
+                });
+                return;
+            }
 
+            // 2. Insert order_items (setelah order utama sukses)
+            if (cart.length > 0) {
+                const orderItems = cart.map(i => ({
+                    orderid: orderId,
+                    product_id: i.id,
+                    product_name: i.name,
+                    qty: i.quantity,
+                    price: i.price,
+                    subtotal: i.price * i.quantity
+                }));
+                const oiRes = await sb.from('order_items').insert(orderItems);
+                if (oiRes.error) console.warn("order_items insert error:", oiRes.error.message);
+            }
+
+            // 3. Update stok + log stock mutation
+            const promises = [];
             cart.forEach(item => {
                 const prod = products.find(p => p.id === item.id);
                 if (prod) {
@@ -4052,9 +4089,8 @@
             try {
                 await Promise.all(promises);
             } catch (err) {
-                console.error("Checkout sync failed:", err);
-                showToast("Gagal sync ke server: " + err.message);
-                // Rollback stok lokal
+                console.error("Stock sync failed:", err);
+                showToast("Gagal sync stok: " + err.message);
                 Object.keys(stockBackup).forEach(id => {
                     const prod = products.find(p => p.id === parseInt(id));
                     if (prod) prod.stock = stockBackup[id];
@@ -4097,6 +4133,83 @@
 
         function closeCheckoutModal() {
             document.getElementById("checkoutModal").classList.remove("active");
+        }
+
+        function openOrderDetail(orderId) {
+            if (!orderId) return;
+            loadOrderDetail(orderId);
+            document.getElementById("orderDetailModal").classList.add("active");
+        }
+
+        function closeOrderDetail() {
+            document.getElementById("orderDetailModal").classList.remove("active");
+        }
+
+        async function loadOrderDetail(orderId) {
+            const box = document.getElementById("orderDetailContent");
+            box.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:20px;"><i class="fas fa-spinner fa-spin"></i> Memuat detail...</div>`;
+
+            const fmt = n => (n || 0).toLocaleString('id-ID');
+
+            try {
+                const [ordRes, itemsRes] = await Promise.all([
+                    sb.from('orders').select('*').eq('orderid', orderId).maybeSingle(),
+                    sb.from('order_items').select('*').eq('orderid', orderId).order('id')
+                ]);
+                if (ordRes.error) throw new Error(ordRes.error.message);
+
+                const o = ordRes.data;
+                if (!o) {
+                    box.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:20px;">Transaksi tidak ditemukan.</div>`;
+                    return;
+                }
+
+                const items = (itemsRes && itemsRes.data) || [];
+                const hasItems = items.length > 0;
+                const hasPayment = o.payment_method != null && o.payment_method !== '';
+                const methodLabel = hasPayment ? String(o.payment_method).toUpperCase() : '-';
+                const subtotal = hasItems ? items.reduce((s, i) => s + (i.subtotal || 0), 0) : (o.subtotal != null ? o.subtotal : o.total);
+                const diskon = o.diskon != null ? o.diskon : 0;
+
+                let itemsHtml = '';
+                if (hasItems) {
+                    itemsHtml = `
+                        <table style="width:100%;border-collapse:collapse;margin:6px 0;">
+                            <thead><tr style="border-bottom:1px solid var(--border-color);font-weight:700;">
+                                <th style="text-align:left;padding:4px;">Produk</th>
+                                <th style="text-align:center;padding:4px;">Qty</th>
+                                <th style="text-align:right;padding:4px;">Harga</th>
+                                <th style="text-align:right;padding:4px;">Subtotal</th>
+                            </tr></thead>
+                            <tbody>
+                                ${items.map(i => `<tr style="border-bottom:1px solid var(--border-color);">
+                                    <td style="padding:4px;">${i.product_name}</td>
+                                    <td style="text-align:center;padding:4px;">${i.qty}</td>
+                                    <td style="text-align:right;padding:4px;">${fmt(i.price)}</td>
+                                    <td style="text-align:right;padding:4px;">${fmt(i.subtotal)}</td>
+                                </tr>`).join('')}
+                            </tbody>
+                        </table>`;
+                }
+
+                box.innerHTML = `
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        <div style="display:flex;justify-content:space-between;"><span>ID Transaksi</span><strong>${o.orderid}</strong></div>
+                        <div style="display:flex;justify-content:space-between;"><span>Tanggal</span><strong>${o.date}</strong></div>
+                        <div style="display:flex;justify-content:space-between;"><span>Pelanggan</span><strong>${o.customer || '-'}</strong></div>
+                        <div style="display:flex;justify-content:space-between;"><span>Metode Bayar</span><strong>${methodLabel}</strong></div>
+                        ${itemsHtml}
+                        <hr style="border-color:var(--border-color);margin:4px 0;">
+                        <div style="display:flex;justify-content:space-between;"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
+                        ${diskon > 0 ? `<div style="display:flex;justify-content:space-between;color:var(--danger);"><span>Diskon</span><span>-${fmt(diskon)}</span></div>` : ''}
+                        <div style="display:flex;justify-content:space-between;font-weight:800;font-size:0.95rem;"><span>Total</span><span>${fmt(o.total)}</span></div>
+                        ${hasPayment ? `<div style="display:flex;justify-content:space-between;"><span>Bayar</span><span>${fmt(o.bayar)}</span></div>
+                        <div style="display:flex;justify-content:space-between;color:var(--success);"><span>Kembalian</span><span>${fmt(o.kembalian)}</span></div>` : ''}
+                    </div>`;
+            } catch (err) {
+                console.error("loadOrderDetail failed:", err);
+                box.innerHTML = `<div style="text-align:center;color:var(--danger);padding:20px;">Gagal memuat detail: ${err.message}</div>`;
+            }
         }
 
         function printReceipt() {
