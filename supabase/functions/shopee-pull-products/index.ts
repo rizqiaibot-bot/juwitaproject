@@ -97,6 +97,74 @@ function extractStock(item: any): number | null {
   return isNaN(n) ? null : Math.round(n);
 }
 
+function extractImageUrl(item: any): string | null {
+  const url = item?.image?.image_url_list?.[0];
+  return typeof url === "string" && url.length > 0 ? url : null;
+}
+
+async function refreshToken(partnerId: string, partnerKey: string, shopId: string, refreshTokenValue: string) {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const path = "/api/v2/auth/access_token/get";
+  const sign = await signShopee(partnerId, partnerKey, path, timestamp, "", "");
+  const params = new URLSearchParams({
+    partner_id: partnerId,
+    timestamp: String(timestamp),
+    sign,
+  });
+  const jsonBody = JSON.stringify({
+    refresh_token: refreshTokenValue,
+    shop_id: Number(shopId),
+    partner_id: Number(partnerId),
+  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const res = await fetch(`${SHOPEE_API_URL}${path}?${params}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: jsonBody,
+    signal: controller.signal,
+  });
+  clearTimeout(timeoutId);
+  const body = await res.json();
+  if (body.error || !body.access_token) {
+    return { error: body.error || body.message || "refresh failed", access_token: null };
+  }
+  await supabase.from("marketplace_credentials").upsert({
+    shop_id: shopId,
+    platform: "shopee",
+    access_token: body.access_token,
+    refresh_token: body.refresh_token || refreshTokenValue,
+    updated_at: new Date().toISOString(),
+  });
+  return { error: null, access_token: body.access_token };
+}
+
+function isAuthError(text: string): boolean {
+  const lower = (text || "").toLowerCase();
+  return lower.includes("access_token") || lower.includes("error_auth") || lower.includes("token_invalid") || lower.includes("token_expired");
+}
+
+async function collectItemIds(partnerId: string, partnerKey: string, shopId: string, accessToken: string): Promise<number[]> {
+  const ids: number[] = [];
+  let offset = 0;
+  while (true) {
+    const resp = await shopeeGet(partnerId, partnerKey, "/api/v2/product/get_item_list", accessToken, shopId, {
+      offset: String(offset),
+      page_size: "100",
+      item_status: "NORMAL",
+    });
+    const items = resp.item || [];
+    for (const item of items) {
+      if (item.item_id != null) ids.push(Number(item.item_id));
+    }
+    const hasNext = resp.has_next_page || false;
+    const nextOffset = resp.next_offset ?? (offset + items.length);
+    if (!hasNext || items.length === 0) break;
+    offset = nextOffset;
+  }
+  return ids;
+}
+
 // ============================================================
 // MAIN
 // ============================================================
@@ -119,7 +187,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { access_token } = await loadToken(shopId);
+    let { access_token, refresh_token } = await loadToken(shopId);
+    if (!access_token && refresh_token) {
+      const r = await refreshToken(partnerId, partnerKey, shopId, refresh_token);
+      if (r.access_token) access_token = r.access_token;
+    }
     if (!access_token) {
       return new Response(JSON.stringify({ success: false, error: "Access token tidak tersedia. Silakan reconnect OAuth Shopee." }), {
         status: 200,
@@ -127,23 +199,22 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 1. Kumpulkan semua item_id (paginasi)
-    const itemIds: number[] = [];
-    let listOffset = 0;
-    while (true) {
-      const resp = await shopeeGet(partnerId, partnerKey, "/api/v2/product/get_item_list", access_token, shopId, {
-        offset: String(listOffset),
-        page_size: "100",
-        item_status: "NORMAL",
-      });
-      const items = resp.item || [];
-      for (const item of items) {
-        if (item.item_id != null) itemIds.push(Number(item.item_id));
+    // 1. Kumpulkan semua item_id (paginasi), refresh bila token expired
+    let itemIds: number[] = [];
+    try {
+      itemIds = await collectItemIds(partnerId, partnerKey, shopId, access_token);
+    } catch (err: any) {
+      if (isAuthError(err.message) && refresh_token) {
+        const r = await refreshToken(partnerId, partnerKey, shopId, refresh_token);
+        if (r.access_token) {
+          access_token = r.access_token;
+          itemIds = await collectItemIds(partnerId, partnerKey, shopId, access_token);
+        } else {
+          throw new Error("Token refresh gagal: " + (r.error || "unknown"));
+        }
+      } else {
+        throw err;
       }
-      const hasNext = resp.has_next_page || false;
-      const nextOffset = resp.next_offset ?? (listOffset + items.length);
-      if (!hasNext || items.length === 0) break;
-      listOffset = nextOffset;
     }
 
     // 2. Ambil base info per batch (max 50) → kumpulkan item detail
@@ -185,6 +256,7 @@ Deno.serve(async (req) => {
       const itemSku = item.item_sku || "";
       const price = extractPrice(item);
       const stock = extractStock(item);
+      const imageUrl = extractImageUrl(item);
 
       let existing = null;
       if (itemId != null) existing = byItemId.get(String(itemId)) || null;
@@ -199,6 +271,7 @@ Deno.serve(async (req) => {
         };
         if (price != null) updates.price = price;
         if (stock != null) updates.stock = stock;
+        if (imageUrl) updates.imageicon = imageUrl;
         toUpdate.push({ id: Number(existing.id), updates });
         updated++;
       } else {
@@ -213,6 +286,7 @@ Deno.serve(async (req) => {
           sku: itemSku || ("SKU" + String(newId).padStart(4, "0")),
           shopee_item_id: itemId,
           shopee_sku: itemSku || null,
+          imageicon: imageUrl || null,
         });
         inserted++;
       }
