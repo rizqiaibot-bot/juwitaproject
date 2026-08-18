@@ -169,9 +169,20 @@
 <div class="container">
   <div class="header">
     <h1><i class="fas fa-store-alt"></i> Marketplace Dashboard</h1>
-    <button class="btn btn-outline" onclick="refreshDashboard()" id="refreshBtn">
-      <i class="fas fa-sync-alt"></i> Refresh Dashboard
-    </button>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="syncShopee()" id="syncShopeeBtn">
+        <i class="fas fa-sync-alt"></i> SYNC SHOPEE
+      </button>
+      <button class="btn btn-outline" onclick="refreshDashboard()" id="refreshBtn">
+        <i class="fas fa-sync-alt"></i> Refresh Dashboard
+      </button>
+    </div>
+  </div>
+
+  <div id="syncShopeePanel" style="display:none;background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:16px 18px;margin-bottom:16px;box-shadow:var(--shadow-sm);">
+    <div id="syncShopeePanelTitle" style="font-weight:800;font-size:0.95rem;margin-bottom:10px;"></div>
+    <div id="syncShopeePanelSteps" style="font-size:0.8rem;line-height:1.9;"></div>
+    <div id="syncShopeePanelSummary" style="font-size:0.78rem;line-height:1.8;margin-top:8px;padding-top:10px;border-top:1px solid var(--border-color);"></div>
   </div>
 
   <div class="summary-grid" id="summaryCards">
@@ -398,10 +409,7 @@ async function loadAccounts() {
         '<td>' + statusBadge(r.connection_status) + '</td>' +
         '<td>' + (r.last_sync_at ? formatTime(r.last_sync_at) : "-") + '</td>' +
         '<td><div class="action-group">' +
-          '<button class="btn btn-primary btn-sm" onclick="openConnectModal()"><i class="fas fa-plug"></i> Connect</button> ' +
-          '<button class="btn btn-warning btn-sm" onclick="syncStock()"><i class="fas fa-sync-alt"></i> Sync</button> ' +
-          '<button class="btn btn-outline btn-sm" onclick="pullOrders()"><i class="fas fa-download"></i> Pull</button> ' +
-          '<button class="btn btn-outline btn-sm" onclick="pullProducts()"><i class="fas fa-boxes"></i> Pull Produk</button>' +
+          '<button class="btn btn-primary btn-sm" onclick="openConnectModal()"><i class="fas fa-plug"></i> Connect</button>' +
         '</div></td>' +
         '</tr>';
     }).join("");
@@ -1036,6 +1044,124 @@ function handleOAuthCallback() {
     showToast("Authorization Shopee gagal: " + err.message, "error");
     refreshDashboard();
   });
+}
+
+// ============================================================
+// SYNC SHOPEE — orchestration sequential: produk → order → stock
+// ============================================================
+let syncShopeeRunning = false;
+
+async function syncShopee() {
+  if (syncShopeeRunning) return;
+  syncShopeeRunning = true;
+
+  const btn = document.getElementById("syncShopeeBtn");
+  const panel = document.getElementById("syncShopeePanel");
+  const title = document.getElementById("syncShopeePanelTitle");
+  const steps = document.getElementById("syncShopeePanelSteps");
+  const summary = document.getElementById("syncShopeePanelSummary");
+
+  function nv(v) { return (v === null || v === undefined) ? '-' : v; }
+  function setBtn(running) {
+    if (!btn) return;
+    btn.disabled = running;
+    btn.innerHTML = running
+      ? '<i class="fas fa-spinner fa-spin"></i> SYNC SHOPEE...'
+      : '<i class="fas fa-sync-alt"></i> SYNC SHOPEE';
+  }
+  function step(icon, text) {
+    if (steps) steps.innerHTML += '<div>' + icon + ' ' + text + '</div>';
+  }
+  function setTitle(t) {
+    if (title) title.textContent = t;
+  }
+
+  try {
+    setBtn(true);
+    if (panel) panel.style.display = 'block';
+    if (steps) steps.innerHTML = '';
+    if (summary) summary.innerHTML = '';
+    setTitle('🔄 SYNC SHOPEE');
+
+    // STEP 1 — Cek koneksi Shopee
+    step('⏳', 'Memeriksa koneksi Shopee...');
+    var connRes = await SB.from('marketplace_config').select('connection_status, shop_id').limit(10);
+    if (connRes.error) throw { stage: 'Koneksi Shopee', message: connRes.error.message };
+    var accounts = connRes.data || [];
+    var connected = accounts.some(function (a) { return a.connection_status === 'connected'; });
+    if (!connected) {
+      setTitle('❌ SYNC SHOPEE GAGAL');
+      step('❌', 'Shopee belum terhubung. Silakan hubungkan akun Shopee terlebih dahulu.');
+      return;
+    }
+    step('✓', 'Koneksi Shopee OK');
+
+    // STEP 2 — Pull Produk
+    step('⏳', '1/3 Mengambil produk Shopee...');
+    var prodRes = null;
+    try { prodRes = await callEdgeFunction('shopee-pull-products', {}); } catch (e) { prodRes = null; }
+    if (!prodRes || prodRes.success === false) {
+      setTitle('❌ SYNC SHOPEE GAGAL');
+      step('❌', 'Pull Produk gagal: ' + (prodRes && prodRes.error ? prodRes.error : 'Unknown error'));
+      return;
+    }
+    step('✓', 'Produk selesai — Fetched: ' + nv(prodRes.fetched) + ' | Inserted: ' + nv(prodRes.inserted) + ' | Updated: ' + nv(prodRes.updated) + ' | Failed: ' + nv(prodRes.failed));
+
+    // STEP 3 — Pull Order
+    step('⏳', '2/3 Mengambil order Shopee...');
+    var orderRes = null;
+    try { orderRes = await callEdgeFunction('shopee-pull-orders'); } catch (e) { orderRes = null; }
+    if (!orderRes || orderRes.success === false) {
+      var oErr = 'Unknown error';
+      if (orderRes && orderRes.error) oErr = orderRes.error;
+      if (orderRes && orderRes.accountResults && orderRes.accountResults.length) {
+        var e0 = orderRes.accountResults[0];
+        if (e0 && e0.error) oErr = (e0.error.code ? e0.error.code + ' ' : '') + (e0.error.message || '');
+      }
+      setTitle('❌ SYNC SHOPEE GAGAL');
+      step('❌', 'Pull Order gagal: ' + oErr);
+      return;
+    }
+    var imported = nv(orderRes.imported);
+    step('✓', 'Order selesai — Pulled: ' + nv(orderRes.pulled) + ' | Inserted: ' + nv(orderRes.inserted) + ' | Skipped: ' + nv(orderRes.skipped) + ' | Imported: ' + imported + ' | Failed: ' + nv(orderRes.failed));
+    if (orderRes.status_distribution) {
+      var distKeys = Object.keys(orderRes.status_distribution);
+      if (distKeys.length) {
+        step('ℹ', 'Status Shopee: ' + distKeys.map(function (k) { return k + ': ' + orderRes.status_distribution[k]; }).join(', '));
+      }
+    }
+
+    // STEP 4 — Sync Stock
+    step('⏳', '3/3 Sinkronisasi stok...');
+    var stockRes = null;
+    try { stockRes = await callEdgeFunction('shopee-stock-sync'); } catch (e) { stockRes = null; }
+    var stockOk = false;
+    if (stockRes && !stockRes.error && stockRes.message !== 'Sync already running') {
+      stockOk = true;
+      step('✓', 'Stock selesai — Synced: ' + nv(stockRes.synced) + ' | Failed: ' + nv(stockRes.failed));
+    } else {
+      var sErr = stockRes ? (stockRes.error || stockRes.message || 'Unknown error') : 'Unknown error';
+      step('⚠', 'Stock gagal: ' + sErr);
+    }
+
+    // Ringkasan akhir
+    if (summary) {
+      summary.innerHTML = '<div>Produk ✓ | Order ✓ | Stock ' + (stockOk ? '✓' : '⚠️') + '</div>';
+      if (String(imported) !== '-' && Number(imported) > 0) {
+        summary.innerHTML += '<div style="color:var(--success);">📦 ' + imported + ' order baru menunggu Picking di Gudang</div>';
+      }
+    }
+    setTitle(stockOk ? '✅ SYNC SHOPEE BERHASIL' : '⚠️ SYNC SHOPEE SELESAI DENGAN PERINGATAN');
+  } catch (err) {
+    var stage = err && err.stage ? err.stage : 'Sinkronisasi';
+    var msg = err && err.message ? err.message : String(err);
+    setTitle('❌ SYNC SHOPEE GAGAL');
+    step('❌', stage + ' gagal: ' + msg);
+  } finally {
+    setBtn(false);
+    syncShopeeRunning = false;
+    refreshDashboard();
+  }
 }
 
 // ============================================================
