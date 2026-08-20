@@ -1110,7 +1110,7 @@ async function syncShopee() {
     // STEP 3 — Pull Order
     step('⏳', '2/3 Mengambil order Shopee...');
     var orderRes = null;
-    try { orderRes = await callEdgeFunction('shopee-pull-orders'); } catch (e) { orderRes = null; }
+    try { orderRes = await callEdgeFunction('shopee-pull-orders', {}); } catch (e) { orderRes = null; }
     if (!orderRes || orderRes.success === false) {
       var oErr = 'Unknown error';
       if (orderRes && orderRes.error) oErr = orderRes.error;
@@ -1134,7 +1134,7 @@ async function syncShopee() {
     // STEP 4 — Sync Stock
     step('⏳', '3/3 Sinkronisasi stok...');
     var stockRes = null;
-    try { stockRes = await callEdgeFunction('shopee-stock-sync'); } catch (e) { stockRes = null; }
+    try { stockRes = await callEdgeFunction('shopee-stock-sync', {}); } catch (e) { stockRes = null; }
     var stockOk = false;
     if (stockRes && !stockRes.error && stockRes.message !== 'Sync already running') {
       stockOk = true;
@@ -1170,7 +1170,7 @@ async function syncShopee() {
 async function syncStock() {
   showToast("Sinkronisasi stok dimulai...");
   try {
-    var result = await callEdgeFunction("shopee-stock-sync");
+    var result = await callEdgeFunction("shopee-stock-sync", {});
     if (result.error) {
       showToast("Sync gagal: " + result.error, "error");
     } else if (result.message === "Sync already running") {
@@ -1190,7 +1190,7 @@ async function syncStock() {
 async function pullOrders() {
   showToast("Mengambil pesanan dari Shopee...");
   try {
-    var result = await callEdgeFunction("shopee-pull-orders");
+    var result = await callEdgeFunction("shopee-pull-orders", {});
     if (result.success) {
       showToast("Selesai: " + (result.inserted || 0) + " baru, " + (result.skipped || 0) + " dilewati, " + (result.failed || 0) + " gagal");
     } else {
