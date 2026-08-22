@@ -2095,7 +2095,7 @@
                     <h1>Daftar Produk</h1>
                     <div class="page-header-desc">Kelola informasi produk, stok, dan kategori katalog</div>
                 </div>
-                <button class="checkout-btn" onclick="showPage('tambah-produk')" style="width:auto;padding:10px 24px;"><i class="fas fa-plus-circle"></i> Tambah Produk</button>
+                <button class="checkout-btn" onclick="resetProductForm(); showPage('tambah-produk')" style="width:auto;padding:10px 24px;"><i class="fas fa-plus-circle"></i> Tambah Produk</button>
             </div>
             <div class="table-wrapper">
                 <table>
@@ -2111,7 +2111,7 @@
         <div id="page-tambah-produk" class="page-content">
             <div class="page-header">
                 <div>
-                    <h1>Tambah Produk Baru</h1>
+                    <h1 id="addProductTitle">Tambah Produk Baru</h1>
                     <div class="page-header-desc">Tambahkan produk baru ke dalam database inventaris toko</div>
                 </div>
             </div>
@@ -2232,7 +2232,7 @@
 
                     <div class="form-actions">
                         <button type="button" class="btn-secondary" onclick="showPage('daftar-produk')">Batal</button>
-                        <button type="submit" class="checkout-btn" style="width:auto;padding:10px 28px;">Simpan Produk</button>
+                        <button type="submit" id="addProductSubmit" class="checkout-btn" style="width:auto;padding:10px 28px;">Simpan Produk</button>
                     </div>
                 </form>
             </div>
@@ -3186,7 +3186,7 @@
                                     ${p.shopee_item_id
                                         ? '<span class="badge-status badge-lunas" title="Item ID: ' + p.shopee_item_id + '">Sudah di Shopee</span>'
                                         : '<button class="aksi-btn" onclick="publishProductToShopee(' + p.id + ')"><i class="fas fa-store"></i> Publish</button>'}
-                                    <button class="aksi-btn" onclick="showToast('Edit ${p.name}')"><i class="fas fa-pen"></i></button>
+                                    <button class="aksi-btn" onclick="editProduct(${p.id})"><i class="fas fa-pen"></i></button>
                                     <button class="aksi-btn" onclick="deleteProduct(${p.id})"><i class="fas fa-trash"></i></button>
                                 </div>
                             </td>
@@ -3206,6 +3206,51 @@
                 renderMonitorStok();
                 showToast("Produk dihapus");
             }
+        }
+
+        let editingProductId = null;
+        let pendingPhotoData = null;
+
+        function resetProductForm() {
+            editingProductId = null;
+            const t = document.getElementById("addProductTitle");
+            if (t) t.textContent = "Tambah Produk Baru";
+            const b = document.getElementById("addProductSubmit");
+            if (b) b.textContent = "Simpan Produk";
+            ["newProdName","newProdSKU","newProdModal","newProdPrice","newProdStock","newProdSpec","newProdLength","newProdWidth","newProdHeight","newProdWeight","newProdBarcode","newProdShopeeId","newProdShopeeSku"].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = "";
+            });
+            const catEl = document.getElementById("newProdCat");
+            if (catEl) catEl.value = "Frozen Food";
+            const supEl = document.getElementById("newProdSupplier");
+            if (supEl) supEl.value = "";
+            pendingPhotoData = null;
+            const ph = document.getElementById("photoPreviewPlaceholder");
+            const img = document.getElementById("photoPreviewImg");
+            if (ph) ph.style.display = "";
+            if (img) { img.style.display = "none"; img.src = ""; }
+        }
+
+        function editProduct(id) {
+            const p = products.find(x => x.id === id);
+            if (!p) return;
+            editingProductId = id;
+            document.getElementById("newProdName").value = p.name || "";
+            document.getElementById("newProdSKU").value = p.sku || "";
+            document.getElementById("newProdCat").value = p.category || "Frozen Food";
+            document.getElementById("newProdModal").value = p.modal || 0;
+            document.getElementById("newProdPrice").value = p.price || 0;
+            document.getElementById("newProdStock").value = p.stock || 0;
+            document.getElementById("newProdSupplier").value = p.supplier || "";
+            document.getElementById("newProdBarcode").value = p.barcode || "";
+            document.getElementById("newProdShopeeId").value = p.shopee_item_id || "";
+            document.getElementById("newProdShopeeSku").value = p.shopee_sku || "";
+            const t = document.getElementById("addProductTitle");
+            if (t) t.textContent = "Edit Produk";
+            const b = document.getElementById("addProductSubmit");
+            if (b) b.textContent = "Simpan Perubahan";
+            showPage("tambah-produk");
         }
 
         let publishingProduct = false;
@@ -4613,7 +4658,6 @@
         }
             window.generateSKU = generateSKU;
 
-        let pendingPhotoData = null;
         function previewPhoto(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -4644,6 +4688,33 @@
                 const shopee_sku = document.getElementById("newProdShopeeSku").value.trim() || null;
                 if (!name || isNaN(modal) || isNaN(price) || isNaN(stock)) { showToast("Isi semua field wajib"); return; }
 
+                // EDIT MODE
+                if (editingProductId != null) {
+                    const finalSku = sku || ("SKU" + String(editingProductId).padStart(4, "0"));
+                    if (products.some(p => p.id !== editingProductId && (p.sku || "").toLowerCase() === finalSku.toLowerCase())) {
+                        showToast(`SKU "${finalSku}" sudah digunakan`);
+                        return;
+                    }
+                    const updates = { name, sku: finalSku, category: cat, modal, price, stock, supplier, barcode: barcode || null, shopee_item_id, shopee_sku };
+                    const { error: upErr } = await sb.from('products').update(updates).eq('id', editingProductId);
+                    if (upErr) {
+                        console.error("Supabase update product error:", upErr.message);
+                        showToast("Gagal menyimpan perubahan: " + upErr.message);
+                        return;
+                    }
+                    const prod = products.find(x => x.id === editingProductId);
+                    if (prod) Object.assign(prod, updates);
+                    showToast(`${name} diperbarui`);
+                    resetProductForm();
+                    renderProducts();
+                    renderCatalogTable();
+                    renderMonitorStok();
+                    renderPricingTables();
+                    showPage("daftar-produk");
+                    return;
+                }
+
+                // ADD MODE
                 const nextId = products.length ? Math.max(...products.map(p => p.id)) + 1 : 1;
                 const finalSku = sku || ("SKU" + String(nextId).padStart(4, "0"));
 
@@ -4843,6 +4914,8 @@
         window.renderRekapKehadiran = renderRekapKehadiran;
         window.ubahBulanRekap = ubahBulanRekap;
         window.deleteProduct = deleteProduct;
+        window.editProduct = editProduct;
+        window.resetProductForm = resetProductForm;
         window.publishProductToShopee = publishProductToShopee;
         window.renderRekapPenjualan = renderRekapPenjualan;
         window.applyMarkup = applyMarkup;
