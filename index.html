@@ -1911,22 +1911,21 @@
             <div class="page-header">
                 <div>
                     <h1>Rekap Penjualan</h1>
-                    <div class="page-header-desc">Ringkasan penjualan per periode: harian, mingguan, bulanan</div>
+                    <div class="page-header-desc">Ringkasan penjualan harian (POS &amp; Shopee)</div>
                 </div>
             </div>
             <div class="form-card" style="margin-bottom:16px;">
                 <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;">
-                    <div class="form-group" style="min-width:130px;"><label>Dari Tanggal</label><input type="date" class="form-control" /></div>
-                    <div class="form-group" style="min-width:130px;"><label>Sampai Tanggal</label><input type="date" class="form-control" /></div>
-                    <button class="checkout-btn" onclick="showToast('Fitur rekap dalam pengembangan')" style="width:auto;padding:10px 24px;margin-bottom:2px;"><i class="fas fa-search"></i> Tampilkan</button>
+                    <div class="form-group" style="min-width:180px;"><label>Tanggal</label><input type="date" id="rekapTanggal" class="form-control" /></div>
+                    <button class="checkout-btn" onclick="renderRekapPenjualan()" style="width:auto;padding:10px 24px;margin-bottom:2px;"><i class="fas fa-search"></i> Tampilkan</button>
                 </div>
             </div>
             <div class="stats-row">
-                <div class="stat-item active"><div><div class="stat-number">-</div><div class="stat-label">Total Omzet</div></div><div class="stat-icon-wrapper"><i class="fas fa-coins"></i></div></div>
-                <div class="stat-item"><div><div class="stat-number">-</div><div class="stat-label">Total Transaksi</div></div><div class="stat-icon-wrapper"><i class="fas fa-receipt"></i></div></div>
-                <div class="stat-item"><div><div class="stat-number">-</div><div class="stat-label">Rata-rata / Hari</div></div><div class="stat-icon-wrapper"><i class="fas fa-calendar-alt"></i></div></div>
+                <div class="stat-item active"><div><div class="stat-number" id="rekapOmzet">-</div><div class="stat-label">Total Omzet</div></div><div class="stat-icon-wrapper"><i class="fas fa-coins"></i></div></div>
+                <div class="stat-item"><div><div class="stat-number" id="rekapTransaksi">-</div><div class="stat-label">Total Transaksi</div></div><div class="stat-icon-wrapper"><i class="fas fa-receipt"></i></div></div>
+                <div class="stat-item"><div><div class="stat-number" id="rekapItem">-</div><div class="stat-label">Item Terjual</div></div><div class="stat-icon-wrapper"><i class="fas fa-box"></i></div></div>
             </div>
-            <div class="table-wrapper"><table><thead><tr><th>PERIODE</th><th>TOTAL OMZET</th><th>TRANSAKSI</th><th>ITEM TERJUAL</th><th>RATA-RATA</th></tr></thead><tbody><tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">Fitur dalam pengembangan ⚡</td></tr></tbody></table></div>
+            <div class="table-wrapper"><table><thead><tr><th>CHANNEL</th><th>OMZET</th><th>TRANSAKSI</th><th>ITEM</th></tr></thead><tbody id="rekapTableBody"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Pilih tanggal lalu klik Tampilkan</td></tr></tbody></table></div>
         </div>
 
         <!-- ===== HALAMAN POS ===== -->
@@ -3178,6 +3177,9 @@
                             <td><span class="badge-status ${levelClass}">${levelText}</span></td>
                             <td>
                                 <div class="aksi-group">
+                                    ${p.shopee_item_id
+                                        ? '<span class="badge-status badge-lunas" title="Item ID: ' + p.shopee_item_id + '">Sudah di Shopee</span>'
+                                        : '<button class="aksi-btn" onclick="publishProductToShopee(' + p.id + ')"><i class="fas fa-store"></i> Publish</button>'}
                                     <button class="aksi-btn" onclick="showToast('Edit ${p.name}')"><i class="fas fa-pen"></i></button>
                                     <button class="aksi-btn" onclick="deleteProduct(${p.id})"><i class="fas fa-trash"></i></button>
                                 </div>
@@ -3197,6 +3199,36 @@
                 renderPricingTables();
                 renderMonitorStok();
                 showToast("Produk dihapus");
+            }
+        }
+
+        let publishingProduct = false;
+
+        async function publishProductToShopee(productId) {
+            if (publishingProduct) { showToast("Publish sedang berjalan..."); return; }
+            const p = products.find(x => x.id === productId);
+            if (!p) return;
+            if (!confirm("Publish produk \"" + p.name + "\" ke Shopee?")) return;
+            publishingProduct = true;
+            showToast("Memproses publish ke Shopee...");
+            try {
+                const { data, error } = await sb.functions.invoke('shopee-create-product', { body: { product_id: productId } });
+                if (error) {
+                    showToast("Publish gagal: " + error.message);
+                    return;
+                }
+                if (data && data.success) {
+                    showToast(data.status === "already_published"
+                        ? "Produk sudah di Shopee (Item ID: " + data.item_id + ")"
+                        : "Publish berhasil. Item ID Shopee: " + data.item_id);
+                    await initSupabaseData();
+                } else {
+                    showToast("Publish gagal: " + (data && data.error ? data.error : "Unknown error"));
+                }
+            } catch (err) {
+                showToast("Publish gagal: " + err.message);
+            } finally {
+                publishingProduct = false;
             }
         }
 
@@ -3898,6 +3930,58 @@
         // ============================================================
         // POS HISTORY & CLOSING
         // ============================================================
+        function renderRekapPenjualan() {
+            const dateEl = document.getElementById("rekapTanggal");
+            const date = (dateEl && dateEl.value) ? dateEl.value : new Date().toISOString().slice(0, 10);
+            const dayOrders = ordersData.filter(o => o.date && o.date.startsWith(date));
+
+            const orderIds = new Set(dayOrders.map(o => o.orderId));
+            const itemQtyByOrder = {};
+            orderItemsData.forEach(i => {
+                if (orderIds.has(i.orderid)) itemQtyByOrder[i.orderid] = (itemQtyByOrder[i.orderid] || 0) + (Number(i.qty) || 0);
+            });
+
+            const groups = [
+                { label: "POS", channels: ["POS1", "POS2"] },
+                { label: "Shopee", channels: ["Shopee"] },
+            ];
+
+            const rows = groups.map(g => {
+                const o = dayOrders.filter(x => g.channels.includes(x.channel));
+                const omzet = o.reduce((s, x) => s + (Number(x.total) || 0), 0);
+                const transaksi = o.length;
+                const item = o.reduce((s, x) => s + (itemQtyByOrder[x.orderId] || 0), 0);
+                return { label: g.label, omzet, transaksi, item };
+            });
+
+            const totalOmzet = rows.reduce((s, r) => s + r.omzet, 0);
+            const totalTransaksi = rows.reduce((s, r) => s + r.transaksi, 0);
+            const totalItem = rows.reduce((s, r) => s + r.item, 0);
+
+            const fmt = n => Number(n || 0).toLocaleString('id-ID');
+            document.getElementById("rekapOmzet").innerText = fmt(totalOmzet);
+            document.getElementById("rekapTransaksi").innerText = totalTransaksi;
+            document.getElementById("rekapItem").innerText = totalItem;
+
+            const tbody = document.getElementById("rekapTableBody");
+            if (!tbody) return;
+            if (!dayOrders.length) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Tidak ada transaksi pada tanggal ini</td></tr>';
+                return;
+            }
+            tbody.innerHTML = rows.map(r => `<tr>
+                <td><strong>${r.label}</strong></td>
+                <td>${fmt(r.omzet)}</td>
+                <td>${r.transaksi}</td>
+                <td>${r.item}</td>
+            </tr>`).join('') + `<tr style="font-weight:800;background:var(--bg-primary);">
+                <td>TOTAL</td>
+                <td>${fmt(totalOmzet)}</td>
+                <td>${totalTransaksi}</td>
+                <td>${totalItem}</td>
+            </tr>`;
+        }
+
         function renderPosHistory() {
             const container = document.getElementById("posHistoryList");
             if (!container) return;
@@ -4404,6 +4488,11 @@
             renderWarehouseOpnameList();
             renderRekapKehadiran();
 
+            // Rekap penjualan: default tanggal hari ini
+            const rekapTanggalEl = document.getElementById("rekapTanggal");
+            if (rekapTanggalEl) rekapTanggalEl.value = new Date().toISOString().slice(0, 10);
+            renderRekapPenjualan();
+
             // Warehouse form init
             populateRecForm();
 
@@ -4510,7 +4599,7 @@
         }
             window.previewPhoto = previewPhoto;
 
-        document.getElementById("addProductForm").addEventListener("submit", function(e) {
+        document.getElementById("addProductForm").addEventListener("submit", async function(e) {
                 e.preventDefault();
                 const name = document.getElementById("newProdName").value.trim();
                 const sku = document.getElementById("newProdSKU").value.trim();
@@ -4519,47 +4608,59 @@
                 const price = parseInt(document.getElementById("newProdPrice").value);
                 const stock = parseInt(document.getElementById("newProdStock").value);
                 const supplier = document.getElementById("newProdSupplier").value;
-                const spec = document.getElementById("newProdSpec").value.trim();
-                const length = parseFloat(document.getElementById("newProdLength").value) || 0;
-                const width = parseFloat(document.getElementById("newProdWidth").value) || 0;
-                const height = parseFloat(document.getElementById("newProdHeight").value) || 0;
-                const weight = parseFloat(document.getElementById("newProdWeight").value) || 0;
                 const barcode = document.getElementById("newProdBarcode").value.trim();
                 const shopee_item_id = parseInt(document.getElementById("newProdShopeeId").value) || null;
                 const shopee_sku = document.getElementById("newProdShopeeSku").value.trim() || null;
-                const photo = pendingPhotoData || null;
-                if (!name || !modal || !price || !stock) { showToast("Isi semua field wajib"); return; }
+                if (!name || isNaN(modal) || isNaN(price) || isNaN(stock)) { showToast("Isi semua field wajib"); return; }
+
                 const nextId = products.length ? Math.max(...products.map(p => p.id)) + 1 : 1;
+                const finalSku = sku || ("SKU" + String(nextId).padStart(4, "0"));
+
+                // Duplicate SKU guard
+                if (products.some(p => (p.sku || "").toLowerCase() === finalSku.toLowerCase())) {
+                    showToast(`SKU "${finalSku}" sudah digunakan, gunakan SKU lain`);
+                    return;
+                }
+
+                // Payload 100% sesuai schema products (tanpa field yang tidak ada di DB)
                 const newProduct = {
                     id: nextId,
                     name,
-                    sku: sku || ("SKU" + String(nextId).padStart(4, "0")),
+                    sku: finalSku,
                     category: cat,
                     modal,
                     price,
                     stock,
-                    minStock: 10,
-                    maxStock: stock * 2,
+                    minstock: 10,
+                    maxstock: stock * 2,
                     supplier,
-                    spec,
-                    length, width, height, weight,
-                    imageIcon: "fa-box",
-                    photo,
+                    imageicon: pendingPhotoData || null,
                     barcode: barcode || ("899" + String(Math.floor(Math.random() * 10000000000)).padStart(10, "0")),
-                    shopee_item_id, shopee_sku
+                    shopee_item_id,
+                    shopee_sku
                 };
-                products.push(newProduct);
 
-                // Sync ke Supabase
-                sb.from('products').insert(newProduct).then(r => {
-                    if (r.error) console.warn("Supabase insert product error:", r.error.message);
-                });
-                logStockMutation(newProduct.id, newProduct.name, 'IN', newProduct.stock, 0, newProduct.stock, 'Produk Baru');
+                // INSERT ke Supabase — tunggu hasil, jangan push lokal sebelum berhasil
+                const { data: inserted, error: insErr } = await sb.from('products').insert(newProduct).select().single();
+                if (insErr) {
+                    console.error("Supabase insert product error:", insErr.message);
+                    showToast("Gagal menyimpan produk: " + insErr.message);
+                    return;
+                }
+
+                const saved = inserted || newProduct;
+                products.push(saved);
+
+                // Stock mutation hanya setelah insert berhasil (hanya jika produk ter-mapping Shopee)
+                if (saved.stock > 0) {
+                    logStockMutation(saved.id, saved.name, 'IN', saved.stock, 0, saved.stock, 'Produk Baru');
+                }
+
                 renderProducts();
                 renderCatalogTable();
                 renderMonitorStok();
                 renderPricingTables();
-                showToast(`${name} ditambahkan`);
+                showToast(`${saved.name} ditambahkan`);
                 showPage("daftar-produk");
             });
 
@@ -4711,6 +4812,8 @@
         window.renderRekapKehadiran = renderRekapKehadiran;
         window.ubahBulanRekap = ubahBulanRekap;
         window.deleteProduct = deleteProduct;
+        window.publishProductToShopee = publishProductToShopee;
+        window.renderRekapPenjualan = renderRekapPenjualan;
         window.applyMarkup = applyMarkup;
         window.editSellPrice = editSellPrice;
         window.doLogout = doLogout;
