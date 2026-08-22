@@ -1926,6 +1926,12 @@
                 <div class="stat-item"><div><div class="stat-number" id="rekapItem">-</div><div class="stat-label">Item Terjual</div></div><div class="stat-icon-wrapper"><i class="fas fa-box"></i></div></div>
             </div>
             <div class="table-wrapper"><table><thead><tr><th>CHANNEL</th><th>OMZET</th><th>TRANSAKSI</th><th>ITEM</th></tr></thead><tbody id="rekapTableBody"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Pilih tanggal lalu klik Tampilkan</td></tr></tbody></table></div>
+            <div class="table-wrapper" style="margin-top:16px;">
+                <table>
+                    <thead><tr><th>ORDER ID</th><th>CHANNEL</th><th>WAKTU</th><th>TOTAL</th><th>STATUS</th><th>ITEM</th></tr></thead>
+                    <tbody id="rekapDetailBody"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">-</td></tr></tbody>
+                </table>
+            </div>
         </div>
 
         <!-- ===== HALAMAN POS ===== -->
@@ -3964,22 +3970,47 @@
             document.getElementById("rekapItem").innerText = totalItem;
 
             const tbody = document.getElementById("rekapTableBody");
-            if (!tbody) return;
-            if (!dayOrders.length) {
-                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Tidak ada transaksi pada tanggal ini</td></tr>';
-                return;
+            if (tbody) {
+                if (!dayOrders.length) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Tidak ada transaksi pada tanggal ini</td></tr>';
+                } else {
+                    tbody.innerHTML = rows.map(r => `<tr>
+                        <td><strong>${r.label}</strong></td>
+                        <td>${fmt(r.omzet)}</td>
+                        <td>${r.transaksi}</td>
+                        <td>${r.item}</td>
+                    </tr>`).join('') + `<tr style="font-weight:800;background:var(--bg-primary);">
+                        <td>TOTAL</td>
+                        <td>${fmt(totalOmzet)}</td>
+                        <td>${totalTransaksi}</td>
+                        <td>${totalItem}</td>
+                    </tr>`;
+                }
             }
-            tbody.innerHTML = rows.map(r => `<tr>
-                <td><strong>${r.label}</strong></td>
-                <td>${fmt(r.omzet)}</td>
-                <td>${r.transaksi}</td>
-                <td>${r.item}</td>
-            </tr>`).join('') + `<tr style="font-weight:800;background:var(--bg-primary);">
-                <td>TOTAL</td>
-                <td>${fmt(totalOmzet)}</td>
-                <td>${totalTransaksi}</td>
-                <td>${totalItem}</td>
-            </tr>`;
+
+            // Rincian detail transaksi
+            const detailBody = document.getElementById("rekapDetailBody");
+            if (detailBody) {
+                if (!dayOrders.length) {
+                    detailBody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">Tidak ada transaksi</td></tr>';
+                } else {
+                    const sorted = dayOrders.slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+                    detailBody.innerHTML = sorted.map(o => {
+                        const items = orderItemsData.filter(i => i.orderid === o.orderId);
+                        const itemStr = items.length ? items.map(i => `${i.product_name} ×${i.qty}`).join(', ') : '-';
+                        const time = (o.date || "").slice(11, 16);
+                        const badge = o.payStatus === "Lunas" ? "badge-lunas" : o.payStatus === "Batal" ? "badge-batal" : "badge-belum";
+                        return `<tr>
+                            <td><strong>${o.orderId}</strong></td>
+                            <td>${renderChannelBadge(o.channel)}</td>
+                            <td>${time || '-'}</td>
+                            <td>${fmt(o.total)}</td>
+                            <td><span class="badge-status ${badge}">${o.payStatus || '-'}</span></td>
+                            <td style="white-space:normal;">${itemStr}</td>
+                        </tr>`;
+                    }).join('');
+                }
+            }
         }
 
         function renderPosHistory() {
