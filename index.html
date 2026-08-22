@@ -1728,7 +1728,6 @@
                         <li data-page="monitor-stok"><a href="#"><i class="fas fa-chart-simple"></i> Monitor Stok</a></li>
                         <li data-page="stock-opname"><a href="#"><i class="fas fa-clipboard-check"></i> Stock Opname</a></li>
                         <li data-page="mutasi-stok"><a href="#"><i class="fas fa-arrows-left-right"></i> Mutasi Stok</a></li>
-                        <li data-page="kartu-stok"><a href="#"><i class="fas fa-id-card"></i> Kartu Stok</a></li>
                         <li data-page="barang-rusak"><a href="#"><i class="fas fa-triangle-exclamation"></i> Barang Rusak &amp; Expired</a></li>
                     </ul>
                 </li>
@@ -2263,11 +2262,6 @@
         <div id="page-mutasi-stok" class="page-content">
             <div class="page-header"><h1>Mutasi Stok</h1><div class="page-header-desc">Catat perpindahan stok antar gudang atau lokasi</div></div>
             <div class="form-card"><h3 style="margin-bottom:16px;">Form Mutasi Barang</h3><div class="form-grid"><div class="form-group"><label>Produk</label><select class="form-control"><option>TASAJI ROTI MARYAM ORIGINAL</option><option>RUJAK CIRENG BRECXELLE</option></select></div><div class="form-group"><label>Jumlah</label><input type="number" class="form-control" value="1" /></div><div class="form-group"><label>Dari Lokasi</label><select class="form-control"><option>Gudang Utama</option><option>Gudang Cabang</option></select></div><div class="form-group"><label>Ke Lokasi</label><select class="form-control"><option>Gudang Cabang</option><option>Gudang Utama</option></select></div></div><button class="checkout-btn" onclick="showToast('Mutasi stok berhasil dicatat')"><i class="fas fa-check"></i> Proses Mutasi</button></div>
-        </div>
-
-        <div id="page-kartu-stok" class="page-content">
-            <div class="page-header"><h1>Kartu Stok</h1><div class="page-header-desc">Riwayat mutasi stok setiap produk secara kronologis</div></div>
-            <div class="table-wrapper"><table><thead><tr><th>TANGGAL</th><th>PRODUK</th><th>MASUK</th><th>KELUAR</th><th>SALDO</th><th>KETERANGAN</th></tr></thead><tbody><tr><td>2026-06-15</td><td>TASAJI ROTI MARYAM ORIGINAL</td><td>200</td><td>-</td><td>1.432</td><td>Pembelian dari Supplier</td></tr><tr><td>2026-06-14</td><td>TASAJI ROTI MARYAM ORIGINAL</td><td>-</td><td>5</td><td>1.232</td><td>Penjualan ORD-20260615-02</td></tr></tbody></table></div>
         </div>
 
         <div id="page-barang-rusak" class="page-content">
@@ -4509,7 +4503,7 @@
                     pos: "pos",
                     "daftar-penjualan": "penjualan", "daftar-pelanggan": "penjualan", "rekap-penjualan": "penjualan",
                     "daftar-produk": "katalog", "tambah-produk": "katalog",
-                    "monitor-stok": "persediaan", "stock-opname": "persediaan", "mutasi-stok": "persediaan", "kartu-stok": "persediaan", "barang-rusak": "persediaan",
+                    "monitor-stok": "persediaan", "stock-opname": "persediaan", "mutasi-stok": "persediaan", "barang-rusak": "persediaan",
                     "data-pembelian": "pembelian", "tambah-pembelian": "pembelian", "riwayat-pembelian": "pembelian", "retur-pembelian": "pembelian", "data-supplier": "pembelian",
                     penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "rak-lokasi": "gudang", "opname-gudang": "gudang",
                     "harga-belanja": "pricing", "harga-jual": "pricing", "ubah-harga": "pricing", "diskon-promo": "pricing", "margin-keuntungan": "pricing",
