@@ -1728,7 +1728,6 @@
                         <li data-page="monitor-stok"><a href="#"><i class="fas fa-chart-simple"></i> Monitor Stok</a></li>
                         <li data-page="stock-opname"><a href="#"><i class="fas fa-clipboard-check"></i> Stock Opname</a></li>
                         <li data-page="mutasi-stok"><a href="#"><i class="fas fa-arrows-left-right"></i> Mutasi Stok</a></li>
-                        <li data-page="barang-rusak"><a href="#"><i class="fas fa-triangle-exclamation"></i> Barang Rusak &amp; Expired</a></li>
                     </ul>
                 </li>
 
@@ -2262,11 +2261,6 @@
         <div id="page-mutasi-stok" class="page-content">
             <div class="page-header"><h1>Mutasi Stok</h1><div class="page-header-desc">Catat perpindahan stok antar gudang atau lokasi</div></div>
             <div class="form-card"><h3 style="margin-bottom:16px;">Form Mutasi Barang</h3><div class="form-grid"><div class="form-group"><label>Produk</label><select class="form-control"><option>TASAJI ROTI MARYAM ORIGINAL</option><option>RUJAK CIRENG BRECXELLE</option></select></div><div class="form-group"><label>Jumlah</label><input type="number" class="form-control" value="1" /></div><div class="form-group"><label>Dari Lokasi</label><select class="form-control"><option>Gudang Utama</option><option>Gudang Cabang</option></select></div><div class="form-group"><label>Ke Lokasi</label><select class="form-control"><option>Gudang Cabang</option><option>Gudang Utama</option></select></div></div><button class="checkout-btn" onclick="showToast('Mutasi stok berhasil dicatat')"><i class="fas fa-check"></i> Proses Mutasi</button></div>
-        </div>
-
-        <div id="page-barang-rusak" class="page-content">
-            <div class="page-header"><h1>Barang Rusak &amp; Expired</h1><div class="page-header-desc">Catat dan pantau barang yang rusak atau mendekati masa kedaluwarsa</div></div>
-            <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>EXPIRED DATE</th><th>JUMLAH</th><th>KONDISI</th><th>TINDAKAN</th></tr></thead><tbody><tr><td>TASAJI ROTI MARYAM COKELAT</td><td>2026-07-10</td><td>12 Pcs</td><td>Mendekati Expired</td><td><button class="aksi-btn" onclick="showToast('Diskon diberikan')">Beri Diskon</button></td></tr><tr><td>RUJAK CIRENG BRECXELLE</td><td>2026-08-22</td><td>3 Pcs</td><td>Kemasan Rusak</td><td><button class="aksi-btn" onclick="showToast('Barang diajukan return')">Return</button></td></tr></tbody></table></div>
         </div>
 
         <div id="page-data-pembelian" class="page-content">
@@ -4503,7 +4497,7 @@
                     pos: "pos",
                     "daftar-penjualan": "penjualan", "daftar-pelanggan": "penjualan", "rekap-penjualan": "penjualan",
                     "daftar-produk": "katalog", "tambah-produk": "katalog",
-                    "monitor-stok": "persediaan", "stock-opname": "persediaan", "mutasi-stok": "persediaan", "barang-rusak": "persediaan",
+                    "monitor-stok": "persediaan", "stock-opname": "persediaan", "mutasi-stok": "persediaan",
                     "data-pembelian": "pembelian", "tambah-pembelian": "pembelian", "riwayat-pembelian": "pembelian", "retur-pembelian": "pembelian", "data-supplier": "pembelian",
                     penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "rak-lokasi": "gudang", "opname-gudang": "gudang",
                     "harga-belanja": "pricing", "harga-jual": "pricing", "ubah-harga": "pricing", "diskon-promo": "pricing", "margin-keuntungan": "pricing",
