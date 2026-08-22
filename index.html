@@ -1726,7 +1726,6 @@
                     <a href="#"><i class="fas fa-boxes-stacked"></i> Persediaan <i class="fas fa-chevron-down"></i></a>
                     <ul class="dropdown-menu">
                         <li data-page="monitor-stok"><a href="#"><i class="fas fa-chart-simple"></i> Monitor Stok</a></li>
-                        <li data-page="stock-opname"><a href="#"><i class="fas fa-clipboard-check"></i> Stock Opname</a></li>
                         <li data-page="mutasi-stok"><a href="#"><i class="fas fa-arrows-left-right"></i> Mutasi Stok</a></li>
                     </ul>
                 </li>
@@ -2251,11 +2250,6 @@
         <div id="page-monitor-stok" class="page-content">
             <div class="page-header"><h1>Monitor Stok</h1><div class="page-header-desc">Pantau ketersediaan stok semua produk secara real-time</div></div>
             <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>KATEGORI</th><th>STOK</th><th>SYNC</th><th>STATUS</th></tr></thead><tbody id="stokTableBody"></tbody></table></div>
-        </div>
-
-        <div id="page-stock-opname" class="page-content">
-            <div class="page-header"><h1>Stock Opname</h1><div class="page-header-desc">Rekonsiliasi stok fisik dengan sistem secara berkala</div></div>
-            <div class="form-card"><h3 style="margin-bottom:16px;">Buat Sesi Opname Baru</h3><div class="form-grid"><div class="form-group"><label>Tanggal Opname</label><input type="date" class="form-control" value="2026-06-16" /></div><div class="form-group"><label>Area Gudang</label><select class="form-control"><option>Semua Area</option><option>Rak A - Roti</option><option>Rak B - Snack</option><option>Rak C - Minuman</option></select></div></div><button class="checkout-btn" onclick="showToast('Sesi opname dibuat')"><i class="fas fa-play"></i> Mulai Opname</button></div>
         </div>
 
         <div id="page-mutasi-stok" class="page-content">
@@ -4497,7 +4491,7 @@
                     pos: "pos",
                     "daftar-penjualan": "penjualan", "daftar-pelanggan": "penjualan", "rekap-penjualan": "penjualan",
                     "daftar-produk": "katalog", "tambah-produk": "katalog",
-                    "monitor-stok": "persediaan", "stock-opname": "persediaan", "mutasi-stok": "persediaan",
+                    "monitor-stok": "persediaan", "mutasi-stok": "persediaan",
                     "data-pembelian": "pembelian", "tambah-pembelian": "pembelian", "riwayat-pembelian": "pembelian", "retur-pembelian": "pembelian", "data-supplier": "pembelian",
                     penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "rak-lokasi": "gudang", "opname-gudang": "gudang",
                     "harga-belanja": "pricing", "harga-jual": "pricing", "ubah-harga": "pricing", "diskon-promo": "pricing", "margin-keuntungan": "pricing",
