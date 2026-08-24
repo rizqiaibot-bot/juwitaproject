@@ -1735,10 +1735,6 @@
                     <a href="#"><i class="fas fa-shopping-cart"></i> Pembelian <i class="fas fa-chevron-down"></i></a>
                     <ul class="dropdown-menu">
                         <li data-page="data-pembelian"><a href="#"><i class="fas fa-database"></i> Data Pembelian</a></li>
-                        <li data-page="tambah-pembelian"><a href="#"><i class="fas fa-plus-circle"></i> Tambah Pembelian</a></li>
-                        <li data-page="riwayat-pembelian"><a href="#"><i class="fas fa-history"></i> Riwayat Pembelian</a></li>
-                        <li data-page="retur-pembelian"><a href="#"><i class="fas fa-arrow-rotate-left"></i> Retur Pembelian</a></li>
-                        <li data-page="data-supplier"><a href="#"><i class="fas fa-building"></i> Data Supplier</a></li>
                     </ul>
                 </li>
 
@@ -2260,26 +2256,6 @@
         <div id="page-data-pembelian" class="page-content">
             <div class="page-header"><h1>Data Pembelian Ke Supplier</h1></div>
             <div class="table-wrapper"><table><thead><tr><th>INVOICE SUPPLIER</th><th>SUPPLIER</th><th>TANGGAL MASUK</th><th>TOTAL HARGA BELI</th><th>STATUS</th><th>AKSI</th></tr></thead><tbody><tr><td>INV-SUP-88201</td><td>PT Sinar Roti Sejahtera</td><td>2026-06-12</td><td>1.200.000</td><td><span class="badge-status badge-lunas">Diterima</span></td><td><button class="aksi-btn" onclick="showToast('Detail dibuka')">Detail</button></td></tr><tr><td>INV-SUP-88202</td><td>CV Snack Nusantara</td><td>2026-06-15</td><td>450.000</td><td><span class="badge-status badge-belum">Dikirim</span></td><td><button class="aksi-btn" onclick="showToast('Detail dibuka')">Detail</button></td></tr></tbody></table></div>
-        </div>
-
-        <div id="page-tambah-pembelian" class="page-content">
-            <div class="page-header"><h1>Tambah Pembelian</h1><div class="page-header-desc">Buat purchase order baru ke supplier</div></div>
-            <div class="form-card"><div class="form-grid"><div class="form-group"><label>Supplier</label><select class="form-control"><option>PT Sinar Roti Sejahtera</option><option>CV Snack Nusantara</option></select></div><div class="form-group"><label>Tanggal PO</label><input type="date" class="form-control" value="2026-06-16" /></div><div class="form-group form-grid-full"><label>Catatan</label><textarea class="form-control" rows="2" placeholder="Catatan untuk supplier..."></textarea></div></div><button class="checkout-btn" onclick="showToast('Purchase Order berhasil dibuat')"><i class="fas fa-check"></i> Buat PO</button></div>
-        </div>
-
-        <div id="page-riwayat-pembelian" class="page-content">
-            <div class="page-header"><h1>Riwayat Pembelian</h1><div class="page-header-desc">Seluruh histori transaksi pembelian ke supplier</div></div>
-            <div class="table-wrapper"><table><thead><tr><th>TGL</th><th>PO NO</th><th>SUPPLIER</th><th>TOTAL</th><th>STATUS</th></tr></thead><tbody><tr><td>2026-06-12</td><td>PO-001</td><td>PT Sinar Roti Sejahtera</td><td>1.200.000</td><td><span class="badge-status badge-lunas">Selesai</span></td></tr><tr><td>2026-06-10</td><td>PO-002</td><td>CV Snack Nusantara</td><td>450.000</td><td><span class="badge-status badge-belum">Proses</span></td></tr></tbody></table></div>
-        </div>
-
-        <div id="page-retur-pembelian" class="page-content">
-            <div class="page-header"><h1>Retur Pembelian</h1><div class="page-header-desc">Pengembalian barang ke supplier karena rusak/cacat</div></div>
-            <div class="table-wrapper"><table><thead><tr><th>TGL RETUR</th><th>NO RETUR</th><th>SUPPLIER</th><th>PRODUK</th><th>JUMLAH</th><th>STATUS</th></tr></thead><tbody><tr><td>2026-06-14</td><td>RET-001</td><td>PT Sinar Roti</td><td>TASAJI ROTI MARYAM COKELAT</td><td>5 Pcs</td><td><span class="badge-status badge-belum">Diproses</span></td></tr></tbody></table></div>
-        </div>
-
-        <div id="page-data-supplier" class="page-content">
-            <div class="page-header"><h1>Data Supplier</h1><div class="page-header-desc">Daftar dan kelola pemasok barang</div></div>
-            <div class="table-wrapper"><table><thead><tr><th>NAMA SUPPLIER</th><th>KONTAK</th><th>ALAMAT</th><th>PRODUK</th><th>STATUS</th></tr></thead><tbody><tr><td><strong>PT Sinar Roti Sejahtera</strong></td><td>0812-3456-7890</td><td>Jl. Industri No. 10</td><td>Roti</td><td><span class="badge-status badge-lunas">Aktif</span></td></tr><tr><td><strong>CV Snack Nusantara</strong></td><td>0821-9876-5432</td><td>Jl. Raya Snack No. 5</td><td>Snack</td><td><span class="badge-status badge-lunas">Aktif</span></td></tr></tbody></table></div>
         </div>
 
         <div id="page-penerimaan" class="page-content">
@@ -4492,7 +4468,7 @@
                     "daftar-penjualan": "penjualan", "daftar-pelanggan": "penjualan", "rekap-penjualan": "penjualan",
                     "daftar-produk": "katalog", "tambah-produk": "katalog",
                     "monitor-stok": "persediaan", "mutasi-stok": "persediaan",
-                    "data-pembelian": "pembelian", "tambah-pembelian": "pembelian", "riwayat-pembelian": "pembelian", "retur-pembelian": "pembelian", "data-supplier": "pembelian",
+                    "data-pembelian": "pembelian",
                     penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "rak-lokasi": "gudang", "opname-gudang": "gudang",
                     "harga-belanja": "pricing", "harga-jual": "pricing", "ubah-harga": "pricing", "diskon-promo": "pricing", "margin-keuntungan": "pricing",
                     karyawan: "hr", absensi: "hr", "rekap-kehadiran": "hr", cuti: "hr", "jadwal-kerja": "hr", penggajian: "hr", "slip-gaji": "hr",
