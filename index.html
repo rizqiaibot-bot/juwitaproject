@@ -1003,6 +1003,26 @@
             min-width: 60px;
             text-align: right;
         }
+        .cart-del-btn {
+            width: 26px;
+            height: 26px;
+            border-radius: 6px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--danger);
+            font-size: 0.72rem;
+            opacity: 0.55;
+            transition: var(--transition);
+            flex-shrink: 0;
+        }
+        .cart-del-btn:hover {
+            opacity: 1;
+            background: var(--danger-light);
+        }
 
         .cart-summary {
             border-top: 2px dashed var(--border-color);
@@ -1759,7 +1779,6 @@
                 <li class="dropdown">
                     <a href="#"><i class="fas fa-warehouse"></i> Gudang <i class="fas fa-chevron-down"></i></a>
                     <ul class="dropdown-menu">
-                        <li data-page="penerimaan"><a href="#"><i class="fas fa-truck-loading"></i> Penerimaan</a></li>
                         <li data-page="picking"><a href="#"><i class="fas fa-clipboard-list"></i> Picking</a></li>
                         <li data-page="packing"><a href="#"><i class="fas fa-boxes"></i> Packing</a></li>
                         <li data-page="pengiriman"><a href="#"><i class="fas fa-truck"></i> Pengiriman</a></li>
@@ -1987,10 +2006,6 @@
                             <i class="fas fa-history"></i>
                             <span>Riwayat</span>
                         </button>
-                        <button class="pos-side-btn" onclick="openClosingModal()">
-                            <i class="fas fa-cash-register"></i>
-                            <span>Closing</span>
-                        </button>
                     </div>
                 </div>
 
@@ -2100,7 +2115,13 @@
                     <h1>Daftar Produk</h1>
                     <div class="page-header-desc">Kelola informasi produk, stok, dan kategori katalog</div>
                 </div>
-                <button class="checkout-btn" onclick="resetProductForm(); showPage('tambah-produk')" style="width:auto;padding:10px 24px;"><i class="fas fa-plus-circle"></i> Tambah Produk</button>
+                <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                    <div style="position:relative;">
+                        <i class="fas fa-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);"></i>
+                        <input type="text" id="catalogSearch" class="form-control" style="padding-left:36px;" placeholder="Cari produk (nama, SKU, ID, barcode)..." oninput="renderCatalogTable()" />
+                    </div>
+                    <button class="checkout-btn" onclick="resetProductForm(); showPage('tambah-produk')" style="width:auto;padding:10px 24px;"><i class="fas fa-plus-circle"></i> Tambah Produk</button>
+                </div>
             </div>
             <div class="table-wrapper">
                 <table>
@@ -2379,7 +2400,7 @@
         </div>
 
         <div id="page-cuti" class="page-content">
-            <div class="page-header"><h1>Pengajuan Cuti</h1></div>
+            <div class="page-header"><h1>Izin dan Cuti</h1></div>
             <div class="table-wrapper"><table><thead><tr><th>KARYAWAN</th><th>DURASI</th><th>ALASAN</th><th>STATUS</th></tr></thead><tbody><tr><td>Ahmad Hidayat</td><td>3 Hari</td><td>Acara Keluarga</td><td><span class="badge-status badge-lunas">Disetujui</span></td></tr></tbody></table></div>
         </div>
 
@@ -3270,6 +3291,7 @@
                                     <span class="qty-val" onclick="editQtyPrompt(${idx})" style="cursor:pointer;" title="Klik untuk edit jumlah">${item.quantity}</span>
                                     <button class="cart-qty-btn" onclick="changeQty(${idx},1)">+</button>
                                 </div>
+                                <button class="cart-del-btn" onclick="removeFromCart(${idx})" title="Hapus item"><i class="fas fa-trash-alt"></i></button>
                             </div>
                             <div class="cart-item-total">${row.toLocaleString('id-ID')}</div>
                         </div>`;
@@ -3294,6 +3316,13 @@
             if (q <= 0) cart.splice(idx, 1);
             else cart[idx].quantity = q;
             updateCartUI();
+        }
+
+        function removeFromCart(idx) {
+            if (!cart[idx]) return;
+            cart.splice(idx, 1);
+            updateCartUI();
+            showToast("Item dihapus dari keranjang");
         }
 
         function editQtyPrompt(idx) {
@@ -3460,12 +3489,22 @@
         function renderCatalogTable() {
             const tbody = document.getElementById("catalogTableBody");
             if (!tbody) return;
-            if (!products.length) {
+            const q = (document.getElementById("catalogSearch")?.value || "").toLowerCase().trim();
+            let list = products;
+            if (q) {
+                list = products.filter(p =>
+                    (p.name || "").toLowerCase().includes(q) ||
+                    (p.sku || "").toLowerCase().includes(q) ||
+                    String(p.id).toLowerCase().includes(q) ||
+                    (p.barcode || "").toLowerCase().includes(q)
+                );
+            }
+            if (!list.length) {
                 tbody.innerHTML =
-                '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);">Belum ada produk</td></tr>';
+                '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);">' + (q ? 'Tidak ada produk ditemukan' : 'Belum ada produk') + '</td></tr>';
                 return;
             }
-            tbody.innerHTML = products.map(p => {
+            tbody.innerHTML = list.map(p => {
                 const levelClass = p.stock > 500 ? "badge-lunas" : p.stock > 100 ? "badge-belum" : "badge-batal";
                 const levelText = p.stock > 500 ? "Tersedia" : p.stock > 100 ? "Sedang" : "Kritis";
                 const thumbHtml = p.photo
@@ -5282,6 +5321,7 @@
         window.showToast = showToast;
         window.quickAdd = quickAdd;
         window.changeQty = changeQty;
+        window.removeFromCart = removeFromCart;
         window.editQtyPrompt = editQtyPrompt;
         window.editPrice = editPrice;
         window.closeCheckoutModal = closeCheckoutModal;
