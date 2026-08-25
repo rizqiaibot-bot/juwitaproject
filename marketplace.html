@@ -132,6 +132,26 @@
     margin-bottom: 14px;
   }
   .modal-box input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+  .detail-items-table {
+    width: 100%; min-width: 780px; font-size: 0.72rem;
+    border-collapse: collapse; margin-top: 8px;
+  }
+  .detail-items-table th {
+    text-align: left; padding: 8px 12px; font-size: 0.64rem;
+    text-transform: uppercase; letter-spacing: 0.03em;
+    background: var(--bg-primary); color: var(--text-muted);
+    white-space: nowrap; border-bottom: 1px solid var(--border-color);
+  }
+  .detail-items-table td {
+    padding: 8px 12px; border-bottom: 1px solid var(--border-color);
+    vertical-align: top;
+  }
+  .detail-items-table td:nth-child(1),
+  .detail-items-table td:nth-child(2),
+  .detail-items-table td:nth-child(4),
+  .detail-items-table td:nth-child(5) { white-space: nowrap; }
+  .detail-items-table td:nth-child(3) { min-width: 220px; }
+  .detail-items-table td:nth-child(6) { min-width: 180px; }
   .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
   .toast-container {
     position: fixed; bottom: 20px; right: 20px; z-index: 2000;
@@ -282,12 +302,12 @@
 </div>
 
 <div class="modal-overlay" id="orderDetailModal">
-  <div class="modal-box" style="max-width:640px;">
+  <div class="modal-box" style="max-width:960px;width:92%;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
       <h3 id="detailTitle" style="margin-bottom:0;">Order Detail</h3>
       <button class="btn btn-outline btn-sm" onclick="closeOrderDetail()"><i class="fas fa-times"></i></button>
     </div>
-    <div id="orderDetailContent" style="font-size:0.78rem;line-height:1.6;"></div>
+    <div id="orderDetailContent" style="font-size:0.78rem;line-height:1.6;overflow-x:auto;"></div>
     <div class="modal-actions" style="margin-top:14px;">
       <button class="btn btn-outline" onclick="closeOrderDetail()">Tutup</button>
       <button class="btn btn-primary" onclick="markReadyImport()" id="markReadyBtn" style="display:none;">
@@ -740,7 +760,7 @@ function renderOrderDetail(order, productsMap) {
   var totalUnmapped = 0;
 
   if (items.length) {
-    itemsHtml = '<table style="width:100%;font-size:0.72rem;margin-top:8px;">' +
+    itemsHtml = '<table class="detail-items-table">' +
       '<thead><tr><th>SKU Shopee</th><th>Item ID</th><th>Nama Produk</th><th>Qty</th><th>Subtotal</th><th>Mapping</th></tr></thead><tbody>';
 
     items.forEach(function(item) {
