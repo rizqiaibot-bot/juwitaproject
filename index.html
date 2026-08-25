@@ -1746,8 +1746,7 @@
                         <li data-page="picking"><a href="#"><i class="fas fa-clipboard-list"></i> Picking</a></li>
                         <li data-page="packing"><a href="#"><i class="fas fa-boxes"></i> Packing</a></li>
                         <li data-page="pengiriman"><a href="#"><i class="fas fa-truck"></i> Pengiriman</a></li>
-                        <li data-page="rak-lokasi"><a href="#"><i class="fas fa-layer-group"></i> Rak &amp; Lokasi</a></li>
-                        <li data-page="opname-gudang"><a href="#"><i class="fas fa-clipboard-check"></i> Opname Gudang</a></li>
+                        <li data-page="opname-gudang"><a href="#"><i class="fas fa-clipboard-check"></i> Stock Opname</a></li>
                     </ul>
                 </li>
 
@@ -2316,43 +2315,10 @@
             <div class="table-wrapper"><table><thead><tr><th>ORDER ID</th><th>PELANGGAN</th><th>KURIR</th><th>NO RESI</th><th>STATUS</th><th>AKSI</th></tr></thead><tbody id="shippingTableBody"></tbody></table></div>
         </div>
 
-        <div id="page-rak-lokasi" class="page-content">
-            <div class="page-header">
-                <div>
-                    <h1>Rak &amp; Lokasi Gudang</h1>
-                    <div class="page-header-desc">Penataan letak barang berdasarkan zona dan rak</div>
-                </div>
-                <button class="checkout-btn" onclick="openRackForm()" style="width:auto;padding:10px 24px;"><i class="fas fa-plus"></i> Tambah Rak</button>
-            </div>
-            <div class="table-wrapper"><table><thead><tr><th>ZONA</th><th>NAMA RAK</th><th>PRODUK</th><th>KAPASITAS</th><th>TERISI</th><th>AKSI</th></tr></thead><tbody id="rackTableBody"></tbody></table></div>
-
-            <div id="rackFormModal" class="modal-overlay" onclick="if(event.target===this)closeRackForm()">
-                <div class="modal-card" style="max-width:90vw;text-align:left;padding:0;overflow:hidden;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border-color);">
-                        <h2 id="rackFormTitle" style="margin:0;font-size:1.1rem;">Tambah Rak Baru</h2>
-                        <button onclick="closeRackForm()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-muted);">&times;</button>
-                    </div>
-                    <div style="padding:20px 24px;">
-                        <div class="form-grid">
-                            <div class="form-group"><label>Zona</label><input id="rackZone" class="form-control" placeholder="Zone A" /></div>
-                            <div class="form-group"><label>Nama Rak</label><input id="rackName" class="form-control" placeholder="Rak 1" /></div>
-                            <div class="form-group"><label>Produk</label><select id="rackProduct" class="form-control"><option value="">-- Kosong --</option></select></div>
-                            <div class="form-group"><label>Kapasitas</label><input id="rackCap" type="number" class="form-control" placeholder="100" /></div>
-                            <div class="form-group"><label>Terisi</label><input id="rackFilled" type="number" class="form-control" placeholder="0" /></div>
-                        </div>
-                    </div>
-                    <div style="display:flex;gap:12px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border-color);">
-                        <button class="btn-secondary" onclick="closeRackForm()">Batal</button>
-                        <button class="checkout-btn" onclick="saveRack()" style="width:auto;padding:10px 28px;"><i class="fas fa-save"></i> Simpan</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <div id="page-opname-gudang" class="page-content">
             <div class="page-header">
                 <div>
-                    <h1>Opname Gudang</h1>
+                    <h1>Stock Opname</h1>
                     <div class="page-header-desc">Rekonsiliasi stok fisik per zona gudang</div>
                 </div>
             </div>
@@ -4469,7 +4435,7 @@
                     "daftar-produk": "katalog", "tambah-produk": "katalog",
                     "monitor-stok": "persediaan", "mutasi-stok": "persediaan",
                     "data-pembelian": "pembelian",
-                    penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "rak-lokasi": "gudang", "opname-gudang": "gudang",
+                    penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "opname-gudang": "gudang",
                     "harga-belanja": "pricing", "harga-jual": "pricing", "ubah-harga": "pricing", "diskon-promo": "pricing", "margin-keuntungan": "pricing",
                     karyawan: "hr", absensi: "hr", "rekap-kehadiran": "hr", cuti: "hr", "jadwal-kerja": "hr", penggajian: "hr", "slip-gaji": "hr",
 
