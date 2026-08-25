@@ -230,6 +230,15 @@
             color: #6366f1;
         }
 
+        /* ACTIVE STATE — menu utama lebih menonjol */
+        .nav-menu-horizontal>li.active>a {
+            font-weight: 700;
+            box-shadow: inset 0 -2px 0 var(--primary);
+        }
+        .nav-menu-horizontal>li.active>a i {
+            color: var(--primary);
+        }
+
         /* ===== DROPDOWN ===== */
         .dropdown {
             position: relative;
@@ -294,6 +303,14 @@
             width: 20px;
             text-align: center;
             font-size: 0.9rem;
+        }
+        .dropdown-menu li.active>a {
+            background: var(--primary-light);
+            color: var(--primary);
+            font-weight: 700;
+        }
+        .dropdown-menu li.active>a i {
+            color: var(--primary);
         }
 
         /* ===== NAV ACTIONS ===== */
@@ -1757,7 +1774,6 @@
                         <li data-page="harga-belanja"><a href="#"><i class="fas fa-shopping-bag"></i> Harga Belanja</a></li>
                         <li data-page="harga-jual"><a href="#"><i class="fas fa-tags"></i> Harga Jual</a></li>
                         <li data-page="ubah-harga"><a href="#"><i class="fas fa-edit"></i> Ubah Harga</a></li>
-                        <li data-page="diskon-promo"><a href="#"><i class="fas fa-percent"></i> Diskon &amp; Promo</a></li>
                         <li data-page="margin-keuntungan"><a href="#"><i class="fas fa-chart-line"></i> Margin Keuntungan</a></li>
                     </ul>
                 </li>
@@ -1767,11 +1783,9 @@
                     <a href="#"><i class="fas fa-users"></i> HR <i class="fas fa-chevron-down"></i></a>
                     <ul class="dropdown-menu">
                         <li data-page="karyawan"><a href="#"><i class="fas fa-user-tie"></i> Karyawan</a></li>
-                        <li data-page="absensi"><a href="#"><i class="fas fa-fingerprint"></i> Absensi</a></li>
                         <li data-page="rekap-kehadiran"><a href="#"><i class="fas fa-calendar-check"></i> Rekap Kehadiran</a></li>
-                        <li data-page="cuti"><a href="#"><i class="fas fa-umbrella-beach"></i> Cuti</a></li>
+                        <li data-page="cuti"><a href="#"><i class="fas fa-umbrella-beach"></i> Izin dan Cuti</a></li>
                         <li data-page="jadwal-kerja"><a href="#"><i class="fas fa-calendar-week"></i> Jadwal Kerja</a></li>
-                        <li data-page="slip-gaji"><a href="#"><i class="fas fa-receipt"></i> Slip Gaji</a></li>
                     </ul>
                 </li>
 
@@ -2384,6 +2398,128 @@
             <div class="form-card"><h3 style="margin-bottom:16px;">Generate Payroll</h3><div class="form-grid"><div class="form-group"><label>Periode</label><select class="form-control"><option>Juni 2026</option><option>Mei 2026</option></select></div><div class="form-group"><label>Status</label><select class="form-control"><option>Semua Karyawan</option><option>Karyawan Aktif Saja</option></select></div></div><button class="checkout-btn" onclick="showToast('Payroll berhasil di-generate')"><i class="fas fa-calculator"></i> Generate Payroll</button></div>
         </div>
 
+        <style>
+            /* ===== REKAP KEHADIRAN (compact UI) ===== */
+            #page-rekap-kehadiran #rekapStats {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 8px 0;
+                margin: 0 0 14px;
+            }
+            #page-rekap-kehadiran .rk-stat {
+                display: inline-flex;
+                align-items: baseline;
+                gap: 5px;
+                padding: 2px 16px;
+                border-right: 1px solid var(--border-color);
+                font-size: 0.7rem;
+                color: var(--text-secondary);
+                white-space: nowrap;
+                line-height: 1.6;
+            }
+            #page-rekap-kehadiran .rk-stat:first-child { padding-left: 0; }
+            #page-rekap-kehadiran .rk-stat:last-child { border-right: none; }
+            #page-rekap-kehadiran .rk-stat b { font-size: 0.8rem; font-weight: 800; }
+            #page-rekap-kehadiran .rk-stat b.rk-h { color: #16a34a; }
+            #page-rekap-kehadiran .rk-stat b.rk-t { color: #d97706; }
+            #page-rekap-kehadiran .rk-stat b.rk-s { color: #7c3aed; }
+            #page-rekap-kehadiran .rk-stat b.rk-i { color: #0891b2; }
+            #page-rekap-kehadiran .rk-stat b.rk-a { color: #dc2626; }
+            #page-rekap-kehadiran .rk-stat b.rk-m { color: #991b1b; }
+            #page-rekap-kehadiran .rk-stat b.rk-lm { color: #0d9488; }
+            #page-rekap-kehadiran .rk-stat b.rk-pct { color: var(--primary); }
+            #page-rekap-kehadiran .rk-box {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 22px;
+                height: 22px;
+                border-radius: 5px;
+                font-size: 0.58rem;
+                font-weight: 700;
+                line-height: 1;
+            }
+            #page-rekap-kehadiran .rk-legend {
+                display: flex;
+                gap: 6px 18px;
+                flex-wrap: wrap;
+                align-items: center;
+                margin-top: 10px;
+                padding: 7px 14px;
+                background: #fafafa;
+                border: 1px solid var(--border-color);
+                border-radius: 10px;
+                font-size: 0.66rem;
+                color: var(--text-secondary);
+            }
+            #page-rekap-kehadiran .rk-legend .rk-lg {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                white-space: nowrap;
+            }
+            #page-rekap-kehadiran .rk-legend .rk-lg .rk-box {
+                width: 16px;
+                height: 16px;
+                border-radius: 4px;
+                font-size: 0.52rem;
+            }
+            #page-rekap-kehadiran #rekapTable {
+                min-width: 1000px;
+            }
+            #page-rekap-kehadiran #rekapTable th {
+                padding: 6px 3px;
+                font-size: 0.58rem;
+                font-weight: 600;
+                color: var(--text-secondary);
+                text-transform: none;
+                letter-spacing: 0;
+                text-align: center;
+                background: var(--bg-primary);
+            }
+            #page-rekap-kehadiran #rekapTable th:first-child {
+                position: sticky;
+                left: 0;
+                z-index: 2;
+                min-width: 160px;
+                text-align: left;
+                text-transform: uppercase;
+                letter-spacing: 0.6px;
+                font-size: 0.6rem;
+            }
+            #page-rekap-kehadiran #rekapTable th:last-child {
+                text-align: center;
+                min-width: 56px;
+                font-weight: 700;
+            }
+            #page-rekap-kehadiran #rekapTable td {
+                padding: 5px 3px;
+                font-size: 0.78rem;
+                border-bottom: 1px solid #f1f5f9;
+                text-align: center;
+                white-space: nowrap;
+            }
+            #page-rekap-kehadiran #rekapTable td:first-child {
+                position: sticky;
+                left: 0;
+                z-index: 1;
+                background: #fff;
+                font-weight: 600;
+                font-size: 0.76rem;
+                text-align: left;
+            }
+            #page-rekap-kehadiran #rekapTable tbody tr {
+                height: 38px;
+            }
+            #page-rekap-kehadiran #rekapTable tbody tr:hover {
+                background: transparent;
+            }
+            #page-rekap-kehadiran #rekapTable tbody tr:last-child td {
+                border-bottom: none;
+            }
+        </style>
+
         <div id="page-rekap-kehadiran" class="page-content">
             <div class="page-header">
                 <div>
@@ -2404,15 +2540,17 @@
             </div>
             <div class="stats-row" id="rekapStats"></div>
             <div class="table-wrapper" style="overflow-x:auto;"><table id="rekapTable"><thead id="rekapThead"></thead><tbody id="rekapTbody"></tbody></table></div>
-            <div class="legend" style="display:flex;gap:16px;flex-wrap:wrap;margin-top:16px;padding:12px 16px;background:var(--bg-card);border-radius:var(--radius-lg);border:1px solid var(--border-color);font-size:0.8rem;">
-                <span><span style="display:inline-block;width:24px;text-align:center;font-weight:800;color:#10b981;">H</span> Hadir</span>
-                <span><span style="display:inline-block;width:24px;text-align:center;font-weight:800;color:#f59e0b;">L</span> Telat</span>
-                <span><span style="display:inline-block;width:24px;text-align:center;font-weight:800;color:#ef4444;">S</span> Sakit</span>
-                <span><span style="display:inline-block;width:24px;text-align:center;font-weight:800;color:#3b82f6;">I</span> Izin</span>
-                <span><span style="display:inline-block;width:24px;text-align:center;font-weight:800;color:#6b7280;">A</span> Alpha</span>
-                <span><span style="display:inline-block;width:24px;text-align:center;font-weight:800;color:#dc2626;">M</span> Mangkir</span>
-                <span><span style="display:inline-block;width:24px;text-align:center;font-weight:800;color:#8b5cf6;">LM</span> Lembur</span>
-                <span><span style="display:inline-block;width:24px;text-align:center;font-weight:800;color:var(--text-muted);">&mdash;</span> Libur/Minggu</span>
+            <div class="rk-legend">
+                <span class="rk-lg"><span class="rk-box" style="background:#dcfce7;color:#16a34a;">H</span> Hadir</span>
+                <span class="rk-lg"><span class="rk-box" style="background:#fef3c7;color:#d97706;">T</span> Telat</span>
+                <span class="rk-lg"><span class="rk-box" style="background:#fee2e2;color:#dc2626;">A</span> Absent</span>
+                <span class="rk-lg"><span class="rk-box" style="background:#dbeafe;color:#2563eb;">C</span> Cuti</span>
+                <span class="rk-lg"><span class="rk-box" style="background:#ede9fe;color:#7c3aed;">S</span> Sakit</span>
+                <span class="rk-lg"><span class="rk-box" style="background:#cffafe;color:#0891b2;">I</span> Izin</span>
+                <span class="rk-lg"><span class="rk-box" style="background:#fecaca;color:#991b1b;">M</span> Mangkir</span>
+                <span class="rk-lg"><span class="rk-box" style="background:#ccfbf1;color:#0d9488;">LM</span> Lembur</span>
+                <span class="rk-lg"><span class="rk-box" style="background:#f1f5f9;color:#94a3b8;">L</span> Libur</span>
+                <span class="rk-lg"><span class="rk-box" style="background:#fafafa;color:#cbd5e1;">?</span> Belum ada data</span>
             </div>
         </div>
 
@@ -3801,46 +3939,14 @@
                 const hadir = counts.H + counts.LM;
                 const hadirPct = total ? Math.round(hadir / total * 100) : 0;
                 statsContainer.innerHTML = `
-                            <div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px 16px;border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;">
-                                <i class="fas fa-check-circle" style="color:#10b981;font-size:1.4rem;"></i>
-                                <h3 style="font-size:1.3rem;font-weight:800;margin:0;line-height:1.1;">${counts.H}</h3>
-                                <p style="font-size:0.7rem;color:var(--text-muted);font-weight:600;margin:0;">Hadir</p>
-                            </div>
-                            <div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px 16px;border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;">
-                                <i class="fas fa-clock" style="color:#f59e0b;font-size:1.4rem;"></i>
-                                <h3 style="font-size:1.3rem;font-weight:800;margin:0;line-height:1.1;">${counts.L}</h3>
-                                <p style="font-size:0.7rem;color:var(--text-muted);font-weight:600;margin:0;">Telat</p>
-                            </div>
-                            <div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px 16px;border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;">
-                                <i class="fas fa-head-side-cough" style="color:#ef4444;font-size:1.4rem;"></i>
-                                <h3 style="font-size:1.3rem;font-weight:800;margin:0;line-height:1.1;">${counts.S}</h3>
-                                <p style="font-size:0.7rem;color:var(--text-muted);font-weight:600;margin:0;">Sakit</p>
-                            </div>
-                            <div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px 16px;border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;">
-                                <i class="fas fa-file-pen" style="color:#3b82f6;font-size:1.4rem;"></i>
-                                <h3 style="font-size:1.3rem;font-weight:800;margin:0;line-height:1.1;">${counts.I}</h3>
-                                <p style="font-size:0.7rem;color:var(--text-muted);font-weight:600;margin:0;">Izin</p>
-                            </div>
-                            <div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px 16px;border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;">
-                                <i class="fas fa-question-circle" style="color:#6b7280;font-size:1.4rem;"></i>
-                                <h3 style="font-size:1.3rem;font-weight:800;margin:0;line-height:1.1;">${counts.A}</h3>
-                                <p style="font-size:0.7rem;color:var(--text-muted);font-weight:600;margin:0;">Alpha</p>
-                            </div>
-                            <div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px 16px;border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;">
-                                <i class="fas fa-user-slash" style="color:#dc2626;font-size:1.4rem;"></i>
-                                <h3 style="font-size:1.3rem;font-weight:800;margin:0;line-height:1.1;">${counts.M}</h3>
-                                <p style="font-size:0.7rem;color:var(--text-muted);font-weight:600;margin:0;">Mangkir</p>
-                            </div>
-                            <div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px 16px;border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;">
-                                <i class="fas fa-moon" style="color:#8b5cf6;font-size:1.4rem;"></i>
-                                <h3 style="font-size:1.3rem;font-weight:800;margin:0;line-height:1.1;">${counts.LM}</h3>
-                                <p style="font-size:0.7rem;color:var(--text-muted);font-weight:600;margin:0;">Lembur</p>
-                            </div>
-                            <div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px 16px;border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;">
-                                <i class="fas fa-chart-line" style="color:var(--primary);font-size:1.4rem;"></i>
-                                <h3 style="font-size:1.3rem;font-weight:800;margin:0;line-height:1.1;">${hadirPct}%</h3>
-                                <p style="font-size:0.7rem;color:var(--text-muted);font-weight:600;margin:0;">Kehadiran</p>
-                            </div>
+                            <span class="rk-stat"><b class="rk-h">${counts.H}</b> Hadir</span>
+                            <span class="rk-stat"><b class="rk-t">${counts.L}</b> Telat</span>
+                            <span class="rk-stat"><b class="rk-s">${counts.S}</b> Sakit</span>
+                            <span class="rk-stat"><b class="rk-i">${counts.I}</b> Izin</span>
+                            <span class="rk-stat"><b class="rk-a">${counts.A}</b> Absent</span>
+                            <span class="rk-stat"><b class="rk-m">${counts.M}</b> Mangkir</span>
+                            <span class="rk-stat"><b class="rk-lm">${counts.LM}</b> Lembur</span>
+                            <span class="rk-stat"><b class="rk-pct">${hadirPct}%</b> Kehadiran</span>
                         `;
             }
 
@@ -3853,9 +3959,9 @@
                     const date = new Date(year, month, d);
                     const isWeekend = date.getDay() === 0 || date.getDay() === 6;
                     html +=
-                        `<th style="${isWeekend ? 'color:var(--text-muted);background:var(--bg-primary);' : ''}">${d}<br><span style="font-weight:400;font-size:0.6rem;">${dayNames[date.getDay()]}</span></th>`;
+                        `<th style="${isWeekend ? 'color:var(--text-muted);' : ''}">${dayNames[date.getDay()]}<br><span style="font-weight:700;font-size:0.68rem;">${d}</span></th>`;
                 }
-                html += `<th style="min-width:100px;">% Hadir</th></tr>`;
+                html += `<th style="min-width:70px;">%</th></tr>`;
                 thead.innerHTML = html;
             }
 
@@ -3863,29 +3969,36 @@
             const tbody = document.getElementById("rekapTbody");
             if (tbody) {
                 const filtered = karyawanData.filter(k => k.name.toLowerCase().includes(search));
+                const attMap = {
+                    "-": { t: "L", bg: "#f1f5f9", c: "#94a3b8" },
+                    "H": { t: "H", bg: "#dcfce7", c: "#16a34a" },
+                    "L": { t: "T", bg: "#fef3c7", c: "#d97706" },
+                    "S": { t: "S", bg: "#ede9fe", c: "#7c3aed" },
+                    "I": { t: "I", bg: "#cffafe", c: "#0891b2" },
+                    "A": { t: "A", bg: "#fee2e2", c: "#dc2626" },
+                    "M": { t: "M", bg: "#fecaca", c: "#991b1b" },
+                    "LM": { t: "LM", bg: "#ccfbf1", c: "#0d9488" },
+                    "C": { t: "C", bg: "#dbeafe", c: "#2563eb" }
+                };
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
                 tbody.innerHTML = filtered.map(k => {
                     const days = attData[k.name] || [];
                     const totalDays = days.filter(s => s !== "-").length;
                     const hadirCount = days.filter(s => s === "H" || s === "LM").length;
                     const pct = totalDays ? Math.round(hadirCount / totalDays * 100) : 0;
-                    const pctColor = pct >= 80 ? "#10b981" : pct >= 60 ? "#f59e0b" : "#ef4444";
+                    const pctColor = pct >= 80 ? "#16a34a" : pct >= 60 ? "#d97706" : "#dc2626";
                     let rowHtml =
-                        `<tr><td style="position:sticky;left:0;z-index:1;background:var(--bg-card);font-weight:700;">${k.name}</td>`;
+                        `<tr><td style="position:sticky;left:0;z-index:1;background:#fff;font-weight:600;white-space:nowrap;">${k.name}</td>`;
                     days.forEach((s, idx) => {
                         const date = new Date(year, month, idx + 1);
-                        const isWeekend = date.getDay() === 0;
-                        const colorMap = { H: "#10b981", L: "#f59e0b", S: "#ef4444", I: "#3b82f6",
-                            A: "#6b7280", M: "#dc2626", LM: "#8b5cf6" };
-                        if (isWeekend) {
-                            rowHtml +=
-                                `<td style="text-align:center;color:var(--text-muted);background:var(--bg-primary);font-size:0.65rem;">&mdash;</td>`;
-                        } else {
-                            rowHtml +=
-                                `<td style="text-align:center;font-weight:700;font-size:0.72rem;color:${colorMap[s] || 'var(--text-primary)'};">${s}</td>`;
-                        }
+                        let st = attMap[s] || { t: "?", bg: "#fafafa", c: "#cbd5e1" };
+                        if (date > today) { st = { t: "?", bg: "#fafafa", c: "#cbd5e1" }; }
+                        rowHtml +=
+                            `<td style="text-align:center;padding:5px 3px;"><span class="rk-box" style="background:${st.bg};color:${st.c};">${st.t}</span></td>`;
                     });
                     rowHtml +=
-                        `<td style="text-align:center;font-weight:800;color:${pctColor};font-size:0.85rem;">${pct}%</td></tr>`;
+                        `<td style="text-align:center;font-weight:700;color:${pctColor};font-size:0.72rem;white-space:nowrap;">${pct}%</td></tr>`;
                     return rowHtml;
                 }).join('');
             }
