@@ -59,6 +59,17 @@ CREATE TABLE IF NOT EXISTS kontrakan (
   tagihan JSONB DEFAULT '[]'::jsonb
 );
 
+-- 5. TABEL ABSENSI (REKAP KEHADIRAN) — edit manual dari halaman HR > Rekap Kehadiran
+CREATE TABLE IF NOT EXISTS attendance_records (
+  id BIGSERIAL PRIMARY KEY,
+  karyawan TEXT NOT NULL,
+  tanggal TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'H',
+  jenis TEXT,
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (karyawan, tanggal)
+);
+
 -- ============================================================
 -- ENABLE RLS (Row Level Security)
 -- ============================================================
@@ -66,6 +77,7 @@ ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE karyawan ENABLE ROW LEVEL SECURITY;
 ALTER TABLE kontrakan ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attendance_records ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
 -- POLICIES (allow all for anon key)
@@ -74,3 +86,4 @@ CREATE POLICY "Allow all products" ON products FOR ALL USING (true) WITH CHECK (
 CREATE POLICY "Allow all orders" ON orders FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all karyawan" ON karyawan FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all kontrakan" ON kontrakan FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all attendance_records" ON attendance_records FOR ALL USING (true) WITH CHECK (true);

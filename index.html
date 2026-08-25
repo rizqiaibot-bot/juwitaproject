@@ -2518,6 +2518,159 @@
             #page-rekap-kehadiran #rekapTable tbody tr:last-child td {
                 border-bottom: none;
             }
+            #editAbsensiModal .edit-absensi-card {
+                background: var(--bg-card);
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-xl);
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+                width: 100%;
+                max-width: 440px;
+                max-height: 90vh;
+                overflow-y: auto;
+                padding: 20px 24px;
+                transform: scale(0.95);
+                transition: var(--transition);
+            }
+            #editAbsensiModal.active .edit-absensi-card {
+                transform: scale(1);
+            }
+            #editAbsensiModal .eab-head {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                margin-bottom: 16px;
+            }
+            #editAbsensiModal .eab-x {
+                background: var(--bg-primary);
+                border: 1px solid var(--border-color);
+                border-radius: 50%;
+                width: 32px;
+                height: 32px;
+                color: var(--text-secondary);
+                cursor: pointer;
+                flex-shrink: 0;
+            }
+            #editAbsensiModal .eab-x:hover {
+                background: var(--border-hover);
+                color: var(--text-primary);
+            }
+            #editAbsensiModal .eab-section {
+                margin-bottom: 16px;
+            }
+            #editAbsensiModal .eab-label {
+                font-size: 0.68rem;
+                font-weight: 800;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                color: var(--text-muted);
+                margin-bottom: 8px;
+            }
+            #editAbsensiModal .eab-status {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 8px;
+            }
+            #editAbsensiModal .eab-pill {
+                padding: 9px 0;
+                border-radius: var(--radius-md);
+                border: 1px solid var(--border-color);
+                background: var(--bg-card);
+                color: var(--text-secondary);
+                font-size: 0.75rem;
+                font-weight: 700;
+                cursor: pointer;
+                transition: var(--transition);
+            }
+            #editAbsensiModal .eab-pill:hover {
+                border-color: var(--primary);
+                color: var(--primary);
+            }
+            #editAbsensiModal .eab-pill.active {
+                background: var(--primary);
+                border-color: var(--primary);
+                color: #fff;
+            }
+            #editAbsensiModal .eab-check {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-top: 12px;
+                font-size: 0.75rem;
+                color: var(--text-secondary);
+                cursor: pointer;
+            }
+            #editAbsensiModal .eab-check input {
+                accent-color: var(--primary);
+                width: 16px;
+                height: 16px;
+                cursor: pointer;
+            }
+            #editAbsensiModal .eab-select {
+                height: 38px;
+                border-radius: 10px;
+                padding: 0 12px;
+                font-size: 0.78rem;
+                color: var(--text-secondary);
+            }
+            #editAbsensiModal .eab-select:focus {
+                border-color: var(--primary);
+                box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+            }
+            #editAbsensiModal .eab-grid2 {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+            #editAbsensiModal .eab-field label {
+                display: block;
+                font-size: 0.68rem;
+                font-weight: 700;
+                color: var(--text-muted);
+                margin-bottom: 4px;
+            }
+            #editAbsensiModal .eab-field input[type="time"] {
+                padding: 8px 10px;
+            }
+            #editAbsensiModal .eab-total {
+                margin-top: 10px;
+                font-size: 0.75rem;
+                color: var(--text-secondary);
+            }
+            #editAbsensiModal .eab-total strong {
+                color: var(--primary);
+            }
+            #editAbsensiModal .eab-foot {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                flex-wrap: wrap;
+                border-top: 1px solid var(--border-color);
+                padding-top: 16px;
+            }
+            #editAbsensiModal .eab-danger {
+                background: transparent;
+                border: 1px solid var(--danger);
+                color: var(--danger);
+                padding: 9px 16px;
+                border-radius: var(--radius-md);
+                font-size: 0.75rem;
+                font-weight: 700;
+                cursor: pointer;
+                transition: var(--transition);
+            }
+            #editAbsensiModal .eab-danger:hover {
+                background: var(--danger);
+                color: #fff;
+            }
+            @media (max-width: 480px) {
+                #editAbsensiModal .eab-status {
+                    grid-template-columns: repeat(2, 1fr);
+                }
+                #editAbsensiModal .eab-grid2 {
+                    grid-template-columns: 1fr;
+                }
+            }
         </style>
 
         <div id="page-rekap-kehadiran" class="page-content">
@@ -2551,6 +2704,76 @@
                 <span class="rk-lg"><span class="rk-box" style="background:#ccfbf1;color:#0d9488;">LM</span> Lembur</span>
                 <span class="rk-lg"><span class="rk-box" style="background:#f1f5f9;color:#94a3b8;">L</span> Libur</span>
                 <span class="rk-lg"><span class="rk-box" style="background:#fafafa;color:#cbd5e1;">?</span> Belum ada data</span>
+            </div>
+        </div>
+
+        <!-- ===== MODAL EDIT ABSENSI ===== -->
+        <div class="modal-overlay" id="editAbsensiModal" onclick="if(event.target===this)closeEditAbsensi()">
+            <div class="edit-absensi-card">
+                <div class="eab-head">
+                    <div>
+                        <strong id="eabNama">-</strong>
+                        <div id="eabTanggal" style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">-</div>
+                    </div>
+                    <button class="eab-x" onclick="closeEditAbsensi()"><i class="fas fa-times"></i></button>
+                </div>
+
+                <div class="eab-section">
+                    <div class="eab-label">Status</div>
+                    <div class="eab-status">
+                        <button type="button" class="eab-pill" data-status="H" onclick="setEditStatus(this)">Hadir</button>
+                        <button type="button" class="eab-pill" data-status="L" onclick="setEditStatus(this)">Terlambat</button>
+                        <button type="button" class="eab-pill" data-status="A" onclick="setEditStatus(this)">Absent</button>
+                        <button type="button" class="eab-pill" data-status="-" onclick="setEditStatus(this)">Libur</button>
+                    </div>
+                    <label class="eab-check">
+                        <input type="checkbox" id="eabLembur" onchange="toggleEditLembur()">
+                        <span>Lembur (LM) — kerja di hari libur</span>
+                    </label>
+                </div>
+
+                <div class="eab-section" id="eabJenisSection" style="display:none;">
+                    <div class="eab-label">Jenis Izin/Cuti</div>
+                    <select class="form-control eab-select" id="eabJenis">
+                        <option value="">Pilih jenis...</option>
+                        <option value="CUTI_TAHUNAN">Cuti Tahunan (CUTI_TAHUNAN)</option>
+                        <option value="SAKIT_SURAT">Sakit (dengan surat dokter) (SAKIT_SURAT)</option>
+                        <option value="SAKIT_TANPA_SURAT">Sakit (tanpa surat dokter) (SAKIT_TANPA_SURAT)</option>
+                        <option value="IZIN">Izin Keperluan Pribadi (IZIN)</option>
+                        <option value="ALPHA">Alpha (izin ditolak, tidak hadir) (ALPHA)</option>
+                        <option value="MANGKIR">Mangkir (tanpa kabar) (MANGKIR)</option>
+                        <option value="IZIN_JAM_KERJA">Izin di Tengah Jam Kerja (IZIN_JAM_KERJA)</option>
+                        <option value="CUTI_NIKAH">Cuti Menikah (CUTI_NIKAH)</option>
+                        <option value="CUTI_NIKAHKAN_ANAK">Cuti Menikahkan Anak (CUTI_NIKAHKAN_ANAK)</option>
+                        <option value="CUTI_KHITAN">Cuti Mengkhitankan Anak (CUTI_KHITAN)</option>
+                        <option value="CUTI_ISTRI_LAHIRAN">Cuti Istri Melahirkan/Keguguran (CUTI_ISTRI_LAHIRAN)</option>
+                        <option value="CUTI_DUKA">Cuti Keluarga Meninggal (CUTI_DUKA)</option>
+                    </select>
+                </div>
+
+                <div class="eab-section">
+                    <div class="eab-label">Jam Kerja</div>
+                    <div class="eab-grid2">
+                        <div class="eab-field"><label>Jam Masuk</label><input type="time" class="form-control" id="eabMasuk" value="08:00" oninput="hitungTotalKerja()"></div>
+                        <div class="eab-field"><label>Jam Pulang</label><input type="time" class="form-control" id="eabPulang" value="17:00" oninput="hitungTotalKerja()"></div>
+                        <div class="eab-field"><label>Mulai Istirahat</label><input type="time" class="form-control" id="eabIstirahatMulai" value="12:00" oninput="hitungTotalKerja()"></div>
+                        <div class="eab-field"><label>Selesai Istirahat</label><input type="time" class="form-control" id="eabIstirahatSelesai" value="13:00" oninput="hitungTotalKerja()"></div>
+                    </div>
+                    <div class="eab-total">Total Kerja: <strong id="eabTotalKerja">8 jam 0 menit</strong></div>
+                </div>
+
+                <div class="eab-section">
+                    <div class="eab-label">Menit Lembur</div>
+                    <input type="number" class="form-control" id="eabMenitLembur" value="0" min="0" style="max-width:160px;">
+                </div>
+
+                <div class="eab-foot">
+                    <button class="eab-danger" onclick="hapusEditAbsensi()"><i class="fas fa-trash-alt"></i> Hapus Record</button>
+                    <div style="display:flex;gap:10px;">
+                        <button class="btn-secondary" onclick="closeEditAbsensi()">Batal</button>
+                        <button class="checkout-btn" onclick="saveEditAbsensi()"><i class="fas fa-save"></i> Simpan</button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -2794,6 +3017,20 @@
                 if (wRackRes.data && wRackRes.data.length > 0) warehouseRacks = wRackRes.data;
                 if (wOpRes.data && wOpRes.data.length > 0) warehouseOpname = wOpRes.data;
                 if (oiRes.data && oiRes.data.length > 0) orderItemsData = oiRes.data;
+                // Muat edit absensi (jika tabel sudah dibuat via migration)
+                try {
+                    const attRes = await sb.from('attendance_records').select('*');
+                    if (attRes.data && attRes.data.length > 0) {
+                        attRes.data.forEach(r => {
+                            const p = String(r.tanggal || "").split("-");
+                            if (p.length !== 3) return;
+                            const y = parseInt(p[0], 10), m = parseInt(p[1], 10) - 1, d = parseInt(p[2], 10);
+                            attendanceEdits[`${y}|${m}|${d}|${r.karyawan}`] = { status: r.status || "H", jenis: r.jenis || null };
+                        });
+                    }
+                } catch (attErr) {
+                    console.warn("Supabase: attendance_records belum tersedia (jalankan migration)", attErr.message);
+                }
                 if (pRes.error || oRes.error || wRecRes.error || wRackRes.error || wOpRes.error) {
                     seedWarehouseData();
                 }
@@ -3868,6 +4105,8 @@
         // ============================================================
         // REKAP KEHADIRAN
         // ============================================================
+        const attendanceEdits = {};
+
         function generateAttendanceData(year, month) {
             const daysInMonth = new Date(year, month + 1, 0).getDate();
             const data = {};
@@ -3902,6 +4141,15 @@
                     }
                 }
                 data[k.name] = days;
+            });
+            // Terapkan edit absensi (sesi berjalan)
+            Object.keys(attendanceEdits).forEach(key => {
+                const p = key.split("|");
+                const y = parseInt(p[0], 10), m = parseInt(p[1], 10), d = parseInt(p[2], 10);
+                const name = p.slice(3).join("|");
+                if (y === year && m === month && data[name]) {
+                    data[name][d - 1] = attendanceEdits[key].status;
+                }
             });
             return data;
         }
@@ -3992,10 +4240,11 @@
                         `<tr><td style="position:sticky;left:0;z-index:1;background:#fff;font-weight:600;white-space:nowrap;">${k.name}</td>`;
                     days.forEach((s, idx) => {
                         const date = new Date(year, month, idx + 1);
+                        const editKey = `${year}|${month}|${idx + 1}|${k.name}`;
                         let st = attMap[s] || { t: "?", bg: "#fafafa", c: "#cbd5e1" };
-                        if (date > today) { st = { t: "?", bg: "#fafafa", c: "#cbd5e1" }; }
+                        if (date > today && !attendanceEdits[editKey]) { st = { t: "?", bg: "#fafafa", c: "#cbd5e1" }; }
                         rowHtml +=
-                            `<td style="text-align:center;padding:5px 3px;"><span class="rk-box" style="background:${st.bg};color:${st.c};">${st.t}</span></td>`;
+                            `<td style="text-align:center;padding:5px 3px;"><span class="rk-box" style="background:${st.bg};color:${st.c};cursor:pointer;" title="Edit absensi" onclick="openEditAbsensi('${k.name}', ${idx + 1}, '${s}')">${st.t}</span></td>`;
                     });
                     rowHtml +=
                         `<td style="text-align:center;font-weight:700;color:${pctColor};font-size:0.72rem;white-space:nowrap;">${pct}%</td></tr>`;
@@ -4012,6 +4261,122 @@
                 rekapTahun++; }
             document.getElementById("rekapBulan").value = rekapBulan;
             renderRekapKehadiran();
+        }
+
+        // ============================================================
+        // EDIT ABSENSI (modal)
+        // ============================================================
+        let editAbsensiKey = null;
+        let editAbsensiNama = "";
+        let editAbsensiDay = 0;
+
+        function openEditAbsensi(name, day, status) {
+            editAbsensiKey = `${rekapTahun}|${rekapBulan}|${day}|${name}`;
+            editAbsensiNama = name;
+            editAbsensiDay = day;
+            const tanggal = new Date(rekapTahun, rekapBulan, day);
+            const hari = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"][tanggal.getDay()];
+            const bulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September",
+                "Oktober", "November", "Desember"
+            ][rekapBulan];
+            document.getElementById("eabNama").textContent = name;
+            document.getElementById("eabTanggal").textContent = `${hari}, ${day} ${bulan} ${rekapTahun}`;
+            document.getElementById("eabMenitLembur").value = 0;
+
+            const prev = attendanceEdits[editAbsensiKey];
+            const cur = prev ? prev.status : status;
+            const isLembur = cur === "LM";
+            document.getElementById("eabLembur").checked = isLembur;
+            document.querySelectorAll("#editAbsensiModal .eab-pill").forEach(b => b.classList.remove("active"));
+            if (!isLembur) {
+                const btn = document.querySelector(`#editAbsensiModal .eab-pill[data-status="${cur === "-" ? "-" : cur}"]`);
+                if (btn) btn.classList.add("active");
+            }
+            document.getElementById("eabJenis").value = prev && prev.jenis ? prev.jenis : "";
+            eabStatusReveal(cur);
+            hitungTotalKerja();
+            document.getElementById("editAbsensiModal").classList.add("active");
+        }
+
+        function eabStatusReveal(status) {
+            const needJenis = ["A", "I", "C", "M", "S"].includes(status);
+            document.getElementById("eabJenisSection").style.display = needJenis ? "" : "none";
+        }
+
+        function closeEditAbsensi() {
+            document.getElementById("editAbsensiModal").classList.remove("active");
+            editAbsensiKey = null;
+        }
+
+        function setEditStatus(btn) {
+            document.querySelectorAll("#editAbsensiModal .eab-pill").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            eabStatusReveal(btn.dataset.status);
+        }
+
+        function toggleEditLembur() {
+            if (document.getElementById("eabLembur").checked) {
+                document.querySelectorAll("#editAbsensiModal .eab-pill").forEach(b => b.classList.remove("active"));
+                eabStatusReveal("LM");
+            }
+        }
+
+        function hitungTotalKerja() {
+            const inEl = document.getElementById("eabMasuk");
+            const outEl = document.getElementById("eabPulang");
+            const brk1 = document.getElementById("eabIstirahatMulai");
+            const brk2 = document.getElementById("eabIstirahatSelesai");
+            if (!inEl || !outEl) return;
+            const toMin = (v) => {
+                if (!v) return 0;
+                const p = v.split(":");
+                return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
+            };
+            let total = toMin(outEl.value) - toMin(inEl.value);
+            if (brk1.value && brk2.value) total -= (toMin(brk2.value) - toMin(brk1.value));
+            if (total < 0) total = 0;
+            const h = Math.floor(total / 60);
+            const m = total % 60;
+            document.getElementById("eabTotalKerja").textContent = `${h} jam ${m} menit`;
+        }
+
+        function saveEditAbsensi() {
+            if (!editAbsensiKey) return;
+            let status = null;
+            const activePill = document.querySelector("#editAbsensiModal .eab-pill.active");
+            if (document.getElementById("eabLembur").checked) {
+                status = "LM";
+            } else if (activePill) {
+                status = activePill.dataset.status;
+            }
+            if (!status) { showToast("Pilih status dulu"); return; }
+            const jenis = document.getElementById("eabJenis").value || null;
+            attendanceEdits[editAbsensiKey] = { status, jenis };
+            const tanggal = `${rekapTahun}-${String(rekapBulan + 1).padStart(2, "0")}-${String(editAbsensiDay).padStart(2, "0")}`;
+            if (sb && sb.from) {
+                sb.from('attendance_records')
+                    .upsert({ karyawan: editAbsensiNama, tanggal, status, jenis }, { onConflict: 'karyawan,tanggal' })
+                    .then(r => { if (r && r.error) console.warn("Save absensi error:", r.error.message); })
+                    .catch(e => console.warn("Save absensi error:", e.message));
+            }
+            closeEditAbsensi();
+            renderRekapKehadiran();
+            showToast("Absensi disimpan");
+        }
+
+        function hapusEditAbsensi() {
+            if (!editAbsensiKey) return;
+            delete attendanceEdits[editAbsensiKey];
+            const tanggal = `${rekapTahun}-${String(rekapBulan + 1).padStart(2, "0")}-${String(editAbsensiDay).padStart(2, "0")}`;
+            if (sb && sb.from) {
+                sb.from('attendance_records')
+                    .delete().eq('karyawan', editAbsensiNama).eq('tanggal', tanggal)
+                    .then(r => { if (r && r.error) console.warn("Delete absensi error:", r.error.message); })
+                    .catch(e => console.warn("Delete absensi error:", e.message));
+            }
+            closeEditAbsensi();
+            renderRekapKehadiran();
+            showToast("Record absensi dihapus");
         }
 
         // ============================================================
@@ -4949,6 +5314,13 @@
 
         window.renderRekapKehadiran = renderRekapKehadiran;
         window.ubahBulanRekap = ubahBulanRekap;
+        window.openEditAbsensi = openEditAbsensi;
+        window.closeEditAbsensi = closeEditAbsensi;
+        window.setEditStatus = setEditStatus;
+        window.toggleEditLembur = toggleEditLembur;
+        window.hitungTotalKerja = hitungTotalKerja;
+        window.saveEditAbsensi = saveEditAbsensi;
+        window.hapusEditAbsensi = hapusEditAbsensi;
         window.deleteProduct = deleteProduct;
         window.editProduct = editProduct;
         window.resetProductForm = resetProductForm;
