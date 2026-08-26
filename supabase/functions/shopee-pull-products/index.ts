@@ -237,10 +237,11 @@ Deno.serve(async (req) => {
 
     const byItemId = new Map<string, any>();
     const bySku = new Map<string, any>();
+    const norm = (v: any) => String(v || "").trim().toLowerCase();
     for (const p of products) {
       if (p.shopee_item_id != null) byItemId.set(String(p.shopee_item_id), p);
-      if (p.sku) bySku.set(String(p.sku).toLowerCase(), p);
-      if (p.shopee_sku) bySku.set(String(p.shopee_sku).toLowerCase(), p);
+      if (p.sku) bySku.set(norm(p.sku), p);
+      if (p.shopee_sku) bySku.set(norm(p.shopee_sku), p);
     }
     let nextId = products.length ? Math.max(...products.map(p => Number(p.id))) + 1 : 1;
 
@@ -253,21 +254,24 @@ Deno.serve(async (req) => {
       fetched++;
       const itemId = item.item_id != null ? Number(item.item_id) : null;
       const itemName = item.item_name || "";
-      const itemSku = item.item_sku || "";
+      const itemSku = (item.item_sku || "").trim();
+      const normSku = itemSku.toLowerCase();
       const price = extractPrice(item);
       const stock = extractStock(item);
       const imageUrl = extractImageUrl(item);
 
+      // Prioritaskan match berdasarkan shopee_item_id (paling stabil),
+      // fallback ke SKU ternormalisasi (trim + lowercase).
       let existing = null;
       if (itemId != null) existing = byItemId.get(String(itemId)) || null;
-      if (!existing && itemSku) existing = bySku.get(String(itemSku).toLowerCase()) || null;
+      if (!existing && itemSku) existing = bySku.get(normSku) || null;
 
       if (existing) {
         const updates: any = {
           name: itemName || existing.name,
           shopee_item_id: itemId != null ? itemId : existing.shopee_item_id,
           shopee_sku: itemSku || existing.shopee_sku,
-          sku: itemSku || existing.sku || ("SKU" + String(existing.id).padStart(4, "0")),
+          sku: itemSku || existing.sku,
         };
         if (price != null) updates.price = price;
         if (stock != null) updates.stock = stock;
@@ -283,11 +287,15 @@ Deno.serve(async (req) => {
           price: price != null ? price : 0,
           modal: 0,
           stock: stock != null ? stock : 0,
-          sku: itemSku || ("SKU" + String(newId).padStart(4, "0")),
+          sku: itemSku || null,
           shopee_item_id: itemId,
           shopee_sku: itemSku || null,
           imageicon: imageUrl || null,
         });
+        // Daftarkan item ini agar item_id/SKU yang sama dalam run yang sama
+        // tidak di-INSERT dua kali (paginasi/item duplikat di response).
+        if (itemId != null) byItemId.set(String(itemId), { id: newId });
+        if (itemSku) bySku.set(normSku, { id: newId });
         inserted++;
       }
     }
