@@ -29,13 +29,30 @@ const SHOPEE_API_URL = "https://partner.shopeemobile.com/api/v2";
 const REQUEST_DELAY_MS = 100;
 const FETCH_TIMEOUT_MS = 15000;
 
-const ACCOUNTS = {
-  toko_1: {
-    partner_id: Deno.env.get("SHOPEE_PARTNER_ID") || "",
-    partner_key: Deno.env.get("SHOPEE_PARTNER_KEY") || "",
-    shop_id: Deno.env.get("SHOPEE_SHOP_ID") || "",
-  },
-};
+// Daftar toko dibangun dinamis dari marketplace_config (connected).
+// partner_id/partner_key tetap dari env (2 toko = 1 partner akun Shopee).
+async function loadShopeeAccounts() {
+  const partnerId = Deno.env.get("SHOPEE_PARTNER_ID") || "";
+  const partnerKey = Deno.env.get("SHOPEE_PARTNER_KEY") || "";
+  const { data, error } = await supabase
+    .from("marketplace_config")
+    .select("shop_id, shop_name")
+    .eq("platform", "shopee")
+    .eq("connection_status", "connected");
+  if (error) {
+    console.error("loadShopeeAccounts error:", error.message);
+    return [];
+  }
+  return (data || [])
+    .filter(a => a.shop_id)
+    .map(a => ({
+      account: String(a.shop_id),
+      shop_id: String(a.shop_id),
+      shop_name: a.shop_name || null,
+      partner_id: partnerId,
+      partner_key: partnerKey,
+    }));
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
@@ -112,8 +129,7 @@ function isAuthError(text) {
   return lower.includes("access_token") || lower.includes("error_auth") || lower.includes("token_invalid") || lower.includes("token_expired");
 }
 
-async function updateShopeeBatch(accountName, items) {
-  const account = ACCOUNTS[accountName];
+async function updateShopeeBatch(account, items) {
   if (!account || !account.partner_id) return { synced: 0, failed: 0, errors: [] };
 
   const shopId = account.shop_id || "";
@@ -230,6 +246,11 @@ Deno.serve(async (req) => {
     let page = 0;
     const pageSize = 100;
 
+    // Muat daftar toko connected sekali per run
+    const accounts = await loadShopeeAccounts();
+    const accountByShop = {};
+    for (const a of accounts) accountByShop[a.shop_id] = a;
+
     while (true) {
       const { data: mutations, error } = await supabase
         .from("stock_mutations")
@@ -241,74 +262,94 @@ Deno.serve(async (req) => {
       if (error) throw error;
       if (!mutations.length) break;
 
-      const grouped = {};
+      // Dedupe per product_id (pakai qty_after terakhir)
+      const productRows = {};
       for (const m of mutations) {
-        const acc = m.shopee_account || "toko_1";
-        if (!grouped[acc]) grouped[acc] = [];
-        grouped[acc].push(m);
+        const key = m.product_id;
+        if (!productRows[key]) {
+          productRows[key] = {
+            product_id: m.product_id,
+            qty_after: m.qty_after,
+            mutation_ids: [],
+            legacy_item_id: m.shopee_item_id != null ? m.shopee_item_id : null,
+          };
+        }
+        productRows[key].mutation_ids.push(m.id);
+        productRows[key].qty_after = m.qty_after;
+      }
+      const products = Object.values(productRows);
+
+      // Mapping produk -> (shop_id, shopee_item_id) dari product_shopee_mapping
+      const mapByProduct = {};
+      const { data: mappings, error: mapErr } = await supabase
+        .from("product_shopee_mapping")
+        .select("product_id, shop_id, shopee_item_id")
+        .in("product_id", products.map(p => p.product_id));
+      if (mapErr) throw mapErr;
+      for (const mp of mappings || []) {
+        if (!mapByProduct[mp.product_id]) mapByProduct[mp.product_id] = [];
+        mapByProduct[mp.product_id].push(mp);
       }
 
-      for (const [acc, accMutations] of Object.entries(grouped)) {
-        const account = ACCOUNTS[acc];
-        const shopId = account.shop_id || "";
-
-        const productStocks = {};
-        for (const m of accMutations) {
-          const key = m.product_id;
-          if (!productStocks[key]) {
-            productStocks[key] = {
-              shopee_item_id: m.shopee_item_id,
-              shopee_sku: m.shopee_sku || "",
-              product_id: m.product_id,
-              product_name: m.product_name || "",
-              qty_after: m.qty_after,
-              mutation_ids: []
-            };
+      // Bangun daftar item per shop
+      const perShopItems = {};
+      for (const p of products) {
+        const maps = mapByProduct[p.product_id] || [];
+        if (maps.length === 0) {
+          // Fallback toko lama: kirim mutation.shopee_item_id ke shop pertama connected
+          if (accounts.length && p.legacy_item_id != null) {
+            const a = accounts[0];
+            if (!perShopItems[a.shop_id]) perShopItems[a.shop_id] = [];
+            perShopItems[a.shop_id].push({ shopee_item_id: p.legacy_item_id, qty_after: p.qty_after, product_id: p.product_id, mutation_ids: p.mutation_ids });
           }
-          productStocks[key].mutation_ids.push(m.id);
-          productStocks[key].qty_after = m.qty_after;
+          continue;
         }
-
-        const items = Object.values(productStocks);
-        const result = await updateShopeeBatch(acc, items);
-
-        const syncedIds = [];
-        const failedIds = [];
-
-        for (const item of items) {
-          const allIds = item.mutation_ids;
-          if (result.errors.some(e => e.shopee_item_id === item.shopee_item_id)) {
-            failedIds.push(...allIds);
-          } else {
-            syncedIds.push(...allIds);
-          }
+        for (const mp of maps) {
+          if (!perShopItems[mp.shop_id]) perShopItems[mp.shop_id] = [];
+          perShopItems[mp.shop_id].push({ shopee_item_id: mp.shopee_item_id, qty_after: p.qty_after, product_id: p.product_id, mutation_ids: p.mutation_ids });
         }
+      }
 
-        if (syncedIds.length > 0) {
+      // Kirim update_stock per shop
+      const shopResults = {};
+      for (const [sid, items] of Object.entries(perShopItems)) {
+        const account = accountByShop[sid];
+        if (!account) continue;
+        const res = await updateShopeeBatch(account, items);
+        const okMap = {};
+        for (const it of items) okMap[String(it.shopee_item_id)] = true;
+        for (const e of res.errors) { if (e.shopee_item_id != null) okMap[String(e.shopee_item_id)] = false; }
+        shopResults[sid] = okMap;
+        totalFailed += res.failed;
+        syncResults.push({ account: account.account, shop_id: sid, synced: res.synced, failed: res.failed, errors: res.errors });
+      }
+
+      // Tandai synced HANYA jika SEMUA target shop sukses; selain itu biarkan pending (retry)
+      for (const p of products) {
+        const targets = [];
+        const maps = mapByProduct[p.product_id] || [];
+        if (maps.length === 0) {
+          if (accounts.length && p.legacy_item_id != null) targets.push({ shop_id: accounts[0].shop_id, item: p.legacy_item_id });
+        } else {
+          for (const mp of maps) targets.push({ shop_id: mp.shop_id, item: mp.shopee_item_id });
+        }
+        if (targets.length === 0) continue;
+        let allOk = true;
+        for (const t of targets) {
+          const okMap = shopResults[t.shop_id];
+          if (!okMap || okMap[String(t.item)] !== true) { allOk = false; break; }
+        }
+        if (allOk) {
           const { error: updErr } = await supabase
             .from("stock_mutations")
             .update({ sync_status: "synced", shopee_sync_at: new Date().toISOString() })
-            .in("id", syncedIds);
+            .in("id", p.mutation_ids);
           if (updErr) {
             console.error("Failed to update synced stock_mutations:", updErr.message);
           } else {
-            totalSynced += syncedIds.length;
+            totalSynced += p.mutation_ids.length;
           }
         }
-
-        if (failedIds.length > 0) {
-          const { error: updErr } = await supabase
-            .from("stock_mutations")
-            .update({ sync_status: "failed", shopee_sync_at: null })
-            .in("id", failedIds);
-          if (updErr) {
-            console.error("Failed to update failed stock_mutations:", updErr.message);
-          } else {
-            totalFailed += failedIds.length;
-          }
-        }
-
-        syncResults.push({ account: acc, shop_id: shopId, synced: result.synced, failed: result.failed, errors: result.errors });
       }
 
       page++;
