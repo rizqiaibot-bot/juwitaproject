@@ -1,52 +1,23 @@
-# Juwita One — OpenCode Rules
+# AGENTS.md — Juwita (WMS)
 
-## 1. Hemat Token — WAJIB
-- Jangan audit seluruh project untuk task kecil.
-- Baca hanya file/fungsi yang relevan dengan permintaan.
-- Jangan membuka ulang file besar jika bagian yang dibutuhkan sudah diketahui.
-- Jangan mengulang audit, test, atau analisis yang sudah PASS.
-- Jangan mencari informasi yang tidak diperlukan untuk task.
-- Untuk perubahan sederhana, selesaikan dengan perubahan minimum.
+## Aturan Inti
 
-## 2. Scope
-- Kerjakan hanya permintaan user.
-- Jangan menyentuh POS, Gudang, Marketplace, Shopee, database, atau modul lain jika tidak terkait.
-- Jika hanya 1 file yang diperlukan, jangan mengubah file lain.
-- Jangan membuat refactor/perbaikan tambahan yang tidak diminta.
-
-## 3. Workflow
-1. Identifikasi file/fungsi yang langsung terkait.
-2. Baca bagian yang diperlukan saja.
-3. Edit seperlunya.
-4. Lakukan test/validasi yang relevan saja.
-5. Stop setelah selesai.
-
-## 4. Jangan Over-Analyze
-- Jangan membuat rencana panjang untuk task sederhana.
-- Jangan melakukan deep audit kecuali user meminta.
-- Jika blocker ditemukan, laporkan blocker dan STOP.
-- Jangan membuat asumsi jika tidak diperlukan.
-
-## 5. Git & Deploy
-- Jangan commit.
-- Jangan push.
-- Jangan deploy.
-- Jangan migration.
-Kecuali user secara eksplisit memerintahkannya.
-
-## 6. Laporan
-Gunakan laporan singkat:
-- File berubah
-- Perubahan
-- Test
-- Status
-Maksimal 5-8 baris untuk task sederhana.
-
-## 7. Model
-- Gunakan DeepSeek V4 Flash untuk task rutin, UI, edit kecil, grep/search terbatas, bug sederhana, dan validasi ringan.
-- DeepSeek V4 Pro hanya jika task benar-benar membutuhkan reasoning kompleks dan user memintanya/menyetujui.
-- Jangan berpindah ke Pro otomatis hanya karena task sedikit lebih sulit.
-
-## 8. Prinsip Utama
-PERUBAHAN KECIL = CONTEXT KECIL = TOKEN KECIL.
-Jangan membawa seluruh riwayat/project context ke task yang tidak membutuhkannya.
+- 1 produk Juwita = 1 product_id.
+- 1 produk = 1 SKU + 1 barcode + 1 stok pusat.
+- products.stock = stok pusat.
+- POS/offline memakai stok pusat.
+- Shopee 1 & Shopee 2 memakai produk pusat yang sama.
+- product_shopee_mapping = mapping product_id → listing Shopee per shop_id.
+- shopee_item_id adalah ID listing, bukan ID produk pusat.
+- stock_mutations = event perubahan/sinkronisasi stok.
+- Shopee stock sync hanya MENGIRIM qty_after, tidak mengurangi products.stock.
+- 1 order Shopee hanya boleh mengurangi stok pusat 1 kali.
+- Jangan membuat product baru hanya karena listing Shopee berbeda.
+- Jangan menghapus/merge produk tanpa audit referensi transaksi.
+- Audit/read-only harus benar-benar tanpa perubahan data.
+- Jangan migration/db push tanpa instruksi eksplisit.
+- Jangan commit/push/deploy tanpa instruksi eksplisit.
+- Jangan mengubah POS, Gudang, Order, atau stok saat mengerjakan fitur Shopee kecuali diminta.
+- Perubahan harus minimal dan fokus pada file yang diperlukan.
+- Hindari membaca seluruh repository; cari file yang relevan saja.
+- Gunakan output ringkas untuk menghemat token.
