@@ -178,7 +178,30 @@ Deno.serve(async (req) => {
   try {
     const partnerId = Deno.env.get("SHOPEE_PARTNER_ID") || "";
     const partnerKey = Deno.env.get("SHOPEE_PARTNER_KEY") || "";
-    const shopId = Deno.env.get("SHOPEE_SHOP_ID") || "724153261";
+
+    const { shop_id, action } = await req.json();
+    const shopId = String(shop_id || "").trim();
+
+    // Allowlist action: undefined (legacy) / "pull" / "pull_exact" → jalur pull/write.
+    // "dry_run" → read-only. Lainnya → 400.
+    const writeAction = action === undefined || action === null || action === "pull" || action === "pull_exact";
+    if (!writeAction && action !== "dry_run") {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "action tidak dikenal. Gunakan: dry_run, pull, pull_exact, atau kosongkan untuk pull.",
+        action: action || null,
+      }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders() }
+      });
+    }
+
+    if (!shopId) {
+      return new Response(JSON.stringify({ success: false, error: "shop_id wajib diisi di body request" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders() }
+      });
+    }
 
     if (!partnerId || !partnerKey) {
       return new Response(JSON.stringify({ success: false, error: "Credential Shopee belum dikonfigurasi" }), {
@@ -188,10 +211,26 @@ Deno.serve(async (req) => {
     }
 
     let { access_token, refresh_token } = await loadToken(shopId);
-    if (!access_token && refresh_token) {
+
+    // dry_run: TIDAK boleh menulis apa pun → jangan auto-refresh token (refreshToken melakukan upsert)
+    if (action === "dry_run") {
+      if (!access_token) {
+        return new Response(JSON.stringify({ success: false, error: "Access token tidak tersedia. Silakan reconnect OAuth Shopee." }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders() }
+        });
+      }
+    } else if (!access_token && refresh_token) {
       const r = await refreshToken(partnerId, partnerKey, shopId, refresh_token);
       if (r.access_token) access_token = r.access_token;
+      if (!access_token) {
+        return new Response(JSON.stringify({ success: false, error: "Access token tidak tersedia. Silakan reconnect OAuth Shopee." }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders() }
+        });
+      }
     }
+
     if (!access_token) {
       return new Response(JSON.stringify({ success: false, error: "Access token tidak tersedia. Silakan reconnect OAuth Shopee." }), {
         status: 200,
@@ -204,7 +243,8 @@ Deno.serve(async (req) => {
     try {
       itemIds = await collectItemIds(partnerId, partnerKey, shopId, access_token);
     } catch (err: any) {
-      if (isAuthError(err.message) && refresh_token) {
+      // dry_run: jangan auto-refresh (refreshToken menulis DB) → biarkan error keluar
+      if (action !== "dry_run" && isAuthError(err.message) && refresh_token) {
         const r = await refreshToken(partnerId, partnerKey, shopId, refresh_token);
         if (r.access_token) {
           access_token = r.access_token;
@@ -229,95 +269,233 @@ Deno.serve(async (req) => {
       for (const item of itemList) allItems.push(item);
     }
 
-    // 3. Load produk existing untuk mapping + generate id
+    // ============================================================
+    // ACTION: dry_run — simulasi matching TANPA menulis database
+    // ============================================================
+    if (action === "dry_run") {
+      const { data: dryProducts } = await supabase
+        .from("products")
+        .select("id, sku, shopee_sku, barcode, name");
+      const dryProductRows = dryProducts || [];
+
+      const norm = (v: any) => String(v || "").trim().toLowerCase();
+      const normName = (v: any) => String(v || "").toLowerCase().replace(/[^a-z0-9]+/g, "").trim();
+      const bySku = new Map<string, any>();
+      const byShopeeSku = new Map<string, any>();
+      const byBarcode = new Map<string, any>();
+      const byName = new Map<string, any[]>();
+      for (const p of dryProductRows) {
+        if (p.sku) bySku.set(norm(p.sku), p);
+        if (p.shopee_sku) byShopeeSku.set(norm(p.shopee_sku), p);
+        if (p.barcode) byBarcode.set(norm(p.barcode), p);
+        const key = normName(p.name);
+        if (key) {
+          if (!byName.has(key)) byName.set(key, []);
+          byName.get(key)!.push(p);
+        }
+      }
+
+      let matchedBySku = 0, matchedByShopeeSku = 0, unmatched = 0, multiple = 0;
+      let exact = 0, possible = 0, noMatch = 0, ambiguous = 0;
+      const possibleExamples: any[] = [];
+      const seenItemIds = new Set<string>();
+
+      const classify = (item: any) => {
+        const itemId = item.item_id != null ? Number(item.item_id) : null;
+        const itemSku = (item.item_sku || "").trim();
+        const normSku = itemSku.toLowerCase();
+        const itemBarcode = (item.barcode || "").trim();
+        const itemName = item.item_name || "";
+
+        // 1) SKU / shopee_sku pusat → EXACT
+        let cand: any = null;
+        if (normSku) {
+          cand = bySku.get(normSku) || byShopeeSku.get(normSku) || null;
+        }
+        if (cand) return { cls: "EXACT", cand, reason: "item_sku cocok dengan products.sku/shopee_sku" };
+
+        // 2) barcode pusat → EXACT (hanya jika barcode listing tersedia)
+        if (itemBarcode) {
+          cand = byBarcode.get(norm(itemBarcode)) || null;
+          if (cand) return { cls: "EXACT", cand, reason: "barcode cocok dengan products.barcode" };
+        }
+
+        // 3) nama ternormalisasi (case/whitespace/punctuation diabaikan)
+        const nameKey = normName(itemName);
+        if (nameKey) {
+          const nameCands = byName.get(nameKey) || [];
+          if (nameCands.length === 1) {
+            return { cls: "POSSIBLE", cand: nameCands[0], reason: "nama cocok persis setelah normalisasi" };
+          }
+          if (nameCands.length > 1) {
+            return { cls: "POSSIBLE", cand: nameCands[0], reason: "nama cocok tapi multi-kandidat (ambigu)", ambiguous: true };
+          }
+        }
+
+        return { cls: "NO_MATCH", cand: null, reason: "tidak ada kandidat barcode/SKU/nama" };
+      };
+
+      for (const item of allItems) {
+        const itemId = item.item_id != null ? Number(item.item_id) : null;
+        if (itemId != null && seenItemIds.has(String(itemId))) {
+          multiple++;
+          continue;
+        }
+        if (itemId != null) seenItemIds.add(String(itemId));
+
+        const itemSku = (item.item_sku || "").trim();
+        const normSku = itemSku.toLowerCase();
+
+        if (normSku) {
+          if (bySku.has(normSku)) {
+            matchedBySku++;
+            continue;
+          }
+          if (byShopeeSku.has(normSku)) {
+            matchedByShopeeSku++;
+            continue;
+          }
+        }
+
+        unmatched++;
+        const res = classify(item);
+        if (res.cls === "EXACT") exact++;
+        else if (res.cls === "POSSIBLE") {
+          possible++;
+          if (res.ambiguous) ambiguous++;
+          if (possibleExamples.length < 30) {
+            possibleExamples.push({
+              shopee_item_id: item.item_id != null ? Number(item.item_id) : null,
+              item_sku: itemSku || null,
+              item_name: item.item_name || "",
+              kandidat_product_id: res.cand ? Number(res.cand.id) : null,
+              kandidat_sku: res.cand ? (res.cand.sku || res.cand.shopee_sku || null) : null,
+              alasan: res.reason,
+            });
+          }
+        }
+        else noMatch++;
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        dry_run: true,
+        shop_id: shopId,
+        total_listing: allItems.length,
+        matched_by_sku: matchedBySku,
+        matched_by_shopee_sku: matchedByShopeeSku,
+        unmatched,
+        multiple_match: multiple,
+        classification: { exact, possible, ambiguous, no_match: noMatch },
+        possible_examples: possibleExamples,
+      }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders() }
+      });
+    }
+
+    // 3. Load produk pusat (master) + mapping Shopee yang sudah ada utk shop ini
     const { data: existingProducts } = await supabase
       .from("products")
       .select("id, sku, shopee_sku, shopee_item_id");
     const products = existingProducts || [];
 
-    const byItemId = new Map<string, any>();
-    const bySku = new Map<string, any>();
+    const { data: existingMappings } = await supabase
+      .from("product_shopee_mapping")
+      .select("product_id, shop_id, shopee_item_id, shopee_sku")
+      .eq("shop_id", shopId);
+    const mappingRows = existingMappings || [];
+
     const norm = (v: any) => String(v || "").trim().toLowerCase();
+
+    // Indeks produk pusat berdasarkan identitas yang BENAR-BENAR tersedia:
+    // products.sku dan products.shopee_sku (SKU pusat = identitas produk).
+    const bySku = new Map<string, any>();
     for (const p of products) {
-      if (p.shopee_item_id != null) byItemId.set(String(p.shopee_item_id), p);
       if (p.sku) bySku.set(norm(p.sku), p);
       if (p.shopee_sku) bySku.set(norm(p.shopee_sku), p);
     }
-    let nextId = products.length ? Math.max(...products.map(p => Number(p.id))) + 1 : 1;
 
-    const toInsert: any[] = [];
-    const toUpdate: { id: number; updates: any }[] = [];
-    let fetched = 0, inserted = 0, updated = 0, skipped = 0, failed = 0;
+    // Indeks mapping utk shop ini: by shopee_item_id (anti duplikat pada re-pull)
+    // dan by product_id (agar satu produk tidak di-map dua kali dalam shop yang sama).
+    const mapByItemId = new Map<string, any>();
+    const mapByProductId = new Map<string, any>();
+    for (const m of mappingRows) {
+      if (m.shopee_item_id != null) mapByItemId.set(String(m.shopee_item_id), m);
+      if (m.product_id != null) mapByProductId.set(String(m.product_id), m);
+    }
 
-    // 4. Klasifikasi insert vs update (item_id dulu, lalu SKU)
+    const toUpsert: any[] = [];
+    let fetched = 0, matched = 0, unmatched = 0, failed = 0;
+    const unmatchedItems: any[] = [];
+
+    // 4. Cocokkan setiap listing Shopee ke produk pusat (hanya via SKU pusat).
+    //    Item yang tidak cocok DILEWATI (tidak dibuatkan produk baru).
     for (const item of allItems) {
       fetched++;
       const itemId = item.item_id != null ? Number(item.item_id) : null;
-      const itemName = item.item_name || "";
       const itemSku = (item.item_sku || "").trim();
       const normSku = itemSku.toLowerCase();
-      const price = extractPrice(item);
-      const stock = extractStock(item);
-      const imageUrl = extractImageUrl(item);
 
-      // Prioritaskan match berdasarkan shopee_item_id (paling stabil),
-      // fallback ke SKU ternormalisasi (trim + lowercase).
-      let existing = null;
-      if (itemId != null) existing = byItemId.get(String(itemId)) || null;
-      if (!existing && itemSku) existing = bySku.get(normSku) || null;
+      // 4a. Jika mapping sudah ada utk item ini di shop ini → aman, skip (anti duplikat)
+      if (itemId != null && mapByItemId.has(String(itemId))) {
+        matched++;
+        continue;
+      }
 
-      if (existing) {
+      // 4b. Cocokkan ke produk pusat via SKU (produk pusat = master SKU/barcode)
+      let product = null;
+      if (normSku) product = bySku.get(normSku) || null;
+
+      if (!product) {
+        unmatched++;
+        unmatchedItems.push({ shopee_item_id: itemId, item_sku: itemSku || null, item_name: item.item_name || "" });
+        continue;
+      }
+
+      const productId = Number(product.id);
+
+      // 4c. Jika produk pusat sudah ter-map di shop ini → update mapping tsb
+      //     (jangan buat duplikat; UNIQUE (product_id, shop_id)).
+      const existingByProduct = mapByProductId.get(String(productId));
+      if (existingByProduct) {
         const updates: any = {
-          name: itemName || existing.name,
-          shopee_item_id: itemId != null ? itemId : existing.shopee_item_id,
-          shopee_sku: itemSku || existing.shopee_sku,
-          sku: itemSku || existing.sku,
-        };
-        if (price != null) updates.price = price;
-        if (stock != null) updates.stock = stock;
-        if (imageUrl) updates.imageicon = imageUrl;
-        toUpdate.push({ id: Number(existing.id), updates });
-        updated++;
-      } else {
-        const newId = nextId++;
-        toInsert.push({
-          id: newId,
-          name: itemName,
-          category: "lainnya",
-          price: price != null ? price : 0,
-          modal: 0,
-          stock: stock != null ? stock : 0,
-          sku: itemSku || null,
           shopee_item_id: itemId,
           shopee_sku: itemSku || null,
-          imageicon: imageUrl || null,
-        });
-        // Daftarkan item ini agar item_id/SKU yang sama dalam run yang sama
-        // tidak di-INSERT dua kali (paginasi/item duplikat di response).
-        if (itemId != null) byItemId.set(String(itemId), { id: newId });
-        if (itemSku) bySku.set(normSku, { id: newId });
-        inserted++;
+          updated_at: new Date().toISOString(),
+        };
+        const { error } = await supabase
+          .from("product_shopee_mapping")
+          .update(updates)
+          .eq("id", existingByProduct.id);
+        if (error) failed++;
+        mapByItemId.set(String(itemId), existingByProduct);
+        matched++;
+        continue;
       }
+
+      // 4d. Mapping baru utk shop ini
+      const newRow = {
+        product_id: productId,
+        shop_id: shopId,
+        shopee_item_id: itemId,
+        shopee_sku: itemSku || null,
+      };
+      toUpsert.push(newRow);
+      mapByItemId.set(String(itemId), { id: null, product_id: productId });
+      mapByProductId.set(String(productId), { id: null, product_id: productId });
+      matched++;
     }
 
-    // 5. Batch insert (500 per batch)
-    const insertBatchSize = 500;
-    for (let i = 0; i < toInsert.length; i += insertBatchSize) {
-      const { error } = await supabase.from("products").insert(toInsert.slice(i, i + insertBatchSize));
+    // 5. Upsert mapping — aman terhadap UNIQUE (shop_id, shopee_item_id) & (product_id, shop_id)
+    const insertBatchSize = 100;
+    for (let i = 0; i < toUpsert.length; i += insertBatchSize) {
+      const batch = toUpsert.slice(i, i + insertBatchSize);
+      const { error } = await supabase
+        .from("product_shopee_mapping")
+        .upsert(batch, { onConflict: "shop_id,shopee_item_id" });
       if (error) {
-        console.error("Batch insert error:", error.message);
-        failed += toInsert.slice(i, i + insertBatchSize).length;
-        inserted -= toInsert.slice(i, i + insertBatchSize).length;
-      }
-    }
-
-    // 6. Update individual (sedikit)
-    for (const u of toUpdate) {
-      const { error } = await supabase.from("products").update(u.updates).eq("id", u.id);
-      if (error) {
-        console.error("Update error:", error.message);
-        failed++;
-        updated--;
+        console.error("Mapping upsert error:", error.message);
+        failed += batch.length;
       }
     }
 
@@ -333,7 +511,7 @@ Deno.serve(async (req) => {
         triggered_by: "admin",
         action_source: "admin_dashboard",
         duration_ms: duration,
-        metadata: { fetched, inserted, updated, skipped, failed }
+        metadata: { fetched, matched, unmatched, failed, unmatched_items: unmatchedItems.slice(0, 20) }
       });
     } catch (logErr: any) {
       console.error("Activity log insert failed:", logErr.message);
@@ -342,10 +520,10 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       success: true,
       fetched,
-      inserted,
-      updated,
-      skipped,
-      failed
+      matched,
+      unmatched,
+      failed,
+      unmatched_items: unmatchedItems.slice(0, 50)
     }), {
       headers: { "Content-Type": "application/json", ...corsHeaders() }
     });
