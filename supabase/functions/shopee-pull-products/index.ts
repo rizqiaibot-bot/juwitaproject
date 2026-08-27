@@ -179,16 +179,16 @@ Deno.serve(async (req) => {
     const partnerId = Deno.env.get("SHOPEE_PARTNER_ID") || "";
     const partnerKey = Deno.env.get("SHOPEE_PARTNER_KEY") || "";
 
-    const { shop_id, action } = await req.json();
+    const { shop_id, action, pairs } = await req.json();
     const shopId = String(shop_id || "").trim();
 
-    // Allowlist action: undefined (legacy) / "pull" / "pull_exact" → jalur pull/write.
+    // Allowlist action: undefined (legacy) / "pull" / "pull_exact" / "apply_mapping" → jalur write.
     // "dry_run" → read-only. Lainnya → 400.
-    const writeAction = action === undefined || action === null || action === "pull" || action === "pull_exact";
+    const writeAction = action === undefined || action === null || action === "pull" || action === "pull_exact" || action === "apply_mapping";
     if (!writeAction && action !== "dry_run") {
       return new Response(JSON.stringify({
         success: false,
-        error: "action tidak dikenal. Gunakan: dry_run, pull, pull_exact, atau kosongkan untuk pull.",
+        error: "action tidak dikenal. Gunakan: dry_run, pull, pull_exact, apply_mapping, atau kosongkan untuk pull.",
         action: action || null,
       }), {
         status: 400,
@@ -199,6 +199,122 @@ Deno.serve(async (req) => {
     if (!shopId) {
       return new Response(JSON.stringify({ success: false, error: "shop_id wajib diisi di body request" }), {
         status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders() }
+      });
+    }
+
+    // ============================================================
+    // ACTION: apply_mapping — tulis mapping eksplisit dari body (TANPA matching)
+    // Khusus Shopee 2 (1214362884). Tidak menyentuh products/stock/mapping lain.
+    // ============================================================
+    if (action === "apply_mapping") {
+      if (shopId !== "1214362884") {
+        return new Response(JSON.stringify({
+          success: false,
+          error: "apply_mapping hanya diizinkan untuk shop_id 1214362884",
+          shop_id: shopId,
+        }), {
+          status: 403,
+          headers: { "Content-Type": "application/json", ...corsHeaders() }
+        });
+      }
+
+      if (!Array.isArray(pairs) || pairs.length === 0) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: "pairs wajib berupa array non-kosong di body request",
+        }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders() }
+        });
+      }
+
+      // Whitelist 30 pasangan hasil validasi READY_TO_MAP (dikunci per shopee_item_id)
+      const ALLOWED_PAIRS: Record<string, { product_id: number; shopee_item_id: number; shopee_sku: string | null }> = {
+        "40652514801": { product_id: 7, shopee_item_id: 40652514801, shopee_sku: "FROZEN FOOD" },
+        "40952105247": { product_id: 46, shopee_item_id: 40952105247, shopee_sku: "FROZEN FOOD" },
+        "49562529052": { product_id: 53, shopee_item_id: 49562529052, shopee_sku: "kentang goreng" },
+        "43254403980": { product_id: 126, shopee_item_id: 43254403980, shopee_sku: "BAKSO" },
+        "47011878052": { product_id: 297, shopee_item_id: 47011878052, shopee_sku: "sosis bakar" },
+        "57256637972": { product_id: 402, shopee_item_id: 57256637972, shopee_sku: "otak otak ikan" },
+        "47805429752": { product_id: 545, shopee_item_id: 47805429752, shopee_sku: "kornet ayam" },
+        "44267944033": { product_id: 552, shopee_item_id: 44267944033, shopee_sku: "BAWANG BOMBAY" },
+        "43801984831": { product_id: 662, shopee_item_id: 43801984831, shopee_sku: "Minyak Goreng" },
+        "52501958107": { product_id: 739, shopee_item_id: 52501958107, shopee_sku: "BASRENG" },
+        "52001081114": { product_id: 749, shopee_item_id: 52001081114, shopee_sku: "otak otak ikan" },
+        "42117956089": { product_id: 932, shopee_item_id: 42117956089, shopee_sku: "mitraKU" },
+        "41302266555": { product_id: 952, shopee_item_id: 41302266555, shopee_sku: "FROZEN FOOD" },
+        "44452089853": { product_id: 962, shopee_item_id: 44452089853, shopee_sku: "FROZEN FOOD" },
+        "27486832240": { product_id: 1215, shopee_item_id: 27486832240, shopee_sku: "FROZEN FOOD" },
+        "43052397063": { product_id: 1269, shopee_item_id: 43052397063, shopee_sku: "SOSIS" },
+        "42652388318": { product_id: 1279, shopee_item_id: 42652388318, shopee_sku: "FROZEN FOOD" },
+        "42670629890": { product_id: 1313, shopee_item_id: 42670629890, shopee_sku: "saus euro gourmet" },
+        "43501563231": { product_id: 1318, shopee_item_id: 43501563231, shopee_sku: "MINYAK GORENG" },
+        "42102161683": { product_id: 1334, shopee_item_id: 42102161683, shopee_sku: "FROZEN FOOD" },
+        "42751554351": { product_id: 1364, shopee_item_id: 42751554351, shopee_sku: "MINYAK GORENG" },
+        "42452088632": { product_id: 1369, shopee_item_id: 42452088632, shopee_sku: "SOSIS" },
+        "29842321893": { product_id: 1374, shopee_item_id: 29842321893, shopee_sku: "minyak goreng" },
+        "43101868973": { product_id: 1399, shopee_item_id: 43101868973, shopee_sku: "Saus" },
+        "40351806510": { product_id: 1417, shopee_item_id: 40351806510, shopee_sku: "FROZEN FOOD" },
+        "42801868663": { product_id: 1423, shopee_item_id: 42801868663, shopee_sku: "Saus" },
+        "43251859040": { product_id: 1424, shopee_item_id: 43251859040, shopee_sku: "Saus" },
+        "43702549828": { product_id: 1441, shopee_item_id: 43702549828, shopee_sku: "FROZEN FOOD" },
+        "41371955340": { product_id: 1472, shopee_item_id: 41371955340, shopee_sku: "minyak goreng" },
+        "42352261821": { product_id: 1586, shopee_item_id: 42352261821, shopee_sku: "FROZEN FOOD" },
+      };
+
+      const seen = new Set<string>();
+      const toUpsert: any[] = [];
+      const rejected: any[] = [];
+      for (const p of pairs) {
+        const productId = Number(p?.product_id);
+        const itemId = Number(p?.shopee_item_id);
+        if (!Number.isInteger(productId) || !Number.isInteger(itemId)) {
+          rejected.push({ product_id: p?.product_id ?? null, shopee_item_id: p?.shopee_item_id ?? null, reason: "invalid value" });
+          continue;
+        }
+        const allowed = ALLOWED_PAIRS[String(itemId)];
+        if (!allowed || allowed.product_id !== productId) {
+          rejected.push({ product_id: productId, shopee_item_id: itemId, reason: "pair tidak diizinkan di whitelist" });
+          continue;
+        }
+        const key = `${productId}|${itemId}`;
+        if (seen.has(key)) {
+          rejected.push({ product_id: productId, shopee_item_id: itemId, reason: "duplicate pair dalam body" });
+          continue;
+        }
+        seen.add(key);
+        toUpsert.push({
+          product_id: productId,
+          shop_id: shopId,
+          shopee_item_id: itemId,
+          shopee_sku: allowed.shopee_sku ?? null,
+        });
+      }
+
+      // Upsert — aman terhadap UNIQUE (shop_id, shopee_item_id) & (product_id, shop_id)
+      let failed = 0;
+      const batchSize = 50;
+      for (let i = 0; i < toUpsert.length; i += batchSize) {
+        const batch = toUpsert.slice(i, i + batchSize);
+        const { error } = await supabase
+          .from("product_shopee_mapping")
+          .upsert(batch, { onConflict: "shop_id,shopee_item_id" });
+        if (error) {
+          console.error("apply_mapping upsert error:", error.message);
+          failed += batch.length;
+        }
+      }
+
+      return new Response(JSON.stringify({
+        success: failed === 0,
+        action: "apply_mapping",
+        shop_id: shopId,
+        requested: pairs.length,
+        upserted: toUpsert.length,
+        failed,
+        rejected,
+      }), {
         headers: { "Content-Type": "application/json", ...corsHeaders() }
       });
     }
@@ -297,8 +413,23 @@ Deno.serve(async (req) => {
 
       let matchedBySku = 0, matchedByShopeeSku = 0, unmatched = 0, multiple = 0;
       let exact = 0, possible = 0, noMatch = 0, ambiguous = 0;
+      let conflictCount = 0;
       const possibleExamples: any[] = [];
+      const conflicts: any[] = [];
       const seenItemIds = new Set<string>();
+
+      // Mapping Shopee yang SUDAH ada utk shop ini → dasar deteksi bentrokan
+      const { data: dryMappings } = await supabase
+        .from("product_shopee_mapping")
+        .select("product_id, shop_id, shopee_item_id, shopee_sku")
+        .eq("shop_id", shopId);
+      const dryMappingRows = dryMappings || [];
+      const mapByProductId = new Map<string, any>();
+      const mapByItemId = new Map<string, any>();
+      for (const m of dryMappingRows) {
+        if (m.product_id != null) mapByProductId.set(String(m.product_id), m);
+        if (m.shopee_item_id != null) mapByItemId.set(String(m.shopee_item_id), m);
+      }
 
       const classify = (item: any) => {
         const itemId = item.item_id != null ? Number(item.item_id) : null;
@@ -346,15 +477,46 @@ Deno.serve(async (req) => {
         const itemSku = (item.item_sku || "").trim();
         const normSku = itemSku.toLowerCase();
 
+        let matchedProduct: any = null;
+        let matchedViaShopeeSku = false;
         if (normSku) {
           if (bySku.has(normSku)) {
-            matchedBySku++;
+            matchedProduct = bySku.get(normSku);
+          } else if (byShopeeSku.has(normSku)) {
+            matchedProduct = byShopeeSku.get(normSku);
+            matchedViaShopeeSku = true;
+          }
+        }
+
+        if (matchedProduct) {
+          const productId = Number(matchedProduct.id);
+
+          // BENTROKAN: SKU cocok, tapi product_id ini SUDAH punya listing Shopee 2
+          // (existing mapping). UNIQUE (product_id, shop_id) → listing ini tidak akan masuk.
+          const existing = mapByItemId.has(String(itemId))
+            ? mapByItemId.get(String(itemId))
+            : mapByProductId.get(String(productId)) || null;
+
+          const existingItemId = existing && existing.shopee_item_id != null ? Number(existing.shopee_item_id) : null;
+
+          // Self-conflict (existing == conflicting) = listing yang SUDAH ter-mapping →
+          // BUKAN conflict, diabaikan.
+          if (existing && existingItemId !== itemId) {
+            conflictCount++;
+            conflicts.push({
+              product_id: productId,
+              product_sku: matchedProduct.sku || matchedProduct.shopee_sku || null,
+              existing_shopee_item_id: existingItemId,
+              conflicting_shopee_item_id: itemId,
+              conflicting_item_sku: itemSku || null,
+              conflicting_item_name: item.item_name || "",
+            });
             continue;
           }
-          if (byShopeeSku.has(normSku)) {
-            matchedByShopeeSku++;
-            continue;
-          }
+
+          if (matchedViaShopeeSku) matchedByShopeeSku++;
+          else matchedBySku++;
+          continue;
         }
 
         unmatched++;
@@ -388,6 +550,8 @@ Deno.serve(async (req) => {
         multiple_match: multiple,
         classification: { exact, possible, ambiguous, no_match: noMatch },
         possible_examples: possibleExamples,
+        conflict_count: conflictCount,
+        conflicts: conflicts.slice(0, 300),
       }), {
         headers: { "Content-Type": "application/json", ...corsHeaders() }
       });
