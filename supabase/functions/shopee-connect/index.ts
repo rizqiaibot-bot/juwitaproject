@@ -227,17 +227,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      const expectedShopId = Deno.env.get("SHOPEE_SHOP_ID") || "724153261";
-      if (String(shop_id) !== expectedShopId) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: "Shop ID tidak sesuai dengan toko yang di-authorize."
-        }), {
-          status: 200,
-          headers: { "Content-Type": "application/json", ...corsHeaders() }
-        });
-      }
-
       const exchange = await exchangeToken(partnerId, partnerKey, code, shop_id);
       if (!exchange.success) {
         return new Response(JSON.stringify({
@@ -291,7 +280,7 @@ Deno.serve(async (req) => {
       } else {
         await supabase.from("marketplace_config").insert({
           platform: "shopee",
-          account_label: "toko_1",
+          account_label: "shopee_" + exchange.shop_id,
           shop_id: exchange.shop_id,
           shop_name: verify.shop_name,
           is_active: true,
@@ -391,7 +380,7 @@ Deno.serve(async (req) => {
           .from("marketplace_config")
           .insert({
             platform: "shopee",
-            account_label: "toko_1",
+            account_label: "shopee_" + shop_id,
             shop_id,
             shop_name: result.shop_name,
             is_active: true,
@@ -451,7 +440,7 @@ Deno.serve(async (req) => {
           .from("marketplace_config")
           .insert({
             platform: "shopee",
-            account_label: "toko_1",
+            account_label: "shopee_" + shop_id,
             shop_id,
             is_active: false,
             connection_status: "error"
