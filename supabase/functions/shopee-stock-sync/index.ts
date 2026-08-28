@@ -225,6 +225,31 @@ Deno.serve(async (req) => {
 
   try {
     // ============================================================
+    // MODE TEST (sync_test) — batasi hanya ke product_id yang diizinkan
+    // ============================================================
+    let testProductIds: number[] | null = null;
+    try {
+      const body = await req.json();
+      const bodyAction = body && body.action;
+      const bodyProductIds = body && Array.isArray(body.product_ids) ? body.product_ids : [];
+      if (bodyAction === "sync_test") {
+        const onlyAllowed = bodyProductIds.every((v: any) => Number(v) === 6);
+        if (bodyProductIds.length > 0 && onlyAllowed) {
+          testProductIds = [6];
+        } else {
+          return new Response(JSON.stringify({
+            message: "sync_test hanya mengizinkan product_ids = [6]",
+          }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", ...corsHeaders() }
+          });
+        }
+      }
+    } catch {
+      // body bukan JSON → abaikan, jalankan mode normal (untuk pemicu cron)
+    }
+
+    // ============================================================
     // ADVISORY LOCK — cegah concurrent execution
     // ============================================================
     const lockResult = await supabase.rpc("sync_lock_acquire");
@@ -252,10 +277,17 @@ Deno.serve(async (req) => {
     for (const a of accounts) accountByShop[a.shop_id] = a;
 
     while (true) {
-      const { data: mutations, error } = await supabase
+      let query = supabase
         .from("stock_mutations")
         .select("*")
-        .eq("sync_status", "pending")
+        .eq("sync_status", "pending");
+
+      // sync_test: HANYA proses product_id yang diizinkan
+      if (testProductIds) {
+        query = query.in("product_id", testProductIds);
+      }
+
+      const { data: mutations, error } = await query
         .order("created_at", { ascending: true })
         .range(page * pageSize, (page + 1) * pageSize - 1);
 
