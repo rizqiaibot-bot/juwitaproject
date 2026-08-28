@@ -181,8 +181,17 @@ async function updateShopeeBatch(account, items) {
             refreshed = true;
             const r = await refreshToken(account, shopId, refresh_token);
             if (r.access_token) {
-              const retryParams = new URLSearchParams(params);
-              retryParams.set("access_token", r.access_token);
+              // Signature update_stock mencakup access_token → hitung ulang timestamp+sign
+              // dengan access_token BARU agar tidak "Wrong sign" pada retry.
+              const retryTs = Math.floor(Date.now() / 1000);
+              const retrySign = await signShopee(account, path, retryTs, r.access_token, shopId);
+              const retryParams = new URLSearchParams({
+                partner_id: account.partner_id,
+                timestamp: String(retryTs),
+                sign: retrySign,
+                shop_id: shopId,
+                access_token: r.access_token,
+              });
               retryParams.set("item_id", String(item.shopee_item_id));
               retryParams.set("stock_list", JSON.stringify([{ model_id: 0, normal_stock: item.qty_after }]));
               const c2 = new AbortController();
@@ -190,7 +199,11 @@ async function updateShopeeBatch(account, items) {
               const res2 = await fetch(`${SHOPEE_API_URL}/product/update_stock?${retryParams}`, { method: "POST", signal: c2.signal });
               clearTimeout(t2);
               if (res2.ok) { synced++; continue; }
-              errors.push({ shopee_item_id: item.shopee_item_id, error: "retry after refresh failed" });
+              // Log retry aman: status + ringkasan error, TANPA token/signature.
+              const err2 = await res2.text();
+              const safeErr2 = (err2 || "").slice(0, 300);
+              console.error(`update_stock retry failed shop=${shopId} item=${item.shopee_item_id} status=${res2.status} body=${safeErr2}`);
+              errors.push({ shopee_item_id: item.shopee_item_id, error: `retry after refresh failed (status ${res2.status}): ${safeErr2}` });
               failed++;
               continue;
             }
