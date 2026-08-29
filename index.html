@@ -1880,8 +1880,8 @@
                     <select id="channelFilter" class="filter-control">
                         <option value="all">Semua Channel</option>
                         <option value="POS1">POS 1</option>
-                        <option value="Shopee1">Shopee 1</option>
-                        <option value="Shopee2">Shopee 2</option>
+                        <option value="Shopee1">Shopee 1 — Juwita Fresh and Frozen</option>
+                        <option value="Shopee2">Shopee 2 — juwita frozen food</option>
                         <option value="WhatsApp">WhatsApp (Internal)</option>
                     </select>
                 </div>
@@ -3035,7 +3035,8 @@
                 if (pRes.data && pRes.data.length > 0) products = pRes.data;
                 if (oRes.data && oRes.data.length > 0) ordersData = oRes.data.map(o => ({
                     orderId: o.orderid, date: o.date, channel: o.channel, customer: o.customer,
-                    total: o.total, payStatus: o.paystatus, wmsStatus: o.wmsstatus, courier: o.courier, resi: o.resi
+                    total: o.total, payStatus: o.paystatus, wmsStatus: o.wmsstatus, courier: o.courier, resi: o.resi,
+                    shop_id: o.shop_id || null
                 }));
                 if (kRes.data && kRes.data.length > 0) karyawanData = kRes.data;
                 if (wRecRes.data && wRecRes.data.length > 0) warehouseReceiving = wRecRes.data;
@@ -3450,14 +3451,21 @@
             let filtered = ordersData;
             if (filterStatus !== "all") filtered = filtered.filter(o => o.payStatus === filterStatus);
             if (filterChannel !== "all") {
-                // Value internal channel dipertahankan:
-                //   POS1 → "POS1", Shopee1/Shopee2 → "Shopee", WhatsApp → "WhatsApp"
-                let channelValue;
-                if (filterChannel === "POS1") channelValue = "POS1";
-                else if (filterChannel === "Shopee1" || filterChannel === "Shopee2") channelValue = "Shopee";
-                else if (filterChannel === "WhatsApp") channelValue = "WhatsApp";
-                else channelValue = filterChannel;
-                if (channelValue) filtered = filtered.filter(o => o.channel === channelValue);
+                // Filter berdasarkan channel DAN shop_id (untuk Shopee).
+                // Shopee 1 = channel "Shopee" + shop_id "724153261"
+                // Shopee 2 = channel "Shopee" + shop_id "1214362884"
+                // Transaksi Shopee lama tanpa shop_id tetap tampil di "Semua Channel".
+                if (filterChannel === "POS1") {
+                    filtered = filtered.filter(o => o.channel === "POS1");
+                } else if (filterChannel === "Shopee1") {
+                    filtered = filtered.filter(o => o.channel === "Shopee" && String(o.shop_id || "") === "724153261");
+                } else if (filterChannel === "Shopee2") {
+                    filtered = filtered.filter(o => o.channel === "Shopee" && String(o.shop_id || "") === "1214362884");
+                } else if (filterChannel === "WhatsApp") {
+                    filtered = filtered.filter(o => o.channel === "WhatsApp");
+                } else {
+                    filtered = filtered.filter(o => o.channel === filterChannel);
+                }
             }
             if (filterSearchText) filtered = filtered.filter(o =>
                 o.customer.toLowerCase().includes(filterSearchText.toLowerCase()) ||

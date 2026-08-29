@@ -28,14 +28,42 @@ const PULL_HOURS_BACK = 168;
 
 const RETRYABLE_STATUSES = [500, 502, 503, 504];
 
-const ACCOUNTS = [
-  {
-    label: "toko_1",
-    partner_id: Deno.env.get("SHOPEE_PARTNER_ID") || "",
-    partner_key: Deno.env.get("SHOPEE_PARTNER_KEY") || "",
-    shop_id: Deno.env.get("SHOPEE_SHOP_ID") || "",
-  },
-];
+interface ShopeeAccount {
+  label: string;
+  shop_id: string;
+  shop_name: string;
+  partner_id: string;
+  partner_key: string;
+}
+
+// Load semua akun Shopee aktif dari marketplace_config (platform='shopee').
+// partner_id/partner_key TETAP dari env (1 partner akun untuk semua toko).
+async function loadShopeeAccounts(): Promise<ShopeeAccount[]> {
+  const partnerId = Deno.env.get("SHOPEE_PARTNER_ID") || "";
+  const partnerKey = Deno.env.get("SHOPEE_PARTNER_KEY") || "";
+
+  const { data, error } = await supabase
+    .from("marketplace_config")
+    .select("shop_id, shop_name, account_label, connection_status, is_active")
+    .eq("platform", "shopee");
+
+  if (error || !data) {
+    console.error("loadShopeeAccounts error:", error ? error.message : "no data");
+    return [];
+  }
+
+  const accounts: ShopeeAccount[] = (data || [])
+    .filter((c: any) => c.is_active === true && c.connection_status === "connected" && c.shop_id)
+    .map((c: any) => ({
+      label: c.account_label || ("shopee_" + c.shop_id),
+      shop_id: String(c.shop_id),
+      shop_name: c.shop_name || null,
+      partner_id: partnerId,
+      partner_key: partnerKey,
+    }));
+
+  return accounts;
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
@@ -83,7 +111,7 @@ async function loadToken(shopId: string) {
   return { access_token: data.access_token || null, refresh_token: data.refresh_token || null };
 }
 
-async function refreshToken(account: typeof ACCOUNTS[0], shopId: string, refreshToken: string) {
+async function refreshToken(account: ShopeeAccount, shopId: string, refreshToken: string) {
   const timestamp = Math.floor(Date.now() / 1000);
   const path = "/api/v2/auth/access_token/get";
   const sign = await signShopee(account.partner_id, account.partner_key, path, timestamp);
@@ -181,7 +209,7 @@ async function fetchWithRetry(url: string, options: Record<string, unknown> = {}
 // ============================================================
 // GET ORDER LIST dari Shopee
 // ============================================================
-async function getOrderList(account: typeof ACCOUNTS[0], timeFrom: number, timeTo: number, accessToken: string, offset = 0) {
+async function getOrderList(account: ShopeeAccount, timeFrom: number, timeTo: number, accessToken: string, offset = 0) {
   const timestamp = Math.floor(Date.now() / 1000);
   const path = "/api/v2/order/get_order_list";
   const sign = await signShopee(account.partner_id, account.partner_key, path, timestamp, accessToken, account.shop_id);
@@ -217,7 +245,7 @@ async function getOrderList(account: typeof ACCOUNTS[0], timeFrom: number, timeT
 // GET ORDER LIST + auto-refresh token saat auth error (maks 1 retry)
 // ============================================================
 async function getOrderListWithAuth(
-  account: typeof ACCOUNTS[0],
+  account: ShopeeAccount,
   shopId: string,
   timeFrom: number,
   timeTo: number,
@@ -248,7 +276,7 @@ async function getOrderListWithAuth(
 // ============================================================
 // GET ORDER DETAIL dari Shopee (batch, support multiple order_sn)
 // ============================================================
-async function getOrderDetailBatch(account: typeof ACCOUNTS[0], orderSns: string[], accessToken: string) {
+async function getOrderDetailBatch(account: ShopeeAccount, orderSns: string[], accessToken: string) {
   if (!orderSns.length) return { orderDetails: [] };
 
   const timestamp = Math.floor(Date.now() / 1000);
@@ -278,7 +306,7 @@ async function getOrderDetailBatch(account: typeof ACCOUNTS[0], orderSns: string
 // ============================================================
 // SAVE ORDER ke marketplace_orders
 // ============================================================
-async function saveOrder(account: typeof ACCOUNTS[0], orderDetail: any) {
+async function saveOrder(account: ShopeeAccount, orderDetail: any) {
   const mpOrderId = orderDetail.order_sn;
   if (!mpOrderId) return { status: "failed", error: "order_sn tidak ditemukan di response" };
 
@@ -328,7 +356,7 @@ async function saveOrder(account: typeof ACCOUNTS[0], orderDetail: any) {
 // Guard: marketplace_orders.internal_order_id.
 // wmsstatus awal = "Baru" (masuk Picking, BUKAN langsung Siap Kirim).
 // ============================================================
-async function autoImportOrder(account: typeof ACCOUNTS[0], orderDetail: any) {
+async function autoImportOrder(account: ShopeeAccount, orderDetail: any) {
   const mpOrderId = orderDetail.order_sn;
   if (!mpOrderId) return { status: "failed", order_sn: mpOrderId, error: "order_sn tidak ditemukan" };
 
@@ -457,7 +485,7 @@ async function autoImportOrder(account: typeof ACCOUNTS[0], orderDetail: any) {
 // ============================================================
 // MAIN — pull orders untuk satu akun
 // ============================================================
-async function pullOrdersForAccount(account: typeof ACCOUNTS[0]) {
+async function pullOrdersForAccount(account: ShopeeAccount) {
   const results: { pulled: number; inserted: number; skipped: number; imported: number; failed: number; errors: any[]; status_distribution: Record<string, number> } = {
     pulled: 0, inserted: 0, skipped: 0, imported: 0, failed: 0, errors: [], status_distribution: {}
   };
@@ -559,9 +587,22 @@ Deno.serve(async (req) => {
   let globalError: string | null = null;
 
   try {
-    const activeAccounts = ACCOUNTS.filter(a => a.partner_id && a.shop_id);
+    const activeAccounts = await loadShopeeAccounts();
+    const usableAccounts = activeAccounts.filter(a => a.partner_id && a.shop_id);
 
-    if (!activeAccounts.length) {
+    // Fallback: jika marketplace_config tidak terbaca dan tidak ada akun,
+    // gunakan env legacy (hanya 1 akun) — TANPA risiko double (env ≠ config).
+    if (!usableAccounts.length && (Deno.env.get("SHOPEE_PARTNER_ID") && Deno.env.get("SHOPEE_SHOP_ID"))) {
+      usableAccounts.push({
+        label: "toko_1",
+        shop_id: Deno.env.get("SHOPEE_SHOP_ID") || "",
+        shop_name: null,
+        partner_id: Deno.env.get("SHOPEE_PARTNER_ID") || "",
+        partner_key: Deno.env.get("SHOPEE_PARTNER_KEY") || "",
+      });
+    }
+
+    if (!usableAccounts.length) {
       return new Response(JSON.stringify({
         success: false,
         error: "Tidak ada akun Shopee yang dikonfigurasi"
@@ -573,7 +614,7 @@ Deno.serve(async (req) => {
 
     let hasAccountError = false;
 
-    for (const account of activeAccounts) {
+    for (const account of usableAccounts) {
       try {
         const results = await pullOrdersForAccount(account);
         totalPulled += results.pulled;
