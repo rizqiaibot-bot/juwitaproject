@@ -2844,9 +2844,8 @@
     <!-- ===== MODAL DETAIL TRANSAKSI ===== -->
     <div class="modal-overlay modal-full" id="orderDetailModal" onclick="if(event.target===this)closeOrderDetail()">
         <div class="modal-card" style="max-width:720px;width:min(92vw,720px);text-align:left;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+            <div style="margin-bottom:14px;">
                 <h3 style="display:flex;align-items:center;gap:8px;font-size:1.1rem;margin:0;"><i class="fas fa-receipt" style="color:var(--primary);"></i> Detail Transaksi</h3>
-                <button class="close-modal-btn" style="padding:4px 10px;" onclick="closeOrderDetail()"><i class="fas fa-times"></i></button>
             </div>
             <div id="orderDetailContent" style="font-size:0.8rem;line-height:1.6;overflow-x:auto;"></div>
             <button class="close-modal-btn" style="margin-top:14px;width:100%;" onclick="closeOrderDetail()">Tutup</button>
