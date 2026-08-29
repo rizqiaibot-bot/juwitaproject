@@ -4849,6 +4849,7 @@
 
             ordersData.unshift({ ...order, synced: orderResult.status === "queued" ? false : true });
 
+            renderProducts();
             renderPenjualanTable();
             renderPosHistory();
             updatePosTodayStats();
