@@ -337,6 +337,7 @@ async function saveOrder(account: ShopeeAccount, orderDetail: any) {
       order_status: orderStatus,
       sync_status: "pending",
       raw_payload: orderDetail,
+      shop_id: account.shop_id || null,
     });
 
   if (insertErr) {
@@ -431,6 +432,7 @@ async function autoImportOrder(account: ShopeeAccount, orderDetail: any) {
         orderid: orderId,
         date: dateStr,
         channel: "Shopee",
+        shop_id: account.shop_id || null,
         customer,
         total,
         paystatus: "Lunas",
