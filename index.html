@@ -4653,12 +4653,40 @@
             try {
                 const queue = await window.JuwitaOfflineDB.getAllOrders(null);
                 for (const rec of queue) {
-                    if (rec.status === "synced") continue;
-                    const result = await callSyncOfflineOrder(rec);
-                    if (result.status === "created" || result.status === "already_exists") {
-                        await window.JuwitaOfflineDB.deleteOrder(rec.local_transaction_id);
-                    } else {
-                        await window.JuwitaOfflineDB.updateOrderStatus(rec.local_transaction_id, "failed", result.message || result.status);
+                    // try/catch PER RECORD — satu record gagal tidak menghentikan lainnya
+                    try {
+                        if (rec.status === "synced") continue;
+
+                        const result = await callSyncOfflineOrder(rec);
+
+                        // Normalisasi status robust: dukung result.status maupun wrapper array/object
+                        const st = String(
+                            (result && (
+                                result.status ||
+                                (Array.isArray(result) && result[0] && result[0].status)
+                            )) || ''
+                        ).trim().toLowerCase();
+
+                        if (st === "created" || st === "already_exists") {
+                            // Transaksi SUKSES → wajib hapus record.
+                            try {
+                                await window.JuwitaOfflineDB.deleteOrder(rec.local_transaction_id);
+                            } catch (delErr) {
+                                // deleteOrder gagal → transaksi tetap sukses, jangan tandai failed.
+                                // Record tersisa → retry berikutnya aman (idempotency_key sama).
+                                console.error("deleteOrder failed untuk " + rec.local_transaction_id + ":", delErr);
+                            }
+                        } else {
+                            // insufficient_stock / conflict / error lain → jangan hapus, tandai failed.
+                            const errMsg = (result && (result.message || (Array.isArray(result) && result[0] && result[0].message))) || st || "sync gagal";
+                            await window.JuwitaOfflineDB.updateOrderStatus(rec.local_transaction_id, "failed", errMsg);
+                        }
+                    } catch (recErr) {
+                        // Record ini error (mis. network/RPC throw) → tandai failed, lanjut record berikutnya.
+                        console.error("drain record error " + rec.local_transaction_id + ":", recErr);
+                        try {
+                            await window.JuwitaOfflineDB.updateOrderStatus(rec.local_transaction_id, "failed", String(recErr && recErr.message || recErr));
+                        } catch (e) { /* ignore */ }
                     }
                     updatePendingIndicator();
                 }
@@ -4666,6 +4694,7 @@
                 console.error("drainOfflineQueue error:", err);
             } finally {
                 draining = false;
+                updateConnBadge();
             }
         }
 
