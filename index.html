@@ -4633,12 +4633,23 @@
             const text = document.getElementById("posConnText");
             if (!text) return;
             if (posOfflineMode) return;
-            if (window.JuwitaOfflineDB) {
-                window.JuwitaOfflineDB.countPending().then(function (n) {
-                    if (n > 0) text.textContent = n + " transaksi menunggu sinkronisasi";
-                    else text.textContent = "ONLINE";
-                }).catch(function () { text.textContent = "ONLINE"; });
-            }
+            if (!window.JuwitaOfflineDB) { text.textContent = "ONLINE"; return; }
+            Promise.all([
+                window.JuwitaOfflineDB.countPending(),
+                window.JuwitaOfflineDB.countFailed()
+            ]).then(function (r) {
+                const pending = r[0] || 0;
+                const failed = r[1] || 0;
+                if (pending > 0 && failed > 0) {
+                    text.textContent = pending + " menunggu · " + failed + " gagal";
+                } else if (pending > 0) {
+                    text.textContent = pending + " transaksi menunggu sinkronisasi";
+                } else if (failed > 0) {
+                    text.textContent = failed + " transaksi gagal (perlu tindakan)";
+                } else {
+                    text.textContent = "ONLINE";
+                }
+            }).catch(function () { text.textContent = "ONLINE"; });
         }
         window.addEventListener("online", function () { updateConnBadge(); drainOfflineQueue(); });
         window.addEventListener("offline", function () { updateConnBadge(); });
@@ -4696,6 +4707,63 @@
                 draining = false;
                 updateConnBadge();
             }
+        }
+
+        // ============================================================
+        // RECOVERY MANUAL — verifikasi queue lama terhadap server.
+        // TIDAK dijalankan otomatis. Panggil via console:
+        //   recoverConfirmedOrders()
+        // Hanya menghapus record queue jika server sudah punya order dengan
+        // orderid + total + items (product_id/qty/subtotal) yang SAMA.
+        // Tidak memanggil RPC, tidak mengubah stok server.
+        // ============================================================
+        async function recoverConfirmedOrders() {
+            if (!window.JuwitaOfflineDB) return { scanned: 0, recovered: 0, skipped: 0, errors: [] };
+            const errors = [];
+            let scanned = 0, recovered = 0, skipped = 0;
+            const all = await window.JuwitaOfflineDB.getAllOrders(null);
+            for (const rec of all) {
+                scanned++;
+                const f = rec.order_fields || {};
+                try {
+                    const { data: orderRow, error: orderErr } = await sb
+                        .from("orders")
+                        .select("orderid, total")
+                        .eq("orderid", f.orderid)
+                        .maybeSingle();
+                    if (orderErr) { errors.push({ id: rec.local_transaction_id, error: orderErr.message }); skipped++; continue; }
+                    if (!orderRow) { skipped++; continue; } // order tidak ada di server → biarkan queue
+
+                    // Verifikasi total
+                    if (Number(orderRow.total) !== Number(f.total)) { skipped++; continue; }
+
+                    // Verifikasi items
+                    const items = rec.items || [];
+                    let itemsOk = true;
+                    for (const it of items) {
+                        const { data: oi, error: oiErr } = await sb
+                            .from("order_items")
+                            .select("product_id, qty, subtotal")
+                            .eq("orderid", f.orderid)
+                            .eq("product_id", it.product_id);
+                        if (oiErr || !oi || oi.length === 0) { itemsOk = false; break; }
+                        const match = oi.some(function (r) {
+                            return Number(r.qty) === Number(it.qty) && Number(r.subtotal) === Number(it.subtotal);
+                        });
+                        if (!match) { itemsOk = false; break; }
+                    }
+                    if (!itemsOk) { skipped++; continue; }
+
+                    // Cocok → server sudah punya transaksi ini → hapus queue (tanpa RPC)
+                    await window.JuwitaOfflineDB.deleteOrder(rec.local_transaction_id);
+                    recovered++;
+                } catch (err) {
+                    errors.push({ id: rec.local_transaction_id, error: String(err && err.message || err) });
+                    skipped++;
+                }
+            }
+            updateConnBadge();
+            return { scanned: scanned, recovered: recovered, skipped: skipped, errors: errors };
         }
 
         // ============================================================
@@ -5531,6 +5599,7 @@
 
         window.drainOfflineQueue = drainOfflineQueue;
         window.updateConnBadge = updateConnBadge;
+        window.recoverConfirmedOrders = recoverConfirmedOrders;
 
         window.renderRekapKehadiran = renderRekapKehadiran;
         window.ubahBulanRekap = ubahBulanRekap;

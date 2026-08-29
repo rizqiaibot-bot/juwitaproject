@@ -123,11 +123,14 @@
     });
   }
 
-  // Jumlah transaksi menunggu sinkronisasi (pending/failed).
+  // Jumlah transaksi yang masih MENUNGGU sinkronisasi (hanya status pending).
   function countPending() {
-    return Promise.all([getAllOrders("pending"), getAllOrders("failed")]).then(function (r) {
-      return r[0].length + r[1].length;
-    });
+    return getAllOrders("pending").then(function (rows) { return rows.length; });
+  }
+
+  // Jumlah transaksi yang GAGAL dan perlu tindakan (status failed).
+  function countFailed() {
+    return getAllOrders("failed").then(function (rows) { return rows.length; });
   }
 
   // ============================================================
@@ -170,6 +173,7 @@
     updateOrderStatus: updateOrderStatus,
     deleteOrder: deleteOrder,
     countPending: countPending,
+    countFailed: countFailed,
     setMeta: setMeta,
     getMeta: getMeta
   };
