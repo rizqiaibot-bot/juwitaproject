@@ -2843,13 +2843,13 @@
 
     <!-- ===== MODAL DETAIL TRANSAKSI ===== -->
     <div class="modal-overlay modal-full" id="orderDetailModal" onclick="if(event.target===this)closeOrderDetail()">
-        <div class="modal-card" style="max-width:520px;text-align:left;">
+        <div class="modal-card" style="max-width:720px;width:min(92vw,720px);text-align:left;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
                 <h3 style="display:flex;align-items:center;gap:8px;font-size:1.1rem;margin:0;"><i class="fas fa-receipt" style="color:var(--primary);"></i> Detail Transaksi</h3>
                 <button class="close-modal-btn" style="padding:4px 10px;" onclick="closeOrderDetail()"><i class="fas fa-times"></i></button>
             </div>
-            <div id="orderDetailContent" style="font-size:0.8rem;line-height:1.6;"></div>
-            <button class="close-modal-btn" style="margin-top:14px;" onclick="closeOrderDetail()">Tutup</button>
+            <div id="orderDetailContent" style="font-size:0.8rem;line-height:1.6;overflow-x:auto;"></div>
+            <button class="close-modal-btn" style="margin-top:14px;width:100%;" onclick="closeOrderDetail()">Tutup</button>
         </div>
     </div>
 
@@ -3517,6 +3517,27 @@
             const dropdown = btn.nextElementSibling;
             document.querySelectorAll(".aksi-dropdown").forEach(d => { if (d !== dropdown) d.style.display = "none"; });
             dropdown.style.display = dropdown.style.display === "none" ? "block" : "none";
+        }
+
+        // Click-outside: tutup semua .aksi-dropdown.
+        // - klik tombol menu (di dalam .aksi-dropdown button) → aksi onclick berjalan, lalu tutup.
+        // - klik area kosong dropdown → tetap terbuka.
+        // - klik di luar → tutup.
+        // Dipasang SEKALI (bukan per render) agar tidak duplikat event.
+        if (!window.__aksiClickOutsideBound) {
+            window.__aksiClickOutsideBound = true;
+            document.addEventListener("click", function(e) {
+                const inDrop = e.target.closest(".aksi-dropdown");
+                const inDropBtn = e.target.closest(".aksi-dropdown button");
+                if (inDropBtn) {
+                    // aksi via onclick sudah berjalan; tutup setelahnya
+                    document.querySelectorAll(".aksi-dropdown").forEach(d => { d.style.display = "none"; });
+                    return;
+                }
+                if (inDrop) return; // area kosong dropdown → tetap terbuka
+                if (e.target.closest(".aksi-btn")) return; // tombol toggle dikelola toggleAksiMenu
+                document.querySelectorAll(".aksi-dropdown").forEach(d => { d.style.display = "none"; });
+            });
         }
 
         // ============================================================
@@ -5053,22 +5074,24 @@
                 let itemsHtml = '';
                 if (hasItems) {
                     itemsHtml = `
-                        <table style="width:100%;border-collapse:collapse;margin:6px 0;">
-                            <thead><tr style="border-bottom:1px solid var(--border-color);font-weight:700;">
-                                <th style="text-align:left;padding:4px;">Produk</th>
-                                <th style="text-align:center;padding:4px;">Qty</th>
-                                <th style="text-align:right;padding:4px;">Harga</th>
-                                <th style="text-align:right;padding:4px;">Subtotal</th>
-                            </tr></thead>
-                            <tbody>
-                                ${items.map(i => `<tr style="border-bottom:1px solid var(--border-color);">
-                                    <td style="padding:4px;">${i.product_name}</td>
-                                    <td style="text-align:center;padding:4px;">${i.qty}</td>
-                                    <td style="text-align:right;padding:4px;">${fmt(i.price)}</td>
-                                    <td style="text-align:right;padding:4px;">${fmt(i.subtotal)}</td>
-                                </tr>`).join('')}
-                            </tbody>
-                        </table>`;
+                        <div style="overflow-x:auto;">
+                            <table style="width:100%;border-collapse:collapse;margin:6px 0;min-width:480px;">
+                                <thead><tr style="border-bottom:1px solid var(--border-color);font-weight:700;">
+                                    <th style="text-align:left;padding:6px 8px;width:auto;">Produk</th>
+                                    <th style="text-align:center;padding:6px 8px;white-space:nowrap;">Qty</th>
+                                    <th style="text-align:right;padding:6px 8px;white-space:nowrap;">Harga</th>
+                                    <th style="text-align:right;padding:6px 8px;white-space:nowrap;">Subtotal</th>
+                                </tr></thead>
+                                <tbody>
+                                    ${items.map(i => `<tr style="border-bottom:1px solid var(--border-color);">
+                                        <td style="padding:6px 8px;">${i.product_name}</td>
+                                        <td style="text-align:center;padding:6px 8px;white-space:nowrap;">${i.qty}</td>
+                                        <td style="text-align:right;padding:6px 8px;white-space:nowrap;">${fmt(i.price)}</td>
+                                        <td style="text-align:right;padding:6px 8px;white-space:nowrap;">${fmt(i.subtotal)}</td>
+                                    </tr>`).join('')}
+                                </tbody>
+                            </table>
+                        </div>`;
                 }
 
                 box.innerHTML = `
