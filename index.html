@@ -3257,6 +3257,32 @@
             });
         }
 
+        // ============================================================
+        // SOUND — efek ringan "tuk" saat produk ditambahkan / qty bertambah
+        // Tanpa file eksternal (Web Audio API). Silent jika gagal/blocked.
+        // ============================================================
+        let _audioCtx = null;
+        function playAddSound() {
+            try {
+                if (!window.AudioContext && !window.webkitAudioContext) return;
+                if (!_audioCtx) {
+                    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (_audioCtx.state === "suspended") _audioCtx.resume();
+                const osc = _audioCtx.createOscillator();
+                const gain = _audioCtx.createGain();
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(880, _audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(440, _audioCtx.currentTime + 0.05);
+                gain.gain.setValueAtTime(0.12, _audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + 0.08);
+                osc.connect(gain);
+                gain.connect(_audioCtx.destination);
+                osc.start();
+                osc.stop(_audioCtx.currentTime + 0.09);
+            } catch (e) { /* sound optional — abaikan */ }
+        }
+
         function quickAdd(id) {
             const p = products.find(p => p.id === id);
             if (!p) return;
@@ -3264,7 +3290,7 @@
             if (item) item.quantity++;
             else cart.push({ ...p, quantity: 1 });
             updateCartUI();
-            showToast(`${p.name} ditambahkan`);
+            playAddSound();
         }
 
         function updateCartUI() {
@@ -3324,6 +3350,7 @@
             if (q <= 0) cart.splice(idx, 1);
             else cart[idx].quantity = q;
             updateCartUI();
+            if (delta > 0) playAddSound();
         }
 
         function removeFromCart(idx) {
@@ -3338,8 +3365,10 @@
             if (!item) return;
             const newQty = prompt(`Edit jumlah "${item.name}":\n(Jumlah saat ini: ${item.quantity})`, item.quantity);
             if (newQty !== null && !isNaN(newQty) && parseInt(newQty) > 0) {
+                const prevQty = cart[idx].quantity;
                 cart[idx].quantity = parseInt(newQty);
                 updateCartUI();
+                if (cart[idx].quantity > prevQty) playAddSound();
             } else if (newQty !== null) {
                 showToast("Jumlah harus angka positif");
             }
