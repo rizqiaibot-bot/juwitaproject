@@ -1965,6 +1965,10 @@
                     <h1>Point of Sale (POS)</h1>
                     <div class="page-header-desc">Kasir cepat untuk penjualan langsung pelanggan offline</div>
                 </div>
+                <div id="posConnBadge" style="display:flex;align-items:center;gap:6px;background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:6px 12px;font-size:0.7rem;font-weight:700;flex-shrink:0;">
+                    <span id="posConnDot" style="width:8px;height:8px;border-radius:50%;background:var(--success);display:inline-block;"></span>
+                    <span id="posConnText">ONLINE</span>
+                </div>
                 <div id="posAccountCard" style="display:none;align-items:center;gap:8px;background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:8px 14px;box-shadow:var(--card-shadow);flex-shrink:0;">
                     <div id="posAvatar" style="width:30px;height:30px;border-radius:50%;background:var(--primary-gradient);color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;"></div>
                     <div style="line-height:1.2;">
@@ -2906,6 +2910,9 @@
     <!-- ===== TOAST CONTAINER ===== -->
     <div class="toast-container" id="toastContainer"></div>
 
+    <!-- ===== OFFLINE DB (IndexedDB helper) ===== -->
+    <script src="offline-db.js"></script>
+
     <!-- ============================================================ -->
     <!-- ===== JAVASCRIPT ===== -->
     <script>
@@ -2984,6 +2991,7 @@
         // ============================================================
         // STATE
         let cart = [];
+        let checkoutLock = false;
         let savedOrders = [];
         let currentSearch = "";
         let posCategory = "all";
@@ -4603,7 +4611,105 @@
         // ============================================================
         // CHECKOUT
         // ============================================================
+        // OFFLINE POS — status koneksi & indikator
+        // ============================================================
+        let posOfflineMode = false;
+        function updateConnBadge() {
+            const dot = document.getElementById("posConnDot");
+            const text = document.getElementById("posConnText");
+            if (!dot || !text) return;
+            if (navigator.onLine === false) {
+                posOfflineMode = true;
+                dot.style.background = "var(--danger)";
+                text.textContent = "OFFLINE";
+            } else {
+                posOfflineMode = false;
+                dot.style.background = "var(--success)";
+                text.textContent = "ONLINE";
+            }
+            updatePendingIndicator();
+        }
+        function updatePendingIndicator() {
+            const text = document.getElementById("posConnText");
+            if (!text) return;
+            if (posOfflineMode) return;
+            if (window.JuwitaOfflineDB) {
+                window.JuwitaOfflineDB.countPending().then(function (n) {
+                    if (n > 0) text.textContent = n + " transaksi menunggu sinkronisasi";
+                    else text.textContent = "ONLINE";
+                }).catch(function () { text.textContent = "ONLINE"; });
+            }
+        }
+        window.addEventListener("online", function () { updateConnBadge(); drainOfflineQueue(); });
+        window.addEventListener("offline", function () { updateConnBadge(); });
+
+        // ============================================================
+        // RECONNECT — kirim queue offline ke RPC, satu per satu
+        // ============================================================
+        let draining = false;
+        async function drainOfflineQueue() {
+            if (draining || !window.JuwitaOfflineDB || navigator.onLine === false) return;
+            draining = true;
+            try {
+                const queue = await window.JuwitaOfflineDB.getAllOrders(null);
+                for (const rec of queue) {
+                    if (rec.status === "synced") continue;
+                    const result = await callSyncOfflineOrder(rec);
+                    if (result.status === "created" || result.status === "already_exists") {
+                        await window.JuwitaOfflineDB.deleteOrder(rec.local_transaction_id);
+                    } else {
+                        await window.JuwitaOfflineDB.updateOrderStatus(rec.local_transaction_id, "failed", result.message || result.status);
+                    }
+                    updatePendingIndicator();
+                }
+            } catch (err) {
+                console.error("drainOfflineQueue error:", err);
+            } finally {
+                draining = false;
+            }
+        }
+
+        // ============================================================
+        // RPC WRAPPER — panggil sync_offline_order (atomic)
+        // ============================================================
+        async function callSyncOfflineOrder(pendingOrder) {
+            const f = pendingOrder.order_fields || {};
+            const items = (pendingOrder.items || []).map(function (it) {
+                return {
+                    product_id: it.product_id,
+                    product_name: it.product_name,
+                    qty: it.qty,
+                    price: it.price,
+                    subtotal: it.subtotal
+                };
+            });
+            const res = await sb.rpc('sync_offline_order', {
+                p_orderid: f.orderid,
+                p_idempotency_key: pendingOrder.idempotency_key,
+                p_date: f.date,
+                p_channel: f.channel,
+                p_customer: f.customer,
+                p_total: f.total,
+                p_paystatus: f.paystatus,
+                p_wmsstatus: f.wmsstatus,
+                p_courier: f.courier,
+                p_resi: f.resi,
+                p_payment_method: f.payment_method,
+                p_subtotal: f.subtotal,
+                p_diskon: f.diskon,
+                p_bayar: f.bayar,
+                p_kembalian: f.kembalian,
+                p_items: items
+            });
+            if (res.error) {
+                throw new Error("RPC: " + (res.error.message || res.error.details || "gagal"));
+            }
+            return res.data || { status: "error", message: "no data" };
+        }
+
+        // ============================================================
         async function processCheckout() {
+            if (checkoutLock) { showToast("Transaksi sedang diproses..."); return; }
             if (cart.length === 0) { showToast("Keranjang masih kosong"); return; }
             for (const item of cart) {
                 const prod = products.find(p => p.id === item.id);
@@ -4663,61 +4769,85 @@
                 }
             });
 
-            // 1. Insert order utama dulu (biar order_items bisa mereferensinya)
+            // ============================================================
+            // Buat pendingOrder + idempotency_key (sekali saja, tidak di-regenerate)
+            // ============================================================
+            const orderItems = cart.map(i => ({
+                product_id: i.id,
+                product_name: i.name,
+                qty: i.quantity,
+                price: i.price,
+                subtotal: i.price * i.quantity
+            }));
+            const txnKey = crypto.randomUUID();
+            const pendingOrder = {
+                local_transaction_id: txnKey,
+                idempotency_key: txnKey,
+                orderid: orderId,
+                order_fields: { ...orderRow, orderid: orderId },
+                items: orderItems,
+                created_at: new Date().toISOString(),
+                status: "pending",
+                error_message: null
+            };
+
+            // ============================================================
+            // Alur checkout: OFFLINE → queue IndexedDB; ONLINE → RPC atomic
+            // ============================================================
+            checkoutLock = true;
+            let orderResult = null;
             try {
-                const orderRes = await sb.from('orders').insert(orderRow);
-                if (orderRes.error) throw new Error("Order sync: " + orderRes.error.message);
-            } catch (err) {
-                console.error("Order sync failed:", err);
-                showToast("Gagal sync ke server: " + err.message);
-                Object.keys(stockBackup).forEach(id => {
-                    const prod = products.find(p => p.id === parseInt(id));
-                    if (prod) prod.stock = stockBackup[id];
-                });
-                return;
-            }
-
-            // 2. Insert order_items (setelah order utama sukses)
-            if (cart.length > 0) {
-                const orderItems = cart.map(i => ({
-                    orderid: orderId,
-                    product_id: i.id,
-                    product_name: i.name,
-                    qty: i.quantity,
-                    price: i.price,
-                    subtotal: i.price * i.quantity
-                }));
-                const oiRes = await sb.from('order_items').insert(orderItems);
-                if (oiRes.error) console.warn("order_items insert error:", oiRes.error.message);
-            }
-
-            // 3. Update stok + log stock mutation
-            const promises = [];
-            cart.forEach(item => {
-                const prod = products.find(p => p.id === item.id);
-                if (prod) {
-                    const qtyBefore = stockBackup[item.id];
-                    const qtyAfter = prod.stock;
-                    promises.push(sb.from('products').update({ stock: prod.stock }).eq('id', prod.id).then(r => {
-                        if (r.error) throw new Error("Stock update: " + r.error.message);
-                    }));
-                    promises.push(logStockMutation(prod.id, prod.name, 'OUT', item.quantity, qtyBefore, qtyAfter, 'POS: ' + orderId));
+                if (navigator.onLine === false || posOfflineMode) {
+                    // OFFLINE: simpan ke queue lokal. Gagal simpan → jangan pura-pura sukses.
+                    try {
+                        await window.JuwitaOfflineDB.saveOrder(pendingOrder);
+                    } catch (dbErr) {
+                        console.error("IndexedDB save failed:", dbErr);
+                        Object.keys(stockBackup).forEach(id => {
+                            const prod = products.find(p => p.id === parseInt(id));
+                            if (prod) prod.stock = stockBackup[id];
+                        });
+                        checkoutLock = false;
+                        showToast("Gagal menyimpan transaksi offline: " + dbErr.message);
+                        return;
+                    }
+                    updateConnBadge();
+                    orderResult = { status: "queued" };
+                } else {
+                    // ONLINE: serahkan ke RPC atomic (order + items + stock + mutation).
+                    orderResult = await callSyncOfflineOrder(pendingOrder);
+                    if (orderResult.status !== "created" && orderResult.status !== "already_exists") {
+                        // insufficient_stock / conflict / error → rollback stok lokal
+                        Object.keys(stockBackup).forEach(id => {
+                            const prod = products.find(p => p.id === parseInt(id));
+                            if (prod) prod.stock = stockBackup[id];
+                        });
+                        checkoutLock = false;
+                        showToast("Transaksi ditolak: " + (orderResult.message || orderResult.status));
+                        return;
+                    }
                 }
-            });
-
-            try {
-                await Promise.all(promises);
             } catch (err) {
-                console.error("Stock sync failed:", err);
-                showToast("Gagal sync stok: " + err.message);
-                Object.keys(stockBackup).forEach(id => {
-                    const prod = products.find(p => p.id === parseInt(id));
-                    if (prod) prod.stock = stockBackup[id];
-                });
-                return;
+                // Jika RPC gagal karena jaringan (bukan keputusan bisnis) → simpan ke queue,
+                // transaksi tidak hilang, akan dikirim saat online.
+                console.error("Checkout RPC error, fallback to queue:", err);
+                try {
+                    await window.JuwitaOfflineDB.saveOrder(pendingOrder);
+                    updateConnBadge();
+                    orderResult = { status: "queued" };
+                } catch (dbErr) {
+                    Object.keys(stockBackup).forEach(id => {
+                        const prod = products.find(p => p.id === parseInt(id));
+                        if (prod) prod.stock = stockBackup[id];
+                    });
+                    checkoutLock = false;
+                    showToast("Gagal memproses transaksi: " + err.message);
+                    return;
+                }
             }
+            checkoutLock = false;
 
-            ordersData.unshift(order);
+            ordersData.unshift({ ...order, synced: orderResult.status === "queued" ? false : true });
 
             renderPenjualanTable();
             renderPosHistory();
@@ -4747,7 +4877,11 @@
             document.getElementById("splitRows").style.display = "none";
             document.getElementById("splitCash").value = "0";
             document.getElementById("splitNonCash").value = "0";
-            showToast(`Transaksi ${orderId} berhasil!`);
+            if (orderResult && orderResult.status === "queued") {
+                showToast(`Transaksi ${orderId} tersimpan lokal (menunggu sinkronisasi)`);
+            } else {
+                showToast(`Transaksi ${orderId} berhasil!`);
+            }
         }
 
         function closeCheckoutModal() {
@@ -5308,6 +5442,19 @@
             // --- LOAD DATA FROM SUPABASE ---
             initSupabaseData();
 
+            // --- OFFLINE POS INIT ---
+            if (window.JuwitaOfflineDB) {
+                window.JuwitaOfflineDB.init().then(function () {
+                    updateConnBadge();
+                    drainOfflineQueue();
+                }).catch(function (err) {
+                    console.warn("Offline DB init failed:", err);
+                    updateConnBadge();
+                });
+            } else {
+                updateConnBadge();
+            }
+
             // Expose form functions to window (defined inside this callback)
             window.generateNewProdBarcode = generateNewProdBarcode;
             window.generateSKU = generateSKU;
@@ -5351,6 +5498,9 @@
         window.deleteRack = deleteRack;
         window.startOpname = startOpname;
         window.finishOpname = finishOpname;
+
+        window.drainOfflineQueue = drainOfflineQueue;
+        window.updateConnBadge = updateConnBadge;
 
         window.renderRekapKehadiran = renderRekapKehadiran;
         window.ubahBulanRekap = ubahBulanRekap;
