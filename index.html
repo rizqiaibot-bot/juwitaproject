@@ -1880,12 +1880,9 @@
                     <select id="channelFilter" class="filter-control">
                         <option value="all">Semua Channel</option>
                         <option value="POS1">POS 1</option>
-                        <option value="POS2">POS 2</option>
-                        <option value="Shopee">Shopee</option>
+                        <option value="Shopee1">Shopee 1</option>
+                        <option value="Shopee2">Shopee 2</option>
                         <option value="WhatsApp">WhatsApp (Internal)</option>
-                        <option value="Juwita App">Juwita App</option>
-                        <option value="Tokopedia">Tokopedia</option>
-                        <option value="Lazada">Lazada</option>
                     </select>
                 </div>
                 <div class="filter-group search-wrapper">
@@ -3452,7 +3449,16 @@
             if (!tbody) return;
             let filtered = ordersData;
             if (filterStatus !== "all") filtered = filtered.filter(o => o.payStatus === filterStatus);
-            if (filterChannel !== "all") filtered = filtered.filter(o => o.channel === filterChannel);
+            if (filterChannel !== "all") {
+                // Value internal channel dipertahankan:
+                //   POS1 → "POS1", Shopee1/Shopee2 → "Shopee", WhatsApp → "WhatsApp"
+                let channelValue;
+                if (filterChannel === "POS1") channelValue = "POS1";
+                else if (filterChannel === "Shopee1" || filterChannel === "Shopee2") channelValue = "Shopee";
+                else if (filterChannel === "WhatsApp") channelValue = "WhatsApp";
+                else channelValue = filterChannel;
+                if (channelValue) filtered = filtered.filter(o => o.channel === channelValue);
+            }
             if (filterSearchText) filtered = filtered.filter(o =>
                 o.customer.toLowerCase().includes(filterSearchText.toLowerCase()) ||
                 o.orderId.toLowerCase().includes(filterSearchText.toLowerCase())
