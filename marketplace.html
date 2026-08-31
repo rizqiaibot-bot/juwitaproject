@@ -1117,16 +1117,33 @@ async function syncShopee() {
     }
     step('✓', 'Koneksi Shopee OK');
 
-    // STEP 2 — Pull Produk
-    step('⏳', '1/3 Mengambil produk Shopee...');
-    var prodRes = null;
-    try { prodRes = await callEdgeFunction('shopee-pull-products', {}); } catch (e) { prodRes = null; }
-    if (!prodRes || prodRes.success === false) {
+    // STEP 2 — Pull Produk (per akun connected)
+    step('⏳', '1/3 Mengambil produk Shopee (semua akun)...');
+    var prodResults = [];
+    var prodHasError = false;
+    for (var ai = 0; ai < accounts.length; ai++) {
+      var acc = accounts[ai];
+      if (acc.connection_status !== 'connected' || !acc.shop_id) continue;
+      var shopIdStr = String(acc.shop_id);
+      step('⏳', '  • Pull produk ' + shopIdStr + '...');
+      var pr = null;
+      try { pr = await callEdgeFunction('shopee-pull-products', { shop_id: shopIdStr }); } catch (e) { pr = null; }
+      if (!pr || pr.success === false) {
+        prodHasError = true;
+        prodResults.push({ shop_id: shopIdStr, success: false, error: (pr && pr.error ? pr.error : 'Unknown error') });
+        step('❌', '  • Pull produk ' + shopIdStr + ' gagal: ' + (pr && pr.error ? pr.error : 'Unknown error'));
+      } else {
+        prodResults.push({ shop_id: shopIdStr, success: true, fetched: pr.fetched, inserted: pr.inserted, updated: pr.updated, failed: pr.failed });
+        step('✓', '  • Pull produk ' + shopIdStr + ' — Fetched: ' + nv(pr.fetched) + ' | Inserted: ' + nv(pr.inserted) + ' | Updated: ' + nv(pr.updated) + ' | Failed: ' + nv(pr.failed));
+      }
+    }
+    var prodOk = prodResults.some(function (r) { return r.success === true; });
+    if (!prodOk) {
       setTitle('❌ SYNC SHOPEE GAGAL');
-      step('❌', 'Pull Produk gagal: ' + (prodRes && prodRes.error ? prodRes.error : 'Unknown error'));
+      step('❌', 'Pull Produk gagal untuk semua akun');
       return;
     }
-    step('✓', 'Produk selesai — Fetched: ' + nv(prodRes.fetched) + ' | Inserted: ' + nv(prodRes.inserted) + ' | Updated: ' + nv(prodRes.updated) + ' | Failed: ' + nv(prodRes.failed));
+    step('✓', 'Produk selesai — akun diproses: ' + prodResults.length + ' (gagal: ' + prodResults.filter(function (r) { return !r.success; }).length + ')');
 
     // STEP 3 — Pull Order
     step('⏳', '2/3 Mengambil order Shopee...');
