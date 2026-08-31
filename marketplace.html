@@ -1155,6 +1155,11 @@ async function syncShopee() {
       if (orderRes && orderRes.accountResults && orderRes.accountResults.length) {
         var e0 = orderRes.accountResults[0];
         if (e0 && e0.error) oErr = (e0.error.code ? e0.error.code + ' ' : '') + (e0.error.message || '');
+        if (oErr === 'Unknown error' && e0 && Array.isArray(e0.errors) && e0.errors.length) {
+          var firstErr = e0.errors[0];
+          oErr = (firstErr && firstErr.error) ? String(firstErr.error) : JSON.stringify(firstErr);
+          if (String(oErr).length > 300) oErr = String(oErr).slice(0, 300) + '...';
+        }
       }
       setTitle('❌ SYNC SHOPEE GAGAL');
       step('❌', 'Pull Order gagal: ' + oErr);

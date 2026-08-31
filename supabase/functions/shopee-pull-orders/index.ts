@@ -311,14 +311,21 @@ async function saveOrder(account: ShopeeAccount, orderDetail: any) {
   if (!mpOrderId) return { status: "failed", error: "order_sn tidak ditemukan di response" };
 
   // Idempotent: cek dulu apakah order sudah pernah ditarik.
+  // Jika sudah ada dengan sync_status='failed' → tandai "retry" agar
+  // autoImportOrder() dipanggil ulang setelah mapping diperbaiki.
   const { data: existing } = await supabase
     .from("marketplace_orders")
-    .select("id")
+    .select("id, sync_status")
     .eq("platform", "shopee")
     .eq("mp_order_id", mpOrderId)
     .maybeSingle();
 
-  if (existing) return { status: "skipped", order_sn: mpOrderId };
+  if (existing) {
+    if (existing.sync_status === "failed") {
+      return { status: "retry", order_sn: mpOrderId };
+    }
+    return { status: "skipped", order_sn: mpOrderId };
+  }
 
   const customerName = orderDetail.buyer_user_name ||
     orderDetail.recipient_address?.name ||
@@ -384,21 +391,45 @@ async function autoImportOrder(account: ShopeeAccount, orderDetail: any) {
     const items = Array.isArray(orderDetail.item_list) ? orderDetail.item_list : [];
     if (!items.length) throw new Error("item_list kosong");
 
-    const { data: prods, error: prodErr } = await supabase
-      .from("products")
-      .select("id, name, price, stock, shopee_item_id")
-      .not("shopee_item_id", "is", null);
-    if (prodErr) throw new Error("gagal load produk: " + prodErr.message);
+    // Mapping per (shop_id + shopee_item_id) dari product_shopee_mapping.
+    // Multi-akun: setiap akun hanya melihat mapping miliknya (tidak cross-account).
+    // HANYA ambil mapping untuk item yang ada di order (bukan semua mapping shop)
+    // agar query produk tidak memuat ratusan baris (mis. 1178 utk Shopee 1).
+    const itemIds = items.map((i: any) => i.item_id).filter((v: any) => v != null);
+    const { data: mappings, error: mapErr } = await supabase
+      .from("product_shopee_mapping")
+      .select("product_id, shop_id, shopee_item_id")
+      .eq("shop_id", account.shop_id)
+      .in("shopee_item_id", itemIds.length ? itemIds : [-1]);
+    if (mapErr) throw new Error("gagal load mapping: " + mapErr.message);
 
-    const prodMap: Record<string, any> = {};
-    (prods || []).forEach((p: any) => { prodMap[String(p.shopee_item_id)] = p; });
+    const mappedProductIds = (mappings || []).map((m: any) => m.product_id).filter((v: any) => v != null);
+    let prods: any[] = [];
+    if (mappedProductIds.length) {
+      const { data: prodData, error: prodErr } = await supabase
+        .from("products")
+        .select("id, name, price, stock")
+        .in("id", mappedProductIds);
+      if (prodErr) throw new Error("gagal load produk: " + prodErr.message);
+      prods = prodData || [];
+    }
+
+    const productById: Record<string, any> = {};
+    (prods || []).forEach((p: any) => { productById[String(p.id)] = p; });
+
+    const mapByItemId: Record<string, any> = {};
+    (mappings || []).forEach((m: any) => {
+      if (m.shopee_item_id != null) mapByItemId[String(m.shopee_item_id)] = m;
+    });
 
     const mapped: any[] = [];
     const stockById: Record<string, number> = {};
     const unmapped: any[] = [];
     for (const item of items) {
       const qty = item.model_quantity_purchased || 1;
-      const prod = prodMap[String(item.item_id)];
+      // 1) Mapping eksplisit per shop (shop_id + shopee_item_id)
+      const mp = mapByItemId[String(item.item_id)];
+      const prod = mp ? (productById[String(mp.product_id)] || null) : null;
       if (!prod) {
         unmapped.push({ shopee_item_id: item.item_id, name: item.item_name || item.model_sku || item.item_id });
         continue;
@@ -535,8 +566,9 @@ async function pullOrdersForAccount(account: ShopeeAccount) {
           results.status_distribution[st] = (results.status_distribution[st] || 0) + 1;
           try {
             const result = await saveOrder(account, detail);
-            if (result.status === "inserted") {
-              results.inserted++;
+            if (result.status === "inserted" || result.status === "retry") {
+              if (result.status === "inserted") results.inserted++;
+              else results.skipped++;
               const imp = await autoImportOrder(account, detail);
               if (imp.status === "imported") results.imported++;
               else if (imp.status === "failed") {
@@ -567,6 +599,43 @@ async function pullOrdersForAccount(account: ShopeeAccount) {
     }
   }
 
+  return results;
+}
+
+// ============================================================
+// RETRY IMPORT — marketplace_orders yang sync_status='failed'
+// Retry langsung dari raw_payload yang tersimpan, tanpa menunggu
+// order muncul lagi di get_order_list (window 7 hari).
+// Idempotent: autoImportOrder guard internal_order_id.
+// ============================================================
+async function retryFailedOrders(account: ShopeeAccount) {
+  const shopId = account.shop_id || "";
+  const { data: failedOrders, error: frErr } = await supabase
+    .from("marketplace_orders")
+    .select("id, mp_order_id, raw_payload")
+    .eq("platform", "shopee")
+    .eq("shop_id", shopId)
+    .eq("sync_status", "failed");
+  if (frErr) throw new Error("gagal load failed orders: " + frErr.message);
+
+  const results = { retried: 0, imported: 0, failed: 0, skipped: 0, errors: [] as any[] };
+  for (const row of failedOrders || []) {
+    if (!row.raw_payload) { results.skipped++; continue; }
+    results.retried++;
+    try {
+      const imp = await autoImportOrder(account, row.raw_payload);
+      if (imp.status === "imported") results.imported++;
+      else if (imp.status === "failed") {
+        results.failed++;
+        results.errors.push({ order_sn: row.mp_order_id, error: imp.error });
+      } else {
+        results.skipped++;
+      }
+    } catch (err: any) {
+      results.failed++;
+      results.errors.push({ order_sn: row.mp_order_id, error: err.message });
+    }
+  }
   return results;
 }
 
@@ -624,6 +693,13 @@ Deno.serve(async (req) => {
         totalSkipped += results.skipped;
         totalImported += results.imported;
         totalFailed += results.failed;
+
+        // Retry order yang sebelumnya gagal import (dari marketplace_orders)
+        const retry = await retryFailedOrders(account);
+        totalImported += retry.imported;
+        totalSkipped += retry.skipped;
+        totalFailed += retry.failed;
+        if (retry.errors.length) results.errors = (results.errors || []).concat(retry.errors);
 
         accountResults.push({
           account: account.label,
@@ -702,7 +778,8 @@ Deno.serve(async (req) => {
         skipped: a.skipped || 0,
         imported: a.imported || 0,
         failed: a.failed || 0,
-        ...(a.error ? { error: a.error } : {})
+        ...(a.error ? { error: a.error } : {}),
+        ...(Array.isArray(a.errors) && a.errors.length ? { errors: a.errors.slice(0, 10) } : {})
       }))
     }), {
       headers: { "Content-Type": "application/json", ...corsHeaders() }
