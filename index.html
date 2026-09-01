@@ -574,6 +574,40 @@
             color: var(--danger);
         }
 
+        /* ===== WORKFLOW CHAIN (Gudang) ===== */
+        .wms-chain {
+            display: inline-flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 3px 4px;
+            font-size: 0.68rem;
+            line-height: 1.3;
+            max-width: 360px;
+        }
+        .wms-step {
+            padding: 2px 7px;
+            border-radius: 20px;
+            color: var(--text-muted);
+            background: transparent;
+            border: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+        .wms-step.done {
+            color: var(--success);
+            background: var(--success-light);
+            border-color: transparent;
+        }
+        .wms-step.now {
+            color: #fff;
+            background: var(--primary);
+            border-color: transparent;
+            font-weight: 700;
+        }
+        .wms-arrow {
+            color: var(--text-muted);
+            font-size: 0.68rem;
+        }
+
         /* ===== AKSI ===== */
         .aksi-group {
             display: flex;
@@ -1783,6 +1817,7 @@
                         <li data-page="packing"><a href="#"><i class="fas fa-boxes"></i> Packing</a></li>
                         <li data-page="pengiriman"><a href="#"><i class="fas fa-truck"></i> Pengiriman</a></li>
                         <li data-page="opname-gudang"><a href="#"><i class="fas fa-clipboard-check"></i> Stock Opname</a></li>
+                        <li data-page="riwayat-gudang"><a href="#"><i class="fas fa-clock-rotate-left"></i> Riwayat Gudang</a></li>
                     </ul>
                 </li>
 
@@ -2237,6 +2272,10 @@
                                 <label>Kode Barcode</label>
                                 <input type="text" id="newProdBarcode" class="form-control" placeholder="Masukkan atau generate barcode..." />
                             </div>
+                            <div class="form-group" style="flex:1;min-width:180px;">
+                                <label>PLU Timbangan (Precio)</label>
+                                <input type="text" id="newProdPLU" class="form-control" placeholder="Contoh: 10022 (scan label timbangan)" />
+                            </div>
                             <button type="button" class="checkout-btn" onclick="generateNewProdBarcode()" style="width:auto;padding:10px 20px;white-space:nowrap;"><i class="fas fa-sync-alt"></i> Generate Barcode</button>
                         </div>
                         <div id="barcodePreview" style="text-align:center;margin-top:12px;display:none;"></div>
@@ -2327,7 +2366,7 @@
                 <button class="filter-tab" data-filter="pending">Perlu Dipick</button>
                 <button class="filter-tab" data-filter="done">Sudah Dipick</button>
             </div>
-            <div class="table-wrapper"><table><thead><tr><th>ORDER ID</th><th>PRODUK</th><th>RAK</th><th>JUMLAH</th><th>STATUS</th><th>AKSI</th></tr></thead><tbody id="pickingTableBody"></tbody></table></div>
+            <div class="table-wrapper"><table><thead><tr><th>ORDER ID</th><th>PRODUK</th><th>RAK</th><th>JUMLAH</th><th>STATUS</th><th>DIPICK PADA</th><th>AKSI</th></tr></thead><tbody id="pickingTableBody"></tbody></table></div>
         </div>
 
         <div id="page-packing" class="page-content">
@@ -2337,7 +2376,7 @@
                     <div class="page-header-desc">Periksa dan kemas pesanan sebelum dikirim</div>
                 </div>
             </div>
-            <div class="table-wrapper"><table><thead><tr><th>ORDER ID</th><th>PELANGGAN</th><th>CHANNEL</th><th>ITEM</th><th>QTY</th><th>QC STATUS</th><th>AKSI</th></tr></thead><tbody id="packingTableBody"></tbody></table></div>
+            <div class="table-wrapper"><table><thead><tr><th>ORDER ID</th><th>PELANGGAN</th><th>CHANNEL</th><th>ITEM</th><th>QTY</th><th>QC STATUS</th><th>DIPACKING PADA</th><th>AKSI</th></tr></thead><tbody id="packingTableBody"></tbody></table></div>
         </div>
 
         <div id="page-pengiriman" class="page-content">
@@ -2347,7 +2386,7 @@
                     <div class="page-header-desc">Jadwal dan status pengiriman ke pelanggan</div>
                 </div>
             </div>
-            <div class="table-wrapper"><table><thead><tr><th>ORDER ID</th><th>PELANGGAN</th><th>KURIR</th><th>NO RESI</th><th>STATUS</th><th>AKSI</th></tr></thead><tbody id="shippingTableBody"></tbody></table></div>
+            <div class="table-wrapper"><table><thead><tr><th>ORDER ID</th><th>PELANGGAN</th><th>KURIR</th><th>NO RESI</th><th>STATUS</th><th>DIKIRIM PADA</th><th>AKSI</th></tr></thead><tbody id="shippingTableBody"></tbody></table></div>
         </div>
 
         <div id="page-opname-gudang" class="page-content">
@@ -2367,6 +2406,24 @@
             </div>
             <div class="page-header" style="margin-top:8px;"><h3 style="font-size:1rem;">Sesi Opname Aktif</h3></div>
             <div id="opnameActiveList"></div>
+        </div>
+
+        <div id="page-riwayat-gudang" class="page-content">
+            <div class="page-header">
+                <div>
+                    <h1>Riwayat Gudang</h1>
+                    <div class="page-header-desc">Aktivitas picking, packing, pengiriman, opname, dan penerimaan (waktu Asia/Jakarta)</div>
+                </div>
+            </div>
+            <div class="filter-tabs" id="historyFilter">
+                <button class="filter-tab active" data-filter="all">Semua</button>
+                <button class="filter-tab" data-filter="pick">Picking</button>
+                <button class="filter-tab" data-filter="pack">Packing</button>
+                <button class="filter-tab" data-filter="ship">Pengiriman</button>
+                <button class="filter-tab" data-filter="opname">Opname</button>
+                <button class="filter-tab" data-filter="receive">Penerimaan</button>
+            </div>
+            <div class="table-wrapper"><table><thead><tr><th>TANGGAL / JAM (WIB)</th><th>AKTIVITAS</th><th>REFERENSI</th><th>PETUGAS</th><th>STATUS</th></tr></thead><tbody id="warehouseHistoryBody"></tbody></table></div>
         </div>
 
         <div id="page-harga-belanja" class="page-content">
@@ -3036,7 +3093,10 @@
                 if (oRes.data && oRes.data.length > 0) ordersData = oRes.data.map(o => ({
                     orderId: o.orderid, date: o.date, channel: o.channel, customer: o.customer,
                     total: o.total, payStatus: o.paystatus, wmsStatus: o.wmsstatus, courier: o.courier, resi: o.resi,
-                    shop_id: o.shop_id || null
+                    shop_id: o.shop_id || null,
+                    picked_at: o.picked_at || null, picked_by: o.picked_by || null,
+                    packed_at: o.packed_at || null, packed_by: o.packed_by || null,
+                    shipped_at: o.shipped_at || null, shipped_by: o.shipped_by || null
                 }));
                 if (kRes.data && kRes.data.length > 0) karyawanData = kRes.data;
                 if (wRecRes.data && wRecRes.data.length > 0) warehouseReceiving = wRecRes.data;
@@ -3290,6 +3350,36 @@
             playAddSound();
         }
 
+        // ============================================================
+        // BARCODE TIMBANGAN PRECIO LP (EAN-13)
+        // Format: prefix 20 + PLU(5 digit) + berat gram(5 digit) + check digit
+        // Contoh: 2010022002409 → PLU 10022, berat 240 gram (0.240 kg)
+        // Deteksi: prefix "20" + panjang 13 digit.
+        // Check digit TIDAK dihitung ulang (posisi terakhir saja, sesuai spec).
+        // ============================================================
+        function parsePrecioBarcode(code) {
+            if (typeof code !== "string") return null;
+            const c = code.trim();
+            if (c.length !== 13 || c.slice(0, 2) !== "20" || !/^\d{13}$/.test(c)) return null;
+            return {
+                plu: c.slice(2, 7),
+                weightKg: parseInt(c.slice(7, 12), 10) / 1000,
+                weightGrams: parseInt(c.slice(7, 12), 10),
+                checkDigit: c.charAt(12)
+            };
+        }
+
+        // Tambah item timbang ke cart: qty = berat (kg), harga = harga/kg dari DB.
+        // Scan kedua produk yang sama dijumlahkan beratnya (satu baris, tidak duplikat).
+        function addWeighedItem(prod, weightKg) {
+            if (!prod || !(weightKg > 0)) return;
+            const existing = cart.find(i => i.id === prod.id && i.isWeighed);
+            if (existing) existing.quantity += weightKg;
+            else cart.push({ ...prod, quantity: weightKg, price: prod.price, subtotal: weightKg * prod.price, isWeighed: true });
+            updateCartUI();
+            playAddSound();
+        }
+
         function updateCartUI() {
             let subtotal = 0;
             const container = document.getElementById("cartItems");
@@ -3312,14 +3402,14 @@
                             <div class="cart-item-details">
                                 <div class="cart-item-name">${item.name}</div>
                                 <div class="cart-item-price" style="display:flex;align-items:center;gap:4px;">
-                                    ${item.price.toLocaleString('id-ID')}
+                                    ${item.price.toLocaleString('id-ID')}${item.isWeighed ? '/kg' : ''}
                                     <button class="cart-qty-btn" onclick="editPrice(${idx})" title="Ubah Harga" style="width:18px;height:18px;font-size:0.55rem;"><i class="fas fa-pencil-alt"></i></button>
                                 </div>
                             </div>
                             <div class="cart-item-actions">
                                 <div class="qty-controls">
                                     <button class="cart-qty-btn" onclick="changeQty(${idx},-1)">-</button>
-                                    <span class="qty-val" onclick="editQtyPrompt(${idx})" style="cursor:pointer;" title="Klik untuk edit jumlah">${item.quantity}</span>
+                                    <span class="qty-val" onclick="editQtyPrompt(${idx})" style="cursor:pointer;" title="Klik untuk edit jumlah">${item.isWeighed ? Number(item.quantity).toFixed(3) : item.quantity}</span>
                                     <button class="cart-qty-btn" onclick="changeQty(${idx},1)">+</button>
                                 </div>
                                 <button class="cart-del-btn" onclick="removeFromCart(${idx})" title="Hapus item"><i class="fas fa-trash-alt"></i></button>
@@ -3495,7 +3585,7 @@
                             <td>${o.customer}</td>
                             <td><strong>${o.total.toLocaleString('id-ID')}</strong></td>
                             <td><span class="badge-status ${badgeClass}">${o.payStatus}</span></td>
-                            <td><span class="badge-status ${wmsBadge}">${o.wmsStatus}</span></td>
+                            <td><span class="badge-status ${wmsBadge}">${wmsDisplay(o.wmsStatus)}</span></td>
                             <td>${o.courier}<br><small style="color:var(--text-muted);">${o.resi}</small></td>
                             <td>
                                 <div class="aksi-group">
@@ -3624,7 +3714,7 @@
             if (t) t.textContent = "Tambah Produk Baru";
             const b = document.getElementById("addProductSubmit");
             if (b) b.textContent = "Simpan Produk";
-            ["newProdName","newProdSKU","newProdModal","newProdPrice","newProdStock","newProdSpec","newProdLength","newProdWidth","newProdHeight","newProdWeight","newProdBarcode","newProdShopeeId","newProdShopeeSku"].forEach(id => {
+            ["newProdName","newProdSKU","newProdModal","newProdPrice","newProdStock","newProdSpec","newProdLength","newProdWidth","newProdHeight","newProdWeight","newProdBarcode","newProdPLU","newProdShopeeId","newProdShopeeSku"].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.value = "";
             });
@@ -3651,6 +3741,7 @@
             document.getElementById("newProdStock").value = p.stock || 0;
             document.getElementById("newProdSupplier").value = p.supplier || "";
             document.getElementById("newProdBarcode").value = p.barcode || "";
+            document.getElementById("newProdPLU").value = p.plu || "";
             document.getElementById("newProdShopeeId").value = p.shopee_item_id || "";
             document.getElementById("newProdShopeeSku").value = p.shopee_sku || "";
             const t = document.getElementById("addProductTitle");
@@ -3920,16 +4011,83 @@
         }
 
         // ============================================================
+        // WAREHOUSE: HELPERS (timestamp WIB + alur kerja)
+        // ============================================================
+        // Konversi timestamp DB (UTC) ke "YYYY-MM-DD HH:mm" Asia/Jakarta.
+        function fmtWIB(ts) {
+            if (!ts) return '';
+            const d = new Date(ts);
+            if (isNaN(d.getTime())) return String(ts);
+            const p = new Intl.DateTimeFormat('sv-SE', {
+                timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', hour12: false
+            }).format(d);
+            return p.replace('T', ' ').slice(0, 16);
+        }
+
+        function currentUserName() {
+            return (currentUser && currentUser.name) ? currentUser.name : 'Admin';
+        }
+
+        // Indeks tahapan alur: Order → Perlu Dipick → Sudah Dipick → Packing → Sudah Dipacking → Siap Kirim → Dikirim
+        function wmsStepIndex(status) {
+            const map = {
+                'Baru': 1, 'Perlu Verifikasi': 1, 'Perlu Dipick': 1,
+                'Dipick': 2, 'Sudah Dipick': 2,
+                'Packing': 3,
+                'Siap Kirim': 5, 'Sudah Dipacking': 5,
+                'Dikirim': 6,
+                'Selesai': 6, 'Batal': -1
+            };
+            return (status in map) ? map[status] : 0;
+        }
+
+        // Label status yang lebih jelas untuk badge.
+        function wmsDisplay(status) {
+            const map = {
+                'Baru': 'Perlu Dipick',
+                'Dipick': 'Sudah Dipick',
+                'Siap Kirim': 'Sudah Dipacking',
+                'Packing': 'Packing',
+                'Dikirim': 'Dikirim',
+                'Selesai': 'Selesai',
+                'Batal': 'Batal',
+                'Perlu Verifikasi': 'Perlu Verifikasi'
+            };
+            return (status in map) ? map[status] : status;
+        }
+
+        // Rantai alur kerja (7 tahap) dengan progres; tahap aktif ditandai.
+        function wmsChainHtml(status) {
+            const steps = ['Order', 'Perlu Dipick', 'Sudah Dipick', 'Packing', 'Sudah Dipacking', 'Siap Kirim', 'Dikirim'];
+            const idx = wmsStepIndex(status);
+            const done = idx >= 0 ? idx : -1;
+            const part = (s, i) => {
+                let cls = 'wms-step';
+                if (done >= 0) {
+                    if (i < done) cls += ' done';
+                    else if (i === done) cls += ' now';
+                }
+                return `<span class="${cls}">${s}</span>`;
+            };
+            const joined = steps.map((s, i) => {
+                const arrow = i > 0 ? '<span class="wms-arrow">→</span>' : '';
+                return arrow + part(s, i);
+            }).join('');
+            return `<div class="wms-chain">${joined}</div>`;
+        }
+
+        // ============================================================
         // WAREHOUSE: PICKING
         // ============================================================
         function renderWarehousePicking(filter) {
             const tbody = document.getElementById("pickingTableBody");
             if (!tbody) return;
             const f = filter || 'all';
-            const pickingOrders = ordersData.filter(o => o.wmsStatus !== 'Selesai' && o.wmsStatus !== 'Batal' && o.wmsStatus !== 'Dikirim');
+            const pickingOrders = ordersData.filter(o => o.wmsStatus === 'Baru' || o.wmsStatus === 'Perlu Verifikasi' || o.wmsStatus === 'Dipick');
             const filtered = f === 'done' ? pickingOrders.filter(o => o.wmsStatus === 'Dipick') : f === 'pending' ? pickingOrders.filter(o => o.wmsStatus !== 'Dipick') : pickingOrders;
             if (!filtered.length) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Tidak ada pesanan untuk dipick</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Tidak ada pesanan untuk dipick</td></tr>';
                 return;
             }
             tbody.innerHTML = filtered.map(o => {
@@ -3938,12 +4096,16 @@
                 const items = orderItemsData.filter(i => i.orderid === o.orderId);
                 const productHtml = items.length ? items.map(i => i.product_name).join('<br>') : '<span style="color:var(--text-muted);">-</span>';
                 const qtyHtml = items.length ? items.map(i => `${i.qty} pcs`).join('<br>') : '<span style="color:var(--text-muted);">-</span>';
+                const pickedInfo = isDone && o.picked_at
+                    ? `<strong>${fmtWIB(o.picked_at)}</strong><br><small style="color:var(--text-muted);">oleh ${o.picked_by || '-'}</small>`
+                    : '<span style="color:var(--text-muted);">-</span>';
                 return `<tr>
-                    <td><strong>${o.orderId}</strong></td>
+                    <td><strong>${o.orderId}</strong><br><small style="color:var(--text-muted);">${o.date || ''}</small></td>
                     <td>${productHtml}</td>
                     <td>${rack ? rack.zone + ' - ' + rack.rack_name : 'Belum ditentukan'}</td>
                     <td>${qtyHtml}</td>
-                    <td><span class="badge-status ${isDone ? 'badge-lunas' : 'badge-belum'}">${isDone ? 'Sudah Dipick' : 'Perlu Dipick'}</span></td>
+                    <td>${wmsChainHtml(o.wmsStatus)}</td>
+                    <td>${pickedInfo}</td>
                     <td>${!isDone ? `<button class="aksi-btn" onclick="markPicked('${o.orderId}')"><i class="fas fa-check"></i> Tandai Dipick</button>` : '-'}</td>
                 </tr>`;
             }).join('');
@@ -3952,8 +4114,17 @@
         async function markPicked(orderId) {
             const o = ordersData.find(x => x.orderId === orderId);
             if (!o) return;
-            o.wmsStatus = 'Dipick';
-            sb.from('orders').update({ wmsstatus: 'Dipick' }).eq('orderid', orderId);
+            const { data, error } = await sb.rpc('record_warehouse_action', {
+                p_order_id: orderId, p_action: 'pick', p_petugas: currentUserName()
+            });
+            if (error) { showToast("Gagal menandai dipick: " + error.message); return; }
+            if (data && data.status !== 'ok') { showToast(data.message || "Gagal menandai dipick"); return; }
+            if (data) {
+                o.wmsStatus = data.wmsstatus || 'Dipick';
+                o.picked_at = data.picked_at; o.picked_by = data.picked_by;
+            } else {
+                o.wmsStatus = 'Dipick'; o.picked_at = new Date().toISOString(); o.picked_by = currentUserName();
+            }
             renderWarehousePicking();
             renderWarehousePacking();
             showToast(`${orderId} ditandai sudah dipick`);
@@ -3976,7 +4147,7 @@
             if (!tbody) return;
             const packingOrders = ordersData.filter(o => o.wmsStatus === 'Dipick' || o.wmsStatus === 'Packing' || o.wmsStatus === 'Siap Kirim');
             if (!packingOrders.length) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Tidak ada pesanan untuk packing</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);">Tidak ada pesanan untuk packing</td></tr>';
                 return;
             }
             tbody.innerHTML = packingOrders.map(o => {
@@ -3987,23 +4158,46 @@
                 } else if (o.wmsStatus === 'Packing') {
                     actionHtml = `<button class="aksi-btn" onclick="markPacked('${o.orderId}')"><i class="fas fa-box"></i> QC OK</button>`;
                 }
+                const packedInfo = o.wmsStatus === 'Siap Kirim' && o.packed_at
+                    ? `<strong>${fmtWIB(o.packed_at)}</strong><br><small style="color:var(--text-muted);">oleh ${o.packed_by || '-'}</small>`
+                    : '<span style="color:var(--text-muted);">-</span>';
                 return `<tr>
-                    <td><strong>${o.orderId}</strong></td>
+                    <td><strong>${o.orderId}</strong><br><small style="color:var(--text-muted);">${o.date || ''}</small></td>
                     <td>${o.customer}</td>
                     <td>${renderChannelBadge(o.channel)}</td>
                     <td>Pesanan ${o.orderId}</td>
                     <td>1</td>
-                    <td><span class="badge-status ${statusCls}">${o.wmsStatus}</span></td>
+                    <td><span class="badge-status ${statusCls}">${wmsDisplay(o.wmsStatus)}</span></td>
+                    <td>${packedInfo}</td>
                     <td>${actionHtml}</td>
                 </tr>`;
             }).join('');
         }
 
+        async function markPacking(orderId) {
+            const o = ordersData.find(x => x.orderId === orderId);
+            if (!o) return;
+            const { error } = await sb.from('orders').update({ wmsstatus: 'Packing' }).eq('orderid', orderId);
+            if (error) { showToast("Gagal mulai packing: " + error.message); return; }
+            o.wmsStatus = 'Packing';
+            renderWarehousePacking();
+            showToast(`${orderId} mulai dipacking`);
+        }
+
         async function markPacked(orderId) {
             const o = ordersData.find(x => x.orderId === orderId);
             if (!o) return;
-            o.wmsStatus = 'Siap Kirim';
-            sb.from('orders').update({ wmsstatus: 'Siap Kirim' }).eq('orderid', orderId);
+            const { data, error } = await sb.rpc('record_warehouse_action', {
+                p_order_id: orderId, p_action: 'pack', p_petugas: currentUserName()
+            });
+            if (error) { showToast("Gagal QC OK: " + error.message); return; }
+            if (data && data.status !== 'ok') { showToast(data.message || "Gagal QC OK"); return; }
+            if (data) {
+                o.wmsStatus = data.wmsstatus || 'Siap Kirim';
+                o.packed_at = data.packed_at; o.packed_by = data.packed_by;
+            } else {
+                o.wmsStatus = 'Siap Kirim'; o.packed_at = new Date().toISOString(); o.packed_by = currentUserName();
+            }
             renderWarehousePacking();
             renderWarehouseShipping();
             showToast(`${orderId} siap dikirim`);
@@ -4017,35 +4211,48 @@
             if (!tbody) return;
             const shipOrders = ordersData.filter(o => o.wmsStatus === 'Siap Kirim' || o.wmsStatus === 'Dikirim');
             if (!shipOrders.length) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Tidak ada pesanan siap kirim</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Tidak ada pesanan siap kirim</td></tr>';
                 return;
             }
             tbody.innerHTML = shipOrders.map(o => {
                 const isSent = o.wmsStatus === 'Dikirim';
+                const shippedInfo = isSent && o.shipped_at
+                    ? `<strong>${fmtWIB(o.shipped_at)}</strong><br><small style="color:var(--text-muted);">oleh ${o.shipped_by || '-'}</small>`
+                    : '<span style="color:var(--text-muted);">-</span>';
                 return `<tr>
-                    <td><strong>${o.orderId}</strong></td>
+                    <td><strong>${o.orderId}</strong><br><small style="color:var(--text-muted);">${o.date || ''}</small></td>
                     <td>${o.customer}</td>
                     <td>${o.courier || 'Belum ditentukan'}</td>
                     <td>${o.resi !== '-' ? o.resi : 'Belum ada'}</td>
-                    <td><span class="badge-status ${isSent ? 'badge-lunas' : 'badge-belum'}">${isSent ? 'Dikirim' : 'Siap Kirim'}</span></td>
+                    <td>${wmsChainHtml(o.wmsStatus)}</td>
+                    <td>${shippedInfo}</td>
                     <td>${!isSent ? `<button class="aksi-btn" onclick="openShipForm('${o.orderId}')"><i class="fas fa-truck"></i> Kirim</button>` : '<button class="aksi-btn" onclick="showToast(\'Lacak ' + o.resi + '\')"><i class="fas fa-search"></i></button>'}</td>
                 </tr>`;
             }).join('');
         }
 
-        function openShipForm(orderId) {
+        async function openShipForm(orderId) {
             const courier = prompt(`Kurir untuk ${orderId}:`, "J&T Express");
             const resi = prompt("No Resi:", "JP" + Date.now().toString(36).toUpperCase());
-            if (courier && resi) {
-                const o = ordersData.find(x => x.orderId === orderId);
-                if (o) {
-                    o.courier = courier; o.resi = resi; o.wmsStatus = 'Dikirim';
-                    sb.from('orders').update({ courier, resi, wmsstatus: 'Dikirim' }).eq('orderid', orderId);
-                    renderWarehouseShipping();
-                    renderPenjualanTable();
-                    showToast(`${orderId} dikirim via ${courier}`);
-                }
+            if (!courier || !resi) return;
+            const o = ordersData.find(x => x.orderId === orderId);
+            if (!o) return;
+            const { data, error } = await sb.rpc('record_warehouse_action', {
+                p_order_id: orderId, p_action: 'ship', p_petugas: currentUserName(), p_courier: courier, p_resi: resi
+            });
+            if (error) { showToast("Gagal kirim: " + error.message); return; }
+            if (data && data.status !== 'ok') { showToast(data.message || "Gagal kirim"); return; }
+            if (data) {
+                o.courier = data.courier; o.resi = data.resi;
+                o.wmsStatus = data.wmsstatus || 'Dikirim';
+                o.shipped_at = data.shipped_at; o.shipped_by = data.shipped_by;
+            } else {
+                o.courier = courier; o.resi = resi; o.wmsStatus = 'Dikirim';
+                o.shipped_at = new Date().toISOString(); o.shipped_by = currentUserName();
             }
+            renderWarehouseShipping();
+            renderPenjualanTable();
+            showToast(`${orderId} dikirim via ${o.courier}`);
         }
 
         // ============================================================
@@ -4158,8 +4365,8 @@
             container.innerHTML = openSessions.map(s => `<div class="account-card">
                 <div class="account-header">
                     <div class="account-info">
-                        <span class="acc-name">${s.zone} - ${s.officer}</span>
-                        <span class="acc-detail">${s.session_date}</span>
+                        <span class="acc-name">${s.zone} - ${s.officer || '-'}</span>
+                        <span class="acc-detail">Mulai: ${fmtWIB(s.created_at)} WIB</span>
                     </div>
                     <button class="checkout-btn" onclick="finishOpname('${s.id}')" style="width:auto;padding:6px 16px;font-size:0.75rem;">Selesai</button>
                 </div>
@@ -4172,10 +4379,12 @@
             if (!officer) { showToast("Isi nama petugas"); return; }
             const session = {
                 id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36),
-                zone, officer, session_date: new Date().toISOString().slice(0, 10), status: 'open'
+                zone, officer, status: 'open'
             };
             warehouseOpname.push(session);
-            sb.from('warehouse_opname').insert(session);
+            const { error } = await sb.from('warehouse_opname').insert(session);
+            if (error) { showToast("Gagal mulai opname: " + error.message); return; }
+            session.created_at = new Date().toISOString();
             renderWarehouseOpnameList();
             document.getElementById("opnameOfficer").value = "";
             showToast(`Sesi opname ${zone} dimulai`);
@@ -4184,10 +4393,58 @@
         async function finishOpname(id) {
             const s = warehouseOpname.find(x => x.id === id);
             if (!s) return;
+            const { data, error } = await sb.rpc('close_opname', { p_opname_id: id });
+            if (error) { showToast("Gagal menyelesaikan opname: " + error.message); return; }
+            if (data && data.status !== 'ok') { showToast(data.message || "Gagal menyelesaikan opname"); return; }
             s.status = 'closed';
-            sb.from('warehouse_opname').update({ status: 'closed' }).eq('id', id);
+            s.closed_at = (data && data.closed_at) ? data.closed_at : new Date().toISOString();
             renderWarehouseOpnameList();
             showToast(`Opname ${s.zone} selesai`);
+        }
+
+        // ============================================================
+        // WAREHOUSE: RIWAYAT GUDANG
+        // Dibangun dari data existing (tidak ada tabel/duplikat baru).
+        // ============================================================
+        function renderWarehouseHistory(filter) {
+            const tbody = document.getElementById("warehouseHistoryBody");
+            if (!tbody) return;
+            const rows = [];
+
+            ordersData.forEach(o => {
+                if (o.picked_at) rows.push({ ts: o.picked_at, sort: new Date(o.picked_at).getTime(), type: 'pick', ref: o.orderId, act: 'Picking', petugas: o.picked_by || '-', status: 'Sudah Dipick' });
+                if (o.packed_at) rows.push({ ts: o.packed_at, sort: new Date(o.packed_at).getTime(), type: 'pack', ref: o.orderId, act: 'Packing', petugas: o.packed_by || '-', status: 'Sudah Dipacking' });
+                if (o.shipped_at) rows.push({ ts: o.shipped_at, sort: new Date(o.shipped_at).getTime(), type: 'ship', ref: o.orderId, act: 'Pengiriman', petugas: o.shipped_by || '-', status: 'Dikirim' });
+            });
+
+            warehouseOpname.forEach(s => {
+                if (s.created_at) rows.push({ ts: s.created_at, sort: new Date(s.created_at).getTime(), type: 'opname', ref: (s.zone || '-') + ' (mulai)', act: 'Stock Opname', petugas: s.officer || '-', status: s.status === 'closed' ? 'Selesai' : 'Berjalan' });
+                if (s.closed_at) rows.push({ ts: s.closed_at, sort: new Date(s.closed_at).getTime(), type: 'opname', ref: (s.zone || '-') + ' (selesai)', act: 'Stock Opname', petugas: s.officer || '-', status: 'Selesai' });
+            });
+
+            warehouseReceiving.forEach(r => {
+                const rts = r.created_at || null;
+                if (rts) rows.push({ ts: rts, sort: new Date(rts).getTime(), type: 'receive', ref: r.po_number || r.product_name || '-', act: 'Penerimaan', petugas: '-', status: r.product_name || '-' });
+            });
+
+            rows.sort((a, b) => (b.sort || 0) - (a.sort || 0));
+
+            const f = filter || 'all';
+            const filtered = f === 'all' ? rows : rows.filter(r => r.type === f);
+
+            if (!filtered.length) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">Tidak ada riwayat aktivitas</td></tr>';
+                return;
+            }
+
+            const actCls = { pick: 'badge-lunas', pack: 'badge-lunas', ship: 'badge-belum', opname: 'badge-belum', receive: 'badge-lunas' };
+            tbody.innerHTML = filtered.map(r => `<tr>
+                <td><strong>${fmtWIB(r.ts)}</strong><br><small style="color:var(--text-muted);">WIB</small></td>
+                <td>${r.act}</td>
+                <td><strong>${r.ref}</strong></td>
+                <td>${r.petugas}</td>
+                <td><span class="badge-status ${actCls[r.type] || 'badge-belum'}">${r.status}</span></td>
+            </tr>`).join('');
         }
 
         // ============================================================
@@ -4875,7 +5132,7 @@
                 if (!prod) { showToast(`Produk "${item.name}" tidak ditemukan`); return; }
                 if (prod.stock < item.quantity) { showToast(`Stok ${prod.name} tidak cukup (tersedia: ${prod.stock})`); return; }
             }
-            let subtotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
+            let subtotal = Math.round(cart.reduce((sum, i) => sum + i.price * i.quantity, 0));
             let disc = Math.min(parseInt(document.getElementById("discountInput").value.replace(/\D/g, "")) || 0, subtotal);
             let total = subtotal - disc;
             let customer = document.getElementById("customerName").value.trim() || "Walk-in Customer";
@@ -4936,7 +5193,7 @@
                 product_name: i.name,
                 qty: i.quantity,
                 price: i.price,
-                subtotal: i.price * i.quantity
+                subtotal: Math.round(i.price * i.quantity)
             }));
             const txnKey = crypto.randomUUID();
             const pendingOrder = {
@@ -5113,6 +5370,12 @@
                         <div style="display:flex;justify-content:space-between;"><span>Tanggal</span><strong>${o.date}</strong></div>
                         <div style="display:flex;justify-content:space-between;"><span>Pelanggan</span><strong>${o.customer || '-'}</strong></div>
                         <div style="display:flex;justify-content:space-between;"><span>Metode Bayar</span><strong>${methodLabel}</strong></div>
+                        <div style="display:flex;justify-content:space-between;"><span>Status Gudang</span><strong>${wmsDisplay(o.wmsstatus)}</strong></div>
+                        <hr style="border-color:var(--border-color);margin:4px 0;">
+                        <div style="font-weight:700;font-size:0.8rem;color:var(--text-muted);">AKTIVITAS GUDANG</div>
+                        <div style="display:flex;justify-content:space-between;"><span>Dipick</span><span>${o.picked_at ? fmtWIB(o.picked_at) + ' WIB · ' + (o.picked_by || '-') : '-'}</span></div>
+                        <div style="display:flex;justify-content:space-between;"><span>Dipacking</span><span>${o.packed_at ? fmtWIB(o.packed_at) + ' WIB · ' + (o.packed_by || '-') : '-'}</span></div>
+                        <div style="display:flex;justify-content:space-between;"><span>Dikirim</span><span>${o.shipped_at ? fmtWIB(o.shipped_at) + ' WIB · ' + (o.shipped_by || '-') : '-'}</span></div>
                         ${itemsHtml}
                         <hr style="border-color:var(--border-color);margin:4px 0;">
                         <div style="display:flex;justify-content:space-between;"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
@@ -5247,7 +5510,7 @@
                     "daftar-produk": "katalog", "tambah-produk": "katalog",
                     "monitor-stok": "persediaan", "mutasi-stok": "persediaan",
                     "data-pembelian": "pembelian",
-                    penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "opname-gudang": "gudang",
+                    penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "opname-gudang": "gudang", "riwayat-gudang": "gudang",
                     "harga-belanja": "pricing", "harga-jual": "pricing", "ubah-harga": "pricing", "diskon-promo": "pricing", "margin-keuntungan": "pricing",
                     karyawan: "hr", absensi: "hr", "rekap-kehadiran": "hr", cuti: "hr", "jadwal-kerja": "hr", penggajian: "hr", "slip-gaji": "hr",
 
@@ -5298,6 +5561,7 @@
             renderWarehouseShipping();
             renderWarehouseRacks();
             renderWarehouseOpnameList();
+            renderWarehouseHistory();
             renderRekapKehadiran();
 
             // Rekap penjualan: default tanggal hari ini
@@ -5314,6 +5578,15 @@
                     document.querySelectorAll("#pickingFilter .filter-tab").forEach(t => t.classList.remove("active"));
                     this.classList.add("active");
                     renderWarehousePicking(this.dataset.filter);
+                });
+            });
+
+            // Riwayat Gudang filter
+            document.querySelectorAll("#historyFilter .filter-tab").forEach(tab => {
+                tab.addEventListener("click", function() {
+                    document.querySelectorAll("#historyFilter .filter-tab").forEach(t => t.classList.remove("active"));
+                    this.classList.add("active");
+                    renderWarehouseHistory(this.dataset.filter);
                 });
             });
 
@@ -5417,9 +5690,10 @@
                 const cat = document.getElementById("newProdCat").value;
                 const modal = parseInt(document.getElementById("newProdModal").value);
                 const price = parseInt(document.getElementById("newProdPrice").value);
-                const stock = parseInt(document.getElementById("newProdStock").value);
+                const stock = parseFloat(document.getElementById("newProdStock").value);
                 const supplier = document.getElementById("newProdSupplier").value;
                 const barcode = document.getElementById("newProdBarcode").value.trim();
+                const plu = document.getElementById("newProdPLU").value.trim() || null;
                 const shopee_item_id = parseInt(document.getElementById("newProdShopeeId").value) || null;
                 const shopee_sku = document.getElementById("newProdShopeeSku").value.trim() || null;
                 if (!name || isNaN(modal) || isNaN(price) || isNaN(stock)) { showToast("Isi semua field wajib"); return; }
@@ -5431,7 +5705,7 @@
                         showToast(`SKU "${finalSku}" sudah digunakan`);
                         return;
                     }
-                    const updates = { name, sku: finalSku, category: cat, modal, price, stock, supplier, barcode: barcode || null, shopee_item_id, shopee_sku };
+                    const updates = { name, sku: finalSku, category: cat, modal, price, stock, supplier, barcode: barcode || null, plu, shopee_item_id, shopee_sku };
                     const { error: upErr } = await sb.from('products').update(updates).eq('id', editingProductId);
                     if (upErr) {
                         console.error("Supabase update product error:", upErr.message);
@@ -5470,10 +5744,11 @@
                     price,
                     stock,
                     minstock: 10,
-                    maxstock: stock * 2,
+                    maxstock: Math.round(stock * 2),
                     supplier,
                     imageicon: pendingPhotoData || null,
                     barcode: barcode || ("899" + String(Math.floor(Math.random() * 10000000000)).padStart(10, "0")),
+                    plu,
                     shopee_item_id,
                     shopee_sku
                 };
@@ -5534,6 +5809,31 @@
                     e.preventDefault();
                     const val = this.value.trim();
                     if (!val) return;
+
+                    // Barcode timbangan Precio LP → tambah item timbang
+                    const precio = parsePrecioBarcode(val);
+                    if (precio) {
+                        if (!(precio.weightKg > 0)) {
+                            showToast("Barcode timbangan Precio invalid (berat tidak valid)");
+                            this.value = "";
+                            renderProducts("", posCategory);
+                            return;
+                        }
+                        const wp = products.find(p => p.plu && String(p.plu).trim() === String(precio.plu));
+                        if (!wp) {
+                            showToast(`PLU ${precio.plu} tidak ditemukan`);
+                            this.value = "";
+                            renderProducts("", posCategory);
+                            return;
+                        }
+                        addWeighedItem(wp, precio.weightKg);
+                        this.value = "";
+                        currentSearch = "";
+                        renderProducts("", posCategory);
+                        showToast(`${wp.name}: ${precio.weightKg.toFixed(3)} kg x ${wp.price.toLocaleString('id-ID')} = ${Math.round(precio.weightKg * wp.price).toLocaleString('id-ID')}`);
+                        return;
+                    }
+
                     let prod = products.find(p => p.id === parseInt(val)) || products.find(p => p.name
                         .toLowerCase() === val.toLowerCase()) || products.find(p => p.barcode && p.barcode === val);
                     if (!prod) {
