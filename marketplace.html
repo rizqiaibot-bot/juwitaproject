@@ -1139,17 +1139,25 @@ async function syncShopee() {
     }
     var prodOk = prodResults.some(function (r) { return r.success === true; });
     if (!prodOk) {
-      setTitle('❌ SYNC SHOPEE GAGAL');
-      step('❌', 'Pull Produk gagal untuk semua akun');
-      return;
+      // Pull Produk gagal TIDAK menghentikan workflow:
+      // tampilkan warning lalu tetap lanjut ke STEP 3/4 (stock sync tetap jalan).
+      prodOk = false;
+      setTitle('⚠️ SYNC SHOPEE DENGAN PERINGATAN');
+      step('⚠', 'Pull Produk gagal untuk semua akun — lanjut sinkronisasi order/stok');
+    } else {
+      step('✓', 'Produk selesai — akun diproses: ' + prodResults.length + ' (gagal: ' + prodResults.filter(function (r) { return !r.success; }).length + ')');
     }
-    step('✓', 'Produk selesai — akun diproses: ' + prodResults.length + ' (gagal: ' + prodResults.filter(function (r) { return !r.success; }).length + ')');
 
     // STEP 3 — Pull Order
     step('⏳', '2/3 Mengambil order Shopee...');
     var orderRes = null;
+    var orderOk = true;
+    var imported = '-';
     try { orderRes = await callEdgeFunction('shopee-pull-orders', {}); } catch (e) { orderRes = null; }
     if (!orderRes || orderRes.success === false) {
+      // Gagal sebagian pada pull order TIDAK menghentikan workflow:
+      // tampilkan warning lalu tetap lanjut ke STEP 4 (sinkronisasi stok).
+      orderOk = false;
       var oErr = 'Unknown error';
       if (orderRes && orderRes.error) oErr = orderRes.error;
       if (orderRes && orderRes.accountResults && orderRes.accountResults.length) {
@@ -1161,16 +1169,18 @@ async function syncShopee() {
           if (String(oErr).length > 300) oErr = String(oErr).slice(0, 300) + '...';
         }
       }
-      setTitle('❌ SYNC SHOPEE GAGAL');
-      step('❌', 'Pull Order gagal: ' + oErr);
-      return;
-    }
-    var imported = nv(orderRes.imported);
-    step('✓', 'Order selesai — Pulled: ' + nv(orderRes.pulled) + ' | Inserted: ' + nv(orderRes.inserted) + ' | Skipped: ' + nv(orderRes.skipped) + ' | Imported: ' + imported + ' | Failed: ' + nv(orderRes.failed));
-    if (orderRes.status_distribution) {
-      var distKeys = Object.keys(orderRes.status_distribution);
-      if (distKeys.length) {
-        step('ℹ', 'Status Shopee: ' + distKeys.map(function (k) { return k + ': ' + orderRes.status_distribution[k]; }).join(', '));
+      imported = orderRes ? nv(orderRes.imported) : '-';
+      setTitle('⚠️ SYNC SHOPEE DENGAN PERINGATAN');
+      step('⚠', 'Pull Order sebagian gagal: ' + oErr + ' — lanjut sinkronisasi stok');
+    } else {
+      orderOk = true;
+      imported = nv(orderRes.imported);
+      step('✓', 'Order selesai — Pulled: ' + nv(orderRes.pulled) + ' | Inserted: ' + nv(orderRes.inserted) + ' | Skipped: ' + nv(orderRes.skipped) + ' | Imported: ' + imported + ' | Failed: ' + nv(orderRes.failed));
+      if (orderRes.status_distribution) {
+        var distKeys = Object.keys(orderRes.status_distribution);
+        if (distKeys.length) {
+          step('ℹ', 'Status Shopee: ' + distKeys.map(function (k) { return k + ': ' + orderRes.status_distribution[k]; }).join(', '));
+        }
       }
     }
 
@@ -1189,12 +1199,12 @@ async function syncShopee() {
 
     // Ringkasan akhir
     if (summary) {
-      summary.innerHTML = '<div>Produk ✓ | Order ✓ | Stock ' + (stockOk ? '✓' : '⚠️') + '</div>';
+      summary.innerHTML = '<div>Produk ' + (prodOk ? '✓' : '⚠️') + ' | Order ' + (orderOk ? '✓' : '⚠️') + ' | Stock ' + (stockOk ? '✓' : '⚠️') + '</div>';
       if (String(imported) !== '-' && Number(imported) > 0) {
         summary.innerHTML += '<div style="color:var(--success);">📦 ' + imported + ' order baru menunggu Picking di Gudang</div>';
       }
     }
-    setTitle(stockOk ? '✅ SYNC SHOPEE BERHASIL' : '⚠️ SYNC SHOPEE SELESAI DENGAN PERINGATAN');
+    setTitle(stockOk && orderOk && prodOk ? '✅ SYNC SHOPEE BERHASIL' : '⚠️ SYNC SHOPEE SELESAI DENGAN PERINGATAN');
   } catch (err) {
     var stage = err && err.stage ? err.stage : 'Sinkronisasi';
     var msg = err && err.message ? err.message : String(err);
