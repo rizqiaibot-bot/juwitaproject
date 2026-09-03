@@ -2063,6 +2063,11 @@
                             <button id="clearCartBtn" class="clear-cart-btn">Kosongkan</button>
                         </div>
                     </div>
+                    <div id="cartSummaryBar" style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:6px;font-size:0.74rem;font-weight:700;color:var(--text-secondary);">
+                        <span>Item <b style="color:var(--text-primary);">0</b></span>
+                        <span>Qty <b style="color:var(--text-primary);">0</b></span>
+                        <span>Total Rp<b style="color:var(--success);">0</b></span>
+                    </div>
                     <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border-color);margin-bottom:6px;">
                         <i class="fas fa-user" style="color:var(--text-muted);font-size:0.8rem;"></i>
                         <input type="text" id="customerName" placeholder="Nama Pelanggan..." style="border:none;outline:none;background:transparent;font-size:0.82rem;font-weight:600;color:var(--text-primary);width:100%;padding:4px 0;" />
@@ -2270,15 +2275,13 @@
                         <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
                             <div class="form-group" style="flex:1;min-width:180px;">
                                 <label>Kode Barcode</label>
-                                <input type="text" id="newProdBarcode" class="form-control" placeholder="Masukkan atau generate barcode..." />
+                                <input type="text" id="newProdBarcode" class="form-control" placeholder="Scan barcode kemasan produk..." />
                             </div>
                             <div class="form-group" style="flex:1;min-width:180px;">
                                 <label>PLU Timbangan (Precio)</label>
                                 <input type="text" id="newProdPLU" class="form-control" placeholder="Contoh: 10022 (scan label timbangan)" />
                             </div>
-                            <button type="button" class="checkout-btn" onclick="generateNewProdBarcode()" style="width:auto;padding:10px 20px;white-space:nowrap;"><i class="fas fa-sync-alt"></i> Generate Barcode</button>
                         </div>
-                        <div id="barcodePreview" style="text-align:center;margin-top:12px;display:none;"></div>
                     </div>
 
                     <!-- CARD: SHOPEE SYNC -->
@@ -3078,10 +3081,30 @@
         // ============================================================
         // SUPABASE DATA LOADING
         // ============================================================
+        // Supabase membatasi response 1000 row/request; muat SEMUA produk
+        // dengan pagination .range() sampai jumlah row < 1000.
+        async function fetchAllProducts() {
+            const all = [];
+            let from = 0;
+            while (true) {
+                const { data, error } = await sb
+                    .from('products')
+                    .select('*')
+                    .order('id', { ascending: true })
+                    .range(from, from + 999);
+                if (error) return { data: null, error };
+                const rows = data || [];
+                all.push(...rows);
+                if (rows.length < 1000) break;
+                from += 1000;
+            }
+            return { data: all, error: null };
+        }
+
         async function initSupabaseData() {
             try {
                 const [pRes, oRes, kRes, wRecRes, wRackRes, wOpRes, oiRes] = await Promise.all([
-                    sb.from('products').select('*'),
+                    fetchAllProducts(),
                     sb.from('orders').select('*').order('date', { ascending: false }),
                     sb.from('karyawan').select('*'),
                     sb.from('warehouse_receiving').select('*').order('received_date', { ascending: false }),
@@ -3369,15 +3392,38 @@
             };
         }
 
-        // Tambah item timbang ke cart: qty = berat (kg), harga = harga/kg dari DB.
-        // Scan kedua produk yang sama dijumlahkan beratnya (satu baris, tidak duplikat).
+        // Tambah item timbang ke cart: quantity = jumlah unit (scan), weightKg = total berat (kg).
+        // Harga total dihitung dari weightKg × harga/kg (DB). Scan kedua produk yang sama
+        // dijumlahkan unit & beratnya (satu baris, tidak duplikat).
         function addWeighedItem(prod, weightKg) {
             if (!prod || !(weightKg > 0)) return;
             const existing = cart.find(i => i.id === prod.id && i.isWeighed);
-            if (existing) existing.quantity += weightKg;
-            else cart.push({ ...prod, quantity: weightKg, price: prod.price, subtotal: weightKg * prod.price, isWeighed: true });
+            if (existing) {
+                existing.quantity += 1;
+                existing.weightKg = Math.round((existing.weightKg + weightKg) * 1000) / 1000;
+            } else {
+                cart.push({ ...prod, quantity: 1, weightKg, price: prod.price, subtotal: Math.round(weightKg * prod.price), isWeighed: true });
+            }
             updateCartUI();
             playAddSound();
+        }
+
+        // Subtotal satu baris keranjang: produk timbang = harga/kg × berat (kg),
+        // produk biasa = harga × qty unit.
+        function cartLineTotal(i) {
+            const qty = i.isWeighed ? (i.weightKg != null ? i.weightKg : i.quantity) : (i.quantity || 0);
+            return Math.round((i.price || 0) * qty);
+        }
+
+        // Format berat gram→kg dengan 3 desimal & koma (mis. 0,300)
+        function fmtKg(w) {
+            return (Math.round((Number(w) || 0) * 1000) / 1000).toFixed(3).replace(".", ",");
+        }
+
+        function setCartSummary(itemCount, totalQty, total) {
+            const el = document.getElementById("cartSummaryBar");
+            if (!el) return;
+            el.innerHTML = `<span>Item <b style="color:var(--text-primary);">${itemCount}</b></span><span>Qty <b style="color:var(--text-primary);">${totalQty}</b></span><span>Total Rp<b style="color:var(--success);">${total.toLocaleString('id-ID')}</b></span>`;
         }
 
         function updateCartUI() {
@@ -3393,14 +3439,17 @@
                 document.getElementById("payAmount").value = "0";
                 document.getElementById("change").innerText = "0";
                 document.getElementById("posCartCount").textContent = "0";
+                setCartSummary(0, 0, 0);
                 return;
             }
+            const totalQty = cart.reduce((s, i) => s + (i.quantity || 0), 0);
             container.innerHTML = cart.map((item, idx) => {
-                const row = item.price * item.quantity;
+                const row = cartLineTotal(item);
                 subtotal += row;
                 return `<div class="cart-item">
                             <div class="cart-item-details">
                                 <div class="cart-item-name">${item.name}</div>
+                                ${item.isWeighed ? `<div style="font-size:0.66rem;color:var(--text-muted);">Berat: ${fmtKg(item.weightKg)} kg</div>` : ''}
                                 <div class="cart-item-price" style="display:flex;align-items:center;gap:4px;">
                                     ${item.price.toLocaleString('id-ID')}${item.isWeighed ? '/kg' : ''}
                                     <button class="cart-qty-btn" onclick="editPrice(${idx})" title="Ubah Harga" style="width:18px;height:18px;font-size:0.55rem;"><i class="fas fa-pencil-alt"></i></button>
@@ -3409,7 +3458,7 @@
                             <div class="cart-item-actions">
                                 <div class="qty-controls">
                                     <button class="cart-qty-btn" onclick="changeQty(${idx},-1)">-</button>
-                                    <span class="qty-val" onclick="editQtyPrompt(${idx})" style="cursor:pointer;" title="Klik untuk edit jumlah">${item.isWeighed ? Number(item.quantity).toFixed(3) : item.quantity}</span>
+                                    <span class="qty-val" onclick="editQtyPrompt(${idx})" style="cursor:pointer;" title="Klik untuk edit jumlah">${item.quantity}</span>
                                     <button class="cart-qty-btn" onclick="changeQty(${idx},1)">+</button>
                                 </div>
                                 <button class="cart-del-btn" onclick="removeFromCart(${idx})" title="Hapus item"><i class="fas fa-trash-alt"></i></button>
@@ -3428,14 +3477,24 @@
             document.getElementById("disc").innerText = `-${disc.toLocaleString('id-ID')}`;
             document.getElementById("total").innerText = total.toLocaleString('id-ID');
             document.getElementById("change").innerText = change.toLocaleString('id-ID');
-            document.getElementById("posCartCount").textContent = cart.reduce((s, i) => s + i.quantity, 0);
+            document.getElementById("posCartCount").textContent = totalQty;
+            setCartSummary(cart.length, totalQty, total);
             updateSplit();
         }
 
         function changeQty(idx, delta) {
-            const q = cart[idx].quantity + delta;
-            if (q <= 0) cart.splice(idx, 1);
-            else cart[idx].quantity = q;
+            const it = cart[idx];
+            if (!it) return;
+            const q = (it.quantity || 0) + delta;
+            if (q <= 0) {
+                cart.splice(idx, 1);
+            } else if (it.isWeighed) {
+                const unitW = it.quantity > 0 ? it.weightKg / it.quantity : 0;
+                it.quantity = q;
+                it.weightKg = Math.round(q * unitW * 1000) / 1000;
+            } else {
+                it.quantity = q;
+            }
             updateCartUI();
             if (delta > 0) playAddSound();
         }
@@ -3452,7 +3511,12 @@
             const newQty = prompt(`Edit jumlah "${item.name}":\n(Jumlah saat ini: ${item.quantity})`, item.quantity);
             if (newQty !== null && !isNaN(newQty) && parseInt(newQty) > 0) {
                 const prevQty = cart[idx].quantity;
-                cart[idx].quantity = parseInt(newQty);
+                const q = parseInt(newQty);
+                if (item.isWeighed) {
+                    const unitW = item.quantity > 0 ? item.weightKg / item.quantity : 0;
+                    item.weightKg = Math.round(q * unitW * 1000) / 1000;
+                }
+                cart[idx].quantity = q;
                 updateCartUI();
                 if (cart[idx].quantity > prevQty) playAddSound();
             } else if (newQty !== null) {
@@ -3504,7 +3568,7 @@
                 container.innerHTML = ""; return; }
             container.style.display = "block";
             container.innerHTML = savedOrders.map((o, i) => {
-                const subtotal = o.items.reduce((s, it) => s + it.price * it.quantity, 0);
+                const subtotal = o.items.reduce((s, it) => s + cartLineTotal(it), 0);
                 const custName = o.customer || "Tanpa Nama";
                 return `<div class="saved-order-item" style="display:flex;align-items:center;justify-content:space-between;background:var(--warning-light);border:1px solid var(--warning);border-radius:var(--radius-sm);padding:6px 12px;font-size:0.75rem;font-weight:600;color:var(--warning-text);margin-bottom:4px;">
                             <span><strong>${o.items.length} item</strong> · ${subtotal.toLocaleString('id-ID')} · <i class="fas fa-user" style="font-size:0.6rem;"></i> ${custName} · ${o.time}</span>
@@ -4919,7 +4983,7 @@
             document.getElementById("posTodayCount").textContent = todayOrders.length;
             const total = todayOrders.reduce((s, o) => s + o.total, 0);
             document.getElementById("posTodayTotal").textContent = 'Rp' + total.toLocaleString('id-ID');
-            document.getElementById("posCartCount").textContent = cart.reduce((s, i) => s + i.quantity, 0);
+            document.getElementById("posCartCount").textContent = cart.reduce((s, i) => s + (i.quantity || 0), 0);
         }
 
         function posClockTick() {
@@ -5127,12 +5191,13 @@
         async function processCheckout() {
             if (checkoutLock) { showToast("Transaksi sedang diproses..."); return; }
             if (cart.length === 0) { showToast("Keranjang masih kosong"); return; }
+            // Validasi stok TIDAK memblokir checkout: stok 0/kurang tetap boleh dijual
+            // (stok boleh menjadi negatif sesuai qty terjual). Cek hanya keberadaan produk.
             for (const item of cart) {
                 const prod = products.find(p => p.id === item.id);
                 if (!prod) { showToast(`Produk "${item.name}" tidak ditemukan`); return; }
-                if (prod.stock < item.quantity) { showToast(`Stok ${prod.name} tidak cukup (tersedia: ${prod.stock})`); return; }
             }
-            let subtotal = Math.round(cart.reduce((sum, i) => sum + i.price * i.quantity, 0));
+            let subtotal = Math.round(cart.reduce((sum, i) => sum + (i.price * (i.isWeighed ? (i.weightKg || 0) : i.quantity)), 0));
             let disc = Math.min(parseInt(document.getElementById("discountInput").value.replace(/\D/g, "")) || 0, subtotal);
             let total = subtotal - disc;
             let customer = document.getElementById("customerName").value.trim() || "Walk-in Customer";
@@ -5179,22 +5244,24 @@
             cart.forEach(item => {
                 const prod = products.find(p => p.id === item.id);
                 if (prod) {
-                    const newStock = prod.stock - item.quantity;
-                    if (newStock < 0) console.warn("Stock negatif terdeteksi untuk", prod.name, "- kemungkinan race condition");
-                    prod.stock = Math.max(0, newStock);
+                    const newStock = prod.stock - (item.isWeighed ? (item.weightKg || 0) : item.quantity);
+                    prod.stock = newStock;
                 }
             });
 
             // ============================================================
             // Buat pendingOrder + idempotency_key (sekali saja, tidak di-regenerate)
             // ============================================================
-            const orderItems = cart.map(i => ({
-                product_id: i.id,
-                product_name: i.name,
-                qty: i.quantity,
-                price: i.price,
-                subtotal: Math.round(i.price * i.quantity)
-            }));
+            const orderItems = cart.map(i => {
+                const qty = i.isWeighed ? (i.weightKg || 0) : i.quantity;
+                return {
+                    product_id: i.id,
+                    product_name: i.name,
+                    qty: qty,
+                    price: i.price,
+                    subtotal: Math.round(i.price * qty)
+                };
+            });
             const txnKey = crypto.randomUUID();
             const pendingOrder = {
                 local_transaction_id: txnKey,
@@ -5276,7 +5343,7 @@
                         <div style="display:flex;justify-content:space-between;"><span>Pelanggan</span><strong>${customer}</strong></div>
                         <div style="display:flex;justify-content:space-between;"><span>Metode Bayar</span><strong>${methodLabel}</strong></div>
                         <hr style="border-color:var(--border-color);margin:6px 0;">
-                        ${cart.map(i => `<div style="display:flex;justify-content:space-between;font-size:0.78rem;"><span>${i.name} x${i.quantity}</span><span>${(i.price*i.quantity).toLocaleString('id-ID')}</span></div>`).join('')}
+                        ${cart.map(i => `<div style="display:flex;justify-content:space-between;font-size:0.78rem;"><span>${i.isWeighed ? `${i.name} x${i.quantity} (${fmtKg(i.weightKg)} kg)` : `${i.name} x${i.quantity}`}</span><span>${cartLineTotal(i).toLocaleString('id-ID')}</span></div>`).join('')}
                         <hr style="border-color:var(--border-color);margin:6px 0;">
                         <div style="display:flex;justify-content:space-between;"><span>Subtotal</span><span>${subtotal.toLocaleString('id-ID')}</span></div>
                         ${disc>0?`<div style="display:flex;justify-content:space-between;color:var(--danger);"><span>Diskon</span><span>-${disc.toLocaleString('id-ID')}</span></div>`:''}
@@ -5644,17 +5711,6 @@
             });
 
             // --- ADD PRODUCT FORM ---
-            function generateNewProdBarcode() {
-            const barcodeEl = document.getElementById("newProdBarcode");
-            const previewEl = document.getElementById("barcodePreview");
-            const barcode = "899" + String(Math.floor(Math.random() * 10000000000)).padStart(10, "0");
-            barcodeEl.value = barcode;
-            previewEl.style.display = "block";
-            previewEl.innerHTML = `<div style="font-family:monospace;font-size:1.4rem;font-weight:800;letter-spacing:2px;padding:10px;background:white;border-radius:var(--radius-sm);color:#000;border:1px solid var(--border-hover);">${barcode}</div>
-                <div style="font-size:0.65rem;color:var(--text-muted);margin-top:4px;"><i class="fas fa-check-circle" style="color:var(--success);"></i> Barcode auto-generated</div>`;
-        }
-            window.generateNewProdBarcode = generateNewProdBarcode;
-
         function generateSKU() {
             const cat = document.getElementById("newProdCat").value;
             const prefix = { "Frozen Food": "FRZ", "Roti": "ROT", "Snack": "SNC", "Minuman": "MIN" }[cat] || "PRD";
@@ -5725,8 +5781,9 @@
                 }
 
                 // ADD MODE
-                const nextId = products.length ? Math.max(...products.map(p => p.id)) + 1 : 1;
-                const finalSku = sku || ("SKU" + String(nextId).padStart(4, "0"));
+                // Seed hanya untuk SKU cadangan bila kosong (SKU tidak unique-constrained di DB).
+                const seedId = products.length ? Math.max(...products.map(p => p.id)) + 1 : 1;
+                const finalSku = sku || ("SKU" + String(seedId).padStart(4, "0"));
 
                 // Duplicate SKU guard
                 if (products.some(p => (p.sku || "").toLowerCase() === finalSku.toLowerCase())) {
@@ -5736,7 +5793,6 @@
 
                 // Payload 100% sesuai schema products (tanpa field yang tidak ada di DB)
                 const newProduct = {
-                    id: nextId,
                     name,
                     sku: finalSku,
                     category: cat,
@@ -5753,15 +5809,42 @@
                     shopee_sku
                 };
 
-                // INSERT ke Supabase — tunggu hasil, jangan push lokal sebelum berhasil
-                const { data: inserted, error: insErr } = await sb.from('products').insert(newProduct).select().single();
-                if (insErr) {
-                    console.error("Supabase insert product error:", insErr.message);
-                    showToast("Gagal menyimpan produk: " + insErr.message);
+                // INSERT ke Supabase — id produk diambil dari MAX(id) di tabel (bukan array lokal).
+                // Retry maks 5x bila tabrakan pkey (error 23505): ambil MAX(id) terbaru lalu coba lagi.
+                let saved = null;
+                let lastInsErr = null;
+                for (let attempt = 0; attempt < 5 && !saved; attempt++) {
+                    const { data: maxRow, error: maxErr } = await sb
+                        .from('products')
+                        .select('id')
+                        .order('id', { ascending: false })
+                        .limit(1);
+                    if (maxErr) {
+                        console.error("Supabase max product id error:", maxErr.message);
+                        showToast("Gagal menyimpan produk: " + maxErr.message);
+                        return;
+                    }
+                    const dbMaxId = maxRow && maxRow.length ? Number(maxRow[0].id) : 0;
+                    newProduct.id = dbMaxId + 1;
+
+                    const { data: inserted, error: insErr } = await sb.from('products').insert(newProduct).select().single();
+                    if (!insErr) {
+                        saved = inserted || newProduct;
+                        break;
+                    }
+                    if (insErr.code !== '23505') {
+                        console.error("Supabase insert product error:", insErr.message);
+                        showToast("Gagal menyimpan produk: " + insErr.message);
+                        return;
+                    }
+                    lastInsErr = insErr;
+                }
+                if (!saved) {
+                    console.error("Supabase insert product error (retry habis):", lastInsErr ? lastInsErr.message : "duplicate product id");
+                    showToast("Gagal menyimpan produk: " + (lastInsErr ? lastInsErr.message : "duplicate product id"));
                     return;
                 }
 
-                const saved = inserted || newProduct;
                 products.push(saved);
 
                 // Stock mutation hanya setelah insert berhasil (hanya jika produk ter-mapping Shopee)
@@ -5918,7 +6001,6 @@
             }
 
             // Expose form functions to window (defined inside this callback)
-            window.generateNewProdBarcode = generateNewProdBarcode;
             window.generateSKU = generateSKU;
             window.previewPhoto = previewPhoto;
         });
