@@ -3045,6 +3045,194 @@
         ];
 
         // ============================================================
+        // PROTOTYPE LOGIN NOMOR HP + PASSWORD (TERISOLASI — akun DUMMY)
+        // Belum memakai Supabase Auth / DB. 7 akun existing & auto-login
+        // admin tetap fallback. Password TIDAK disimpan plaintext:
+        // hanya digest SHA-256 (salt: phone) yang ada di kode.
+        // Akun dummy: testkasir / 081234567890 / (password disimpan sebagai hash)
+        // ============================================================
+        const PROTO_SESSION_KEY = "juwita_proto_user";
+        const PROTO_PHONE = "081234567890";
+        const PROTO_HASH = "e3fbca6520fe58a82ecaf643e7ce8a4576331df7be8df9330fd2f2e95c8ff154"; // sha256("081234567890|juwita-proto|dummy123")
+        // FULL MENU untuk akun prototype/testkasir (diambil dari daftar menu admin,
+        // agar selalu konsisten dengan menu yang benar-benar tersedia di aplikasi).
+        const PROTO_FULL_MENUS = ["pos", "penjualan", "katalog", "persediaan", "pembelian", "gudang", "pricing", "hr", "pengaturan"];
+
+        function protoFullMenus() {
+            const admin = userAccounts.find(a => a.username === "admin");
+            if (admin && Array.isArray(admin.menus) && admin.menus.length) return [...admin.menus];
+            return [...PROTO_FULL_MENUS];
+        }
+
+        async function protoHash(phone, password) {
+            const data = new TextEncoder().encode(phone + "|juwita-proto|" + password);
+            const buf = await crypto.subtle.digest("SHA-256", data);
+            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+        }
+
+        function protoNormalizePhone(raw) {
+            let d = String(raw || "").replace(/\D/g, "");
+            if (d.startsWith("62")) d = "0" + d.slice(2);
+            return d;
+        }
+
+        function buildProtoUser() {
+            return {
+                username: "testkasir",
+                phone: PROTO_PHONE,
+                name: "Test User",
+                role: "tester",
+                roleLabel: "Tester",
+                menus: protoFullMenus(),
+                loginMethod: "phone"
+            };
+        }
+
+        // ============================================================
+        // LOGIN NYATA — SUPABASE AUTH (dormant sampai infra siap)
+        // Mode "auth" diaktifkan SETELAH migration app_users diterapkan dan
+        // Auth user (email internal deterministik) dibuat oleh pemilik.
+        // Saat masih "prototype", jalur ini TIDAK aktif (prototype tetap jalan).
+        // Password HANYA di Supabase Auth. Tidak pernah plaintext di file/DB app.
+        // ============================================================
+        const JUWITA_AUTH_MODE = "auth"; // ubah ke "auth" saat siap
+        const JUWITA_EMAIL_DOMAIN = "juwita.local"; // email internal: <noHp>@juwita.local
+
+        function realPhoneToEmail(phone) {
+            return protoNormalizePhone(phone) + "@" + JUWITA_EMAIL_DOMAIN;
+        }
+
+        function applyRealUser(row) {
+            const menus = (Array.isArray(row.menus) && row.menus.length) ? row.menus : [];
+            const isOwner = String(row.role || "").toLowerCase() === "owner";
+            currentUser = {
+                id: row.auth_user_id,
+                username: row.phone,
+                phone: row.phone,
+                email: row.email || null,
+                name: row.full_name,
+                role: row.role,
+                roleLabel: row.role_label || row.role,
+                menus: [...menus],
+                status: row.status,
+                privileges: isOwner ? ["manage_users", "manage_permissions", "manage_settings"] : []
+            };
+            localStorage.removeItem(PROTO_SESSION_KEY);
+            renderUserUI();
+            filterMenuByRole();
+            const avail = currentUser.menus[0] || "pos";
+            showPage(avail);
+        }
+
+        function hasPrivilege(priv) {
+            return !!(currentUser && Array.isArray(currentUser.privileges) && currentUser.privileges.indexOf(priv) !== -1);
+        }
+
+        async function realRestoreSession() {
+            try {
+                if (!sb || !sb.auth) return false;
+                const { data: { session } } = await sb.auth.getSession();
+                if (!session || !session.user) return false;
+                const { data: row, error } = await sb.from("app_users").select("*").eq("auth_user_id", session.user.id).maybeSingle();
+                if (error || !row || row.status !== "ACTIVE") {
+                    try { await sb.auth.signOut(); } catch (e) { /* abaikan */ }
+                    return false;
+                }
+                applyRealUser(row);
+                return true;
+            } catch (e) {
+                console.warn("restore real session error:", e && e.message);
+                return false;
+            }
+        }
+
+        async function realLoginSubmit() {
+            const errEl = document.getElementById("phoneLoginError");
+            const hpInput = document.getElementById("phoneLoginHp");
+            const passInput = document.getElementById("phoneLoginPass");
+            const hp = protoNormalizePhone(hpInput ? hpInput.value : "");
+            const pass = passInput ? passInput.value : "";
+            if (!hp) { if (errEl) errEl.textContent = "Nomor HP wajib diisi"; return; }
+            if (!pass) { if (errEl) errEl.textContent = "Password wajib diisi"; return; }
+            if (!sb || !sb.auth) { if (errEl) errEl.textContent = "Supabase Auth belum tersedia"; return; }
+            const email = realPhoneToEmail(hp);
+            let res;
+            try {
+                res = await sb.auth.signInWithPassword({ email: email, password: pass });
+            } catch (e) {
+                if (errEl) errEl.textContent = "Gagal terhubung ke server auth";
+                return;
+            }
+            if (res.error || !res.data || !res.data.user) {
+                if (errEl) errEl.textContent = "Nomor HP atau password salah";
+                return;
+            }
+            const uid = res.data.user.id;
+            const { data: row, error: rowErr } = await sb.from("app_users").select("*").eq("auth_user_id", uid).maybeSingle();
+            if (rowErr || !row) {
+                try { await sb.auth.signOut(); } catch (e) { /* abaikan */ }
+                if (errEl) errEl.textContent = "Nomor HP tidak terdaftar di aplikasi";
+                return;
+            }
+            if (row.status !== "ACTIVE") {
+                try { await sb.auth.signOut(); } catch (e) { /* abaikan */ }
+                if (errEl) errEl.textContent = "Akun nonaktif, hubungi pemilik";
+                return;
+            }
+            applyRealUser(row);
+            closePhoneLogin();
+            showToast("Login berhasil sebagai " + currentUser.name);
+        }
+
+        function openPhoneLogin() {
+            const m = document.getElementById("phoneLoginModal");
+            if (!m) return;
+            const errEl = document.getElementById("phoneLoginError");
+            if (errEl) errEl.textContent = "";
+            const pass = document.getElementById("phoneLoginPass");
+            if (pass) pass.value = "";
+            m.classList.add("active");
+            setTimeout(() => {
+                const hp = document.getElementById("phoneLoginHp");
+                if (hp) hp.focus();
+            }, 50);
+        }
+
+        function closePhoneLogin() {
+            const m = document.getElementById("phoneLoginModal");
+            if (m) m.classList.remove("active");
+        }
+
+        async function phoneLoginSubmit() {
+            if (JUWITA_AUTH_MODE === "auth") { return realLoginSubmit(); }
+            const errEl = document.getElementById("phoneLoginError");
+            const hpInput = document.getElementById("phoneLoginHp");
+            const passInput = document.getElementById("phoneLoginPass");
+            const hp = protoNormalizePhone(hpInput ? hpInput.value : "");
+            const pass = passInput ? passInput.value : "";
+            if (!hp) { if (errEl) errEl.textContent = "Nomor HP wajib diisi"; return; }
+            if (hp !== PROTO_PHONE) { if (errEl) errEl.textContent = "Nomor HP tidak terdaftar"; return; }
+            if (!pass) { if (errEl) errEl.textContent = "Password wajib diisi"; return; }
+            let hash;
+            try {
+                hash = await protoHash(hp, pass);
+            } catch (e) {
+                if (errEl) errEl.textContent = "Web Crypto tidak tersedia (butuh https / localhost)";
+                return;
+            }
+            if (hash !== PROTO_HASH) { if (errEl) errEl.textContent = "Password salah"; return; }
+            currentUser = buildProtoUser();
+            localStorage.setItem(PROTO_SESSION_KEY, JSON.stringify(currentUser));
+            localStorage.removeItem("juwita_user");
+            closePhoneLogin();
+            renderUserUI();
+            filterMenuByRole();
+            const avail = (currentUser.menus && currentUser.menus[0]) || "pos";
+            showPage(avail);
+            showToast("Login berhasil sebagai " + currentUser.name);
+        }
+
+        // ============================================================
         // STATE
         let cart = [];
         let checkoutLock = false;
@@ -3221,6 +3409,11 @@
         function doLogout() {
             currentUser = null;
             localStorage.removeItem("juwita_user");
+            localStorage.removeItem(PROTO_SESSION_KEY);
+            if (JUWITA_AUTH_MODE === "auth" && sb && sb.auth) {
+                sb.auth.signOut().then(function () { location.reload(); }).catch(function () { location.reload(); });
+                return;
+            }
             location.reload();
         }
 
@@ -3235,7 +3428,7 @@
                 if (posCard) posCard.style.display = "flex";
                 if (posAvatar) posAvatar.textContent = initial;
                 if (posName) posName.textContent = currentUser.name;
-                if (posEmail) posEmail.textContent = currentUser.username + "@juwita.com";
+                if (posEmail) { posEmail.textContent = ""; posEmail.style.display = "none"; }
                 if (posLogout) posLogout.style.display = "flex";
             } else {
                 if (posCard) posCard.style.display = "none";
@@ -5970,18 +6163,41 @@
             setInterval(posClockTick, 1000);
             setTimeout(() => document.getElementById("scanInput")?.focus(), 200);
 
-            // --- AUTH INIT ---
-            const admin = userAccounts.find(a => a.username === "admin");
-            if (admin) {
-                currentUser = { username: admin.username, name: admin.name, role: admin.role, roleLabel: admin.roleLabel, menus: [...admin.menus] };
-            }
-            filterMenuByRole();
-            renderUserUI();
+            // --- AUTH INIT: LOGIN GATE (tanpa session → tampilkan LOGIN SCREEN) ---
+            if (JUWITA_AUTH_MODE === "auth") {
+                // Mode nyata: sesi Supabase + resolve dari app_users.
+                currentUser = null;
+                filterMenuByRole();
+                renderUserUI();
+                openPhoneLogin(); // tampilkan gate dulu
+                realRestoreSession().then(function (ok) {
+                    if (ok) closePhoneLogin();
+                });
+            } else {
+                // Mode prototype (fallback sampai login Rizkin terbukti).
+                let protoSession = null;
+                try {
+                    const raw = localStorage.getItem(PROTO_SESSION_KEY);
+                    if (raw) {
+                        const p = JSON.parse(raw);
+                        if (p && p.username === "testkasir" && Array.isArray(p.menus)) protoSession = p;
+                    }
+                } catch (e) { /* abaikan */ }
+                if (protoSession) {
+                    currentUser = protoSession;
+                } else {
+                    currentUser = null; // TIDAK ada auto-login admin
+                }
+                filterMenuByRole();
+                renderUserUI();
 
-            // --- DEFAULT PAGE ---
-            if (currentUser) {
-                const available = currentUser.menus[0] || "pos";
-                showPage(available);
+                // --- DEFAULT PAGE ---
+                if (currentUser) {
+                    const available = currentUser.menus[0] || "pos";
+                    showPage(available);
+                } else {
+                    openPhoneLogin(); // login screen sebagai halaman awal (gate)
+                }
             }
 
             // --- LOAD DATA FROM SUPABASE ---
@@ -6068,6 +6284,27 @@
         window.renderAccountCards = renderAccountCards;
         window.toggleAccountMenu = toggleAccountMenu;
     </script>
+
+    <!-- ===== LOGIN SCREEN NOMOR HP (GATE — PROTOTYPE) ===== -->
+    <div class="modal-overlay" id="phoneLoginModal" style="background:rgba(10,13,22,0.96);">
+        <div class="modal-card" style="max-width:360px;width:min(92vw,360px);">
+            <div class="modal-success-icon"><i class="fas fa-mobile-alt"></i></div>
+            <h3>Login Nomor HP</h3>
+            <div style="text-align:left;display:flex;flex-direction:column;gap:10px;margin-top:12px;">
+                <div>
+                    <label style="font-size:0.7rem;font-weight:700;color:var(--text-muted);">Nomor HP</label>
+                    <input type="tel" id="phoneLoginHp" class="form-control" placeholder="08xxxxxxxxxx" autocomplete="tel" onkeydown="if(event.key==='Enter')phoneLoginSubmit()" />
+                </div>
+                <div>
+                    <label style="font-size:0.7rem;font-weight:700;color:var(--text-muted);">Password</label>
+                    <input type="password" id="phoneLoginPass" class="form-control" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')phoneLoginSubmit()" />
+                </div>
+                <div id="phoneLoginError" style="color:var(--danger);font-size:0.72rem;min-height:14px;"></div>
+            </div>
+            <button class="checkout-btn" style="width:100%;margin-top:14px;" onclick="phoneLoginSubmit()">Login</button>
+            <p style="font-size:0.66rem;color:var(--text-muted);margin-top:12px;text-align:center;">Prototype · akun dummy testkasir (081234567890)</p>
+        </div>
+    </div>
 
     <!-- ===== LOGIN OVERLAY ===== -->
 </body>
