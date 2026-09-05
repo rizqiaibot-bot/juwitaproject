@@ -1867,6 +1867,7 @@
                     <h1>Daftar Penjualan</h1>
                     <div class="page-header-desc">Kelola dan pantau seluruh transaksi penjualan toko Anda</div>
                 </div>
+                <span id="penjualanLiveIndicator" title="Status sinkronisasi data Penjualan (polling 30 detik)" style="display:inline-flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:600;color:var(--text-muted);background:var(--bg-card,#fff);border:1px solid var(--border-color);border-radius:50px;padding:5px 12px;white-space:nowrap;">🟡 Menyiapkan • Sinkron terakhir: -</span>
             </div>
 
             <div class="stats-row" id="statsFilter">
@@ -3125,6 +3126,7 @@
             filterMenuByRole();
             const avail = currentUser.menus[0] || "pos";
             showPage(avail);
+            ensureOrdersPolling();
         }
 
         function hasPrivilege(priv) {
@@ -3232,6 +3234,7 @@
             filterMenuByRole();
             const avail = (currentUser.menus && currentUser.menus[0]) || "pos";
             showPage(avail);
+            ensureOrdersPolling();
             showToast("Login berhasil sebagai " + currentUser.name);
         }
 
@@ -3304,14 +3307,7 @@
                     sb.from('order_items').select('*').order('id')
                 ]);
                 if (pRes.data && pRes.data.length > 0) products = pRes.data;
-                if (oRes.data && oRes.data.length > 0) ordersData = oRes.data.map(o => ({
-                    orderId: o.orderid, date: o.date, channel: o.channel, customer: o.customer,
-                    total: o.total, payStatus: o.paystatus, wmsStatus: o.wmsstatus, courier: o.courier, resi: o.resi,
-                    shop_id: o.shop_id || null,
-                    picked_at: o.picked_at || null, picked_by: o.picked_by || null,
-                    packed_at: o.packed_at || null, packed_by: o.packed_by || null,
-                    shipped_at: o.shipped_at || null, shipped_by: o.shipped_by || null
-                }));
+                if (oRes.data && oRes.data.length > 0) ordersData = oRes.data.map(mapOrderRowToView);
                 if (kRes.data && kRes.data.length > 0) karyawanData = kRes.data;
                 if (wRecRes.data && wRecRes.data.length > 0) warehouseReceiving = wRecRes.data;
                 if (wRackRes.data && wRackRes.data.length > 0) warehouseRacks = wRackRes.data;
@@ -3357,6 +3353,156 @@
             renderWarehouseShipping();
             renderWarehouseRacks();
             renderWarehouseOpnameList();
+        }
+
+        // ============================================================
+        // LIVE REFRESH ORDER (POLLING RINGAN 30 DETIK)
+        // Tujuan: transaksi Shopee hasil scheduler muncul di halaman
+        // Penjualan Juwita One TANPA reload (F5).
+        // Hanya fetch orders + order_items (bukan initSupabaseData penuh).
+        // Aman untuk POS: TIDAK menyentuh cart/stock/currentPage/idempotency.
+        // ============================================================
+        function mapOrderRowToView(o) {
+            return {
+                orderId: o.orderid, date: o.date, channel: o.channel, customer: o.customer,
+                total: o.total, payStatus: o.paystatus, wmsStatus: o.wmsstatus, courier: o.courier, resi: o.resi,
+                shop_id: o.shop_id || null,
+                picked_at: o.picked_at || null, picked_by: o.picked_by || null,
+                packed_at: o.packed_at || null, packed_by: o.packed_by || null,
+                shipped_at: o.shipped_at || null, shipped_by: o.shipped_by || null
+            };
+        }
+
+        let ordersRefreshTimer = null;
+        let ordersRefreshInFlight = false;
+
+        // --- Indikator "Live" halaman Penjualan (waktu Asia/Jakarta) ---
+        let ordersLastSyncLabel = "-";
+        const ordersWibFormatter = new Intl.DateTimeFormat("id-ID", {
+            timeZone: "Asia/Jakarta", hour12: false, hourCycle: "h23",
+            year: "numeric", month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit", second: "2-digit"
+        });
+
+        function wibNowParts() {
+            const parts = {};
+            ordersWibFormatter.formatToParts(new Date()).forEach(function (p) {
+                if (p.type !== "literal") parts[p.type] = p.value;
+            });
+            return parts;
+        }
+
+        function wibNowClock() {
+            const p = wibNowParts();
+            return (p.hour || "00") + ":" + (p.minute || "00") + ":" + (p.second || "00");
+        }
+
+        function wibNowStamp() {
+            const p = wibNowParts();
+            return (p.year || "") + "-" + (p.month || "00") + "-" + (p.day || "00") + " " + wibNowClock();
+        }
+
+        // ok=true → 🟢 Live; ok=false → 🟠 Menunggu koneksi (data lama tetap).
+        function setOrdersLiveIndicator(ok) {
+            const el = document.getElementById("penjualanLiveIndicator");
+            if (!el) return;
+            if (ok) {
+                ordersLastSyncLabel = wibNowClock();
+                el.textContent = "🟢 Live • Sinkron terakhir: " + ordersLastSyncLabel;
+                el.style.color = "var(--success)";
+            } else {
+                el.textContent = "🟠 Menunggu koneksi • Sinkron terakhir: " + ordersLastSyncLabel;
+                el.style.color = "var(--warning)";
+            }
+        }
+
+        function stopOrdersRefresh() {
+            if (ordersRefreshTimer !== null) {
+                clearInterval(ordersRefreshTimer);
+                ordersRefreshTimer = null;
+            }
+        }
+
+        // Mulai polling. Hanya 1 interval untuk orders (guard ordersRefreshTimer).
+        // Tidak mulai jika belum ada user login (session gate).
+        function ensureOrdersPolling() {
+            if (ordersRefreshTimer !== null) return;
+            if (!currentUser) return;
+            ordersRefreshTimer = setInterval(refreshOrdersLight, 30000);
+        }
+
+        // Polling hanya boleh jalan setelah sesi authenticated. Auth memakai
+        // session Supabase aktif (client sb) — tanpa service-role key/secret.
+        async function isOrdersPollAllowed() {
+            if (!currentUser) return false;
+            if (!sb || !sb.auth) return false;
+            if (JUWITA_AUTH_MODE === "auth") {
+                try {
+                    const { data } = await sb.auth.getSession();
+                    return !!(data && data.session);
+                } catch (e) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        async function refreshOrdersLight() {
+            if (!(await isOrdersPollAllowed())) {
+                stopOrdersRefresh();
+                return;
+            }
+            if (ordersRefreshInFlight) return;
+            if (navigator.onLine === false) {
+                setOrdersLiveIndicator(false);
+                return;
+            }
+            if (!sb || typeof sb.from !== "function") return;
+            ordersRefreshInFlight = true;
+            try {
+                const [oRes, oiRes] = await Promise.all([
+                    sb.from('orders')
+                        .select('orderid,date,channel,customer,total,paystatus,wmsstatus,courier,resi,shop_id,picked_at,picked_by,packed_at,packed_by,shipped_at,shipped_by')
+                        .order('date', { ascending: false }),
+                    sb.from('order_items')
+                        .select('id,orderid,product_id,product_name,qty,price,subtotal')
+                        .order('id')
+                ]);
+                if (oRes.error) throw oRes.error;
+                if (oiRes.error) throw oiRes.error;
+
+                if (oRes.data) {
+                    const fresh = oRes.data.map(mapOrderRowToView);
+                    const freshIds = new Set();
+                    fresh.forEach(o => freshIds.add(o.orderId));
+                    // Pertahankan order lokal yang belum ada di server (mis. POS
+                    // offline yang masih antri) supaya tidak hilang dari daftar.
+                    const merged = fresh.slice();
+                    ordersData.forEach(o => {
+                        if (!freshIds.has(o.orderId)) merged.push(o);
+                    });
+                    merged.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+                    ordersData = merged;
+                }
+                if (oiRes.data && oiRes.data.length) {
+                    orderItemsData = oiRes.data;
+                }
+
+                renderPenjualanTable();
+                // Picking: hormati tab filter aktif (jangan reset paksa ke 'all').
+                const activePick = document.querySelector('#pickingFilter .filter-tab.active');
+                renderWarehousePicking(activePick ? activePick.dataset.filter : undefined);
+
+                setOrdersLiveIndicator(true);
+                console.log("[Juwita Live] Penjualan synced " + wibNowStamp());
+            } catch (err) {
+                // Gagal → ordersData lama tetap dipertahankan; indikator jadi oranye,
+                // log ringkas saja (tanpa toast berulang). Tick berikutnya coba lagi.
+                setOrdersLiveIndicator(false);
+                console.warn("refreshOrdersLight error:", err && err.message ? err.message : err);
+            } finally {
+                ordersRefreshInFlight = false;
+            }
         }
 
         // ============================================================
@@ -6112,6 +6258,8 @@
             document.getElementById("navMenu")?.classList.remove("active");
             if (pageId === "pos") setTimeout(() => document.getElementById("scanInput")?.focus(), 100);
             if (pageId === "pengaturan") setTimeout(() => renderAccountCards(), 10);
+            // Pastikan polling live tetap berjalan saat halaman Penjualan dibuka.
+            if (pageId === "daftar-penjualan") ensureOrdersPolling();
         }
 
         // ============================================================
@@ -6514,6 +6662,7 @@
 
             // --- LOAD DATA FROM SUPABASE ---
             initSupabaseData();
+            ensureOrdersPolling();
 
             // --- OFFLINE POS INIT ---
             if (window.JuwitaOfflineDB) {
