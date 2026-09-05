@@ -2865,7 +2865,10 @@
             <div class="form-card" style="max-width:100%;">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
                     <h3 style="margin:0;">Manajemen Akun &amp; Hak Akses Menu</h3>
-                    <span id="totalAkun" style="font-size:0.75rem;color:var(--text-muted);"></span>
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                        <span id="totalAkun" style="font-size:0.75rem;color:var(--text-muted);"></span>
+                        <button id="btnAddEmployee" type="button" onclick="openEmployeeForm('new')" style="display:none;align-items:center;gap:6px;background:var(--primary-gradient);border:none;border-radius:var(--radius-lg);padding:8px 14px;cursor:pointer;color:#fff;font-size:0.74rem;font-weight:700;white-space:nowrap;"><i class="fas fa-user-plus"></i> + Tambah Karyawan</button>
+                    </div>
                 </div>
                 <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:18px;">
                     <i class="fas fa-info-circle"></i> Atur siapa saja yang bisa mengakses menu HR, POS, dan menu lainnya. Centang untuk memberi akses.
@@ -3417,29 +3420,56 @@
             location.reload();
         }
 
+        // Kontrol user global (nama + Logout) yang muncul di SEMUA halaman,
+        // untuk semua akun authenticated — tidak tergantung role/menu/posisi.
+        function ensureGlobalUserChip() {
+            if (document.getElementById("globalUserChip")) return;
+            const chip = document.createElement("div");
+            chip.id = "globalUserChip";
+            chip.style.cssText = "position:fixed;top:12px;right:12px;z-index:1200;display:none;align-items:center;gap:8px;background:var(--bg-card,#ffffff);border:1px solid var(--border-color);border-radius:50px;padding:6px 8px 6px 6px;box-shadow:0 4px 14px rgba(0,0,0,0.18);max-width:270px;";
+            const avatar = document.createElement("span");
+            avatar.id = "globalUserAvatar";
+            avatar.style.cssText = "width:28px;height:28px;border-radius:50%;background:var(--primary-gradient,#4f46e5);color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.68rem;font-weight:700;flex-shrink:0;";
+            const name = document.createElement("span");
+            name.id = "globalUserName";
+            name.style.cssText = "font-size:0.74rem;font-weight:700;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;";
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.textContent = "Logout";
+            btn.onclick = doLogout;
+            btn.style.cssText = "border:none;border-radius:20px;background:var(--danger,#ef4444);color:#fff;font-size:0.7rem;font-weight:700;padding:6px 12px;cursor:pointer;flex-shrink:0;";
+            chip.appendChild(avatar);
+            chip.appendChild(name);
+            chip.appendChild(btn);
+            document.body.appendChild(chip);
+        }
+
         function renderUserUI() {
+            ensureGlobalUserChip();
+            const chip = document.getElementById("globalUserChip");
+            const avatar = document.getElementById("globalUserAvatar");
+            const nameEl = document.getElementById("globalUserName");
             const posCard = document.getElementById("posAccountCard");
-            const posAvatar = document.getElementById("posAvatar");
-            const posName = document.getElementById("posName");
-            const posEmail = document.getElementById("posEmail");
             const posLogout = document.getElementById("posLogoutBtn");
             if (currentUser) {
                 const initial = currentUser.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-                if (posCard) posCard.style.display = "flex";
-                if (posAvatar) posAvatar.textContent = initial;
-                if (posName) posName.textContent = currentUser.name;
-                if (posEmail) { posEmail.textContent = ""; posEmail.style.display = "none"; }
-                if (posLogout) posLogout.style.display = "flex";
+                if (avatar) avatar.textContent = initial;
+                if (nameEl) nameEl.textContent = currentUser.name;
+                if (chip) chip.style.display = "flex";
             } else {
-                if (posCard) posCard.style.display = "none";
-                if (posLogout) posLogout.style.display = "none";
+                if (chip) chip.style.display = "none";
             }
+            // Kontrol lama di header POS tidak dipakai lagi (diganti chip global).
+            if (posCard) posCard.style.display = "none";
+            if (posLogout) posLogout.style.display = "none";
         }
 
         function renderAccountCards() {
             const container = document.getElementById("accountListContainer");
-            const totalEl = document.getElementById("totalAkun");
             if (!container) return;
+            // Mode Auth nyata → kelola karyawan dari app_users (hanya owner).
+            if (JUWITA_AUTH_MODE === "auth") { renderAppAccounts(); return; }
+            const totalEl = document.getElementById("totalAkun");
             if (totalEl) totalEl.textContent = `Total: ${userAccounts.length} Akun`;
 
             const allMenus = ["pos","penjualan","katalog","persediaan","pembelian","gudang","pricing","hr","pengaturan"];
@@ -3483,6 +3513,288 @@
                 filterMenuByRole();
             }
             showToast(`Akses "${menu}" ${acc.menus.includes(menu)?'diberikan':'dicabut'}`);
+        }
+
+        // ============================================================
+        // MANAJEMEN KARYAWAN (app_users) — HANYA OWNER/Super Admin
+        // ============================================================
+        const APP_MENU_KEYS = ["pos", "penjualan", "katalog", "persediaan", "pembelian", "gudang", "pricing", "hr", "pengaturan"];
+        const APP_MENU_LABELS = { pos: "POS", penjualan: "Penjualan", katalog: "Katalog", persediaan: "Persediaan", pembelian: "Pembelian", gudang: "Gudang", pricing: "Pricing", hr: "HR", pengaturan: "Pengaturan" };
+        const APP_ROLES = [
+            { value: "kasir", label: "Kasir" },
+            { value: "gudang", label: "Gudang" },
+            { value: "hr", label: "HR" },
+            { value: "keuangan", label: "Keuangan" },
+            { value: "kurir", label: "Kurir" },
+            { value: "staf", label: "Staf" },
+            { value: "admin", label: "Admin" }
+        ];
+        let appEmployees = [];
+        let empEditingId = null;
+
+        function escEmp(v) {
+            return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
+                return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+            });
+        }
+
+        function canManageUsers() {
+            if (JUWITA_AUTH_MODE !== "auth" || !currentUser) return false;
+            return hasPrivilege("manage_users");
+        }
+
+        async function loadAppAccounts() {
+            if (!canManageUsers()) { appEmployees = []; return appEmployees; }
+            try {
+                const { data, error } = await sb.from("app_users").select("*").order("created_at", { ascending: true });
+                if (error) throw error;
+                appEmployees = data || [];
+            } catch (e) {
+                console.warn("load app_users error:", e && e.message);
+                appEmployees = [];
+            }
+            return appEmployees;
+        }
+
+        function renderAppAccounts() {
+            const container = document.getElementById("accountListContainer");
+            const totalEl = document.getElementById("totalAkun");
+            const addBtn = document.getElementById("btnAddEmployee");
+            if (!container) return;
+            if (!canManageUsers()) {
+                container.innerHTML = '<div style="padding:14px;color:var(--text-muted);font-size:0.8rem;"><i class="fas fa-lock"></i> Hanya pemilik (Super Admin) yang dapat mengelola akun karyawan.</div>';
+                if (totalEl) totalEl.textContent = "";
+                if (addBtn) addBtn.style.display = "none";
+                return;
+            }
+            if (addBtn) addBtn.style.display = "inline-flex";
+            container.innerHTML = '<div style="padding:20px;color:var(--text-muted);text-align:center;"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>';
+            loadAppAccounts().then(function (list) {
+                if (!list.length) {
+                    container.innerHTML = '<div style="padding:14px;color:var(--text-muted);font-size:0.8rem;">Belum ada karyawan. Klik "+ Tambah Karyawan".</div>';
+                    if (totalEl) totalEl.textContent = "Total: 0 Karyawan";
+                    return;
+                }
+                if (totalEl) totalEl.textContent = "Total: " + list.length + " Karyawan";
+                container.innerHTML = list.map(function (emp) {
+                    const isOwner = String(emp.role || "").toLowerCase() === "owner";
+                    const statusCls = emp.status === "ACTIVE" ? "badge-lunas" : "badge-belum";
+                    const statusTxt = emp.status === "ACTIVE" ? "Aktif" : "Nonaktif";
+                    const chips = APP_MENU_KEYS.map(function (m) {
+                        const on = Array.isArray(emp.menus) && emp.menus.indexOf(m) !== -1;
+                        return '<span class="menu-chip-edit' + (on ? " active" : "") + '" style="cursor:default;">' + APP_MENU_LABELS[m] + "</span>";
+                    }).join("");
+                    const roleTag = emp.role_label || emp.role || "";
+                    return '<div class="account-card">' +
+                        '<div class="account-header">' +
+                        '<div class="account-info">' +
+                        '<span class="acc-name">' + escEmp(emp.full_name) + "</span>" +
+                        '<span class="acc-detail">' + escEmp(emp.phone) + " · " + escEmp(roleTag) +
+                        ' · <span class="badge-status ' + statusCls + '">' + statusTxt + "</span>" +
+                        (isOwner ? " · OWNER" : "") + "</span></div>" +
+                        '<div style="display:flex;gap:6px;align-items:center;">' +
+                        '<button class="aksi-btn" onclick="openEmployeeForm(\'edit\',\'' + emp.id + '\')"><i class="fas fa-edit"></i> Edit</button>' +
+                        '<button class="aksi-btn" onclick="resetEmployeePassword(\'' + emp.id + '\')"><i class="fas fa-key"></i> Reset Password</button>' +
+                        "</div></div>" +
+                        '<div style="display:flex;flex-wrap:wrap;gap:3px;">' + chips + "</div>" +
+                        "</div>";
+                }).join("");
+            });
+        }
+
+        function openEmployeeForm(mode, id) {
+            if (!canManageUsers()) { showToast("Akses ditolak"); return; }
+            const m = document.getElementById("employeeFormModal");
+            if (!m) return;
+            empEditingId = mode === "edit" ? id : null;
+
+            const errEl = document.getElementById("empError");
+            if (errEl) { errEl.textContent = ""; errEl.style.color = ""; }
+            const titleEl = document.getElementById("empModalTitle");
+            if (titleEl) titleEl.textContent = mode === "edit" ? "Edit Karyawan" : "Tambah Karyawan";
+
+            const nameInput = document.getElementById("empName");
+            const phoneInput = document.getElementById("empPhone");
+            const roleSel = document.getElementById("empRole");
+            const labelInput = document.getElementById("empRoleLabel");
+            const statusSel = document.getElementById("empStatus");
+            const passInput = document.getElementById("empPassword");
+            const passRow = document.getElementById("empPassRow");
+            const menuBoxes = Array.from(document.querySelectorAll('input[name="empMenu"]'));
+
+            // Reset semua kontrol: kosongkan + AKTIF dulu
+            nameInput.value = "";
+            phoneInput.value = "";
+            roleSel.value = "";
+            labelInput.value = "";
+            statusSel.value = "ACTIVE";
+            passInput.value = "";
+            phoneInput.disabled = false;
+            roleSel.disabled = false;
+            labelInput.disabled = false;
+            statusSel.disabled = false;
+            roleSel.title = "";
+            statusSel.title = "";
+            labelInput.title = "";
+            phoneInput.title = "";
+            menuBoxes.forEach(function (c) { c.checked = false; c.disabled = false; });
+
+            const editing = empEditingId ? (appEmployees.find(function (e) { return e.id === empEditingId; }) || null) : null;
+
+            if (editing) {
+                const isOwnerRow = String(editing.role || "").toLowerCase() === "owner";
+                nameInput.value = editing.full_name || "";
+                phoneInput.value = editing.phone || "";
+                labelInput.value = editing.role_label || "";
+                statusSel.value = editing.status || "ACTIVE";
+                if (editing.role && roleSel.querySelector('option[value="' + editing.role + '"]')) roleSel.value = editing.role;
+                (Array.isArray(editing.menus) ? editing.menus : []).forEach(function (mk) {
+                    const cb = document.querySelector('input[name="empMenu"][value="' + mk + '"]');
+                    if (cb) cb.checked = true;
+                });
+
+                if (passRow) passRow.style.display = "none";
+                phoneInput.disabled = true; // Nomor HP = identitas login (read-only)
+
+                if (isOwnerRow) {
+                    // OWNER / RIZKIN → terkunci penuh kecuali nama
+                    roleSel.disabled = true;
+                    roleSel.title = "Role owner terkunci";
+                    labelInput.disabled = true;
+                    labelInput.title = "Label owner dikelola sistem";
+                    statusSel.disabled = true;
+                    statusSel.title = "Owner selalu Aktif";
+                    menuBoxes.forEach(function (c) { c.disabled = true; });
+                } else {
+                    // KARYAWAN BIASA → role/status/label/menu SEMUA AKTIF
+                    roleSel.disabled = false;
+                    labelInput.disabled = false;
+                    statusSel.disabled = false;
+                    menuBoxes.forEach(function (c) { c.disabled = false; });
+                }
+            } else {
+                // Mode TAMBAH → semua aktif, password terlihat
+                if (passRow) passRow.style.display = "";
+            }
+            m.classList.add("active");
+        }
+
+        function closeEmployeeForm() {
+            const m = document.getElementById("employeeFormModal");
+            if (!m) return;
+            document.querySelectorAll('input[name="empMenu"]').forEach(function (c) { c.disabled = false; });
+            const roleSel = document.getElementById("empRole");
+            const statusSel = document.getElementById("empStatus");
+            const labelInput = document.getElementById("empRoleLabel");
+            const phoneInput = document.getElementById("empPhone");
+            if (roleSel) roleSel.disabled = false;
+            if (statusSel) statusSel.disabled = false;
+            if (labelInput) labelInput.disabled = false;
+            if (phoneInput) phoneInput.disabled = false;
+            m.classList.remove("active");
+        }
+
+        // Panggil Edge Function employee-admin (owner-only; JWT session Rizkin).
+        async function employeeAdminCall(payload) {
+            if (!sb || !sb.auth) throw new Error("Auth tidak tersedia");
+            const { data: sessionData } = await sb.auth.getSession();
+            const session = sessionData && sessionData.session;
+            if (!session || !session.access_token) throw new Error("Sesi tidak ditemukan, silakan login ulang");
+            const res = await fetch(SUPABASE_URL + "/functions/v1/employee-admin", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + session.access_token
+                },
+                body: JSON.stringify(payload)
+            });
+            let data = null;
+            try { data = await res.json(); } catch (e) { data = null; }
+            if (!res.ok) {
+                throw new Error((data && data.error) ? String(data.error) : ("HTTP " + res.status));
+            }
+            return data;
+        }
+
+        async function saveEmployeeForm() {
+            const errEl = document.getElementById("empError");
+            if (errEl) errEl.textContent = "";
+            if (!canManageUsers()) { if (errEl) errEl.textContent = "Akses ditolak"; return; }
+            const name = document.getElementById("empName").value.trim();
+            const phone = protoNormalizePhone(document.getElementById("empPhone").value);
+            const role = document.getElementById("empRole").value;
+            const roleLabel = document.getElementById("empRoleLabel").value.trim() || role;
+            const status = document.getElementById("empStatus").value;
+            const pass = document.getElementById("empPassword").value || "";
+            const menus = Array.from(document.querySelectorAll('input[name="empMenu"]:checked')).map(function (c) { return c.value; });
+            if (!name) { if (errEl) errEl.textContent = "Nama lengkap wajib diisi"; return; }
+            if (!role) { if (errEl) errEl.textContent = "Role/Jabatan wajib dipilih"; return; }
+            if (!menus.length) { if (errEl) errEl.textContent = "Pilih minimal satu hak akses menu"; return; }
+            if (!empEditingId) {
+                if (!/^\d{10,13}$/.test(phone)) { if (errEl) errEl.textContent = "Nomor HP tidak valid"; return; }
+                if (pass.length < 6) { if (errEl) errEl.textContent = "Password login awal minimal 6 karakter"; return; }
+                if (errEl) errEl.textContent = "";
+                try {
+                    await employeeAdminCall({
+                        action: "create",
+                        full_name: name,
+                        phone: phone,
+                        password: pass,
+                        role: role,
+                        role_label: roleLabel,
+                        menus: menus,
+                        status: status
+                    });
+                } catch (err) {
+                    if (errEl) errEl.textContent = err.message;
+                    return;
+                }
+                closeEmployeeForm();
+                renderAccountCards();
+                showToast("Karyawan berhasil ditambahkan");
+                return;
+            }
+            if (empEditingId) {
+                const editing = appEmployees.find(function (e) { return e.id === empEditingId; }) || null;
+                const payload = { full_name: name, role: role, role_label: roleLabel, menus: menus, status: status };
+                if (editing && String(editing.role || "").toLowerCase() === "owner") {
+                    // Owner tidak bisa diubah status/role/menus lewat UI → cegah lockout.
+                    payload.role = editing.role;
+                    payload.status = editing.status;
+                    payload.menus = editing.menus;
+                }
+                const { error } = await sb.from("app_users").update(payload).eq("id", empEditingId);
+                if (error) { if (errEl) errEl.textContent = "Gagal simpan: " + error.message; return; }
+                if (editing && editing.auth_user_id === currentUser.id) {
+                    const { data: row } = await sb.from("app_users").select("*").eq("id", empEditingId).maybeSingle();
+                    if (row) applyRealUser(row);
+                }
+            }
+            closeEmployeeForm();
+            renderAccountCards();
+            showToast("Data karyawan disimpan");
+        }
+
+        async function resetEmployeePassword(id) {
+            if (!canManageUsers()) { showToast("Akses ditolak"); return; }
+            const emp = appEmployees.find(function (e) { return e.id === id; });
+            if (!emp) return;
+            if (emp.auth_user_id === currentUser.id) {
+                const np = prompt("Password baru untuk akun Anda (min 6 karakter):");
+                if (!np || np.length < 6) { showToast("Password minimal 6 karakter"); return; }
+                const { error } = await sb.auth.updateUser({ password: np });
+                if (error) showToast("Gagal reset: " + error.message);
+                else showToast("Password akun Anda berhasil diubah");
+                return;
+            }
+            const np = prompt("Password baru untuk " + emp.full_name + " (min 6 karakter):");
+            if (!np || np.length < 6) { showToast("Password minimal 6 karakter"); return; }
+            try {
+                await employeeAdminCall({ action: "reset_password", auth_user_id: emp.auth_user_id, password: np });
+                showToast("Password " + emp.full_name + " berhasil di-reset");
+            } catch (err) {
+                showToast("Gagal reset: " + err.message);
+            }
         }
 
         // ============================================================
@@ -6283,7 +6595,80 @@
         window.filterMenuByRole = filterMenuByRole;
         window.renderAccountCards = renderAccountCards;
         window.toggleAccountMenu = toggleAccountMenu;
+        window.openEmployeeForm = openEmployeeForm;
+        window.closeEmployeeForm = closeEmployeeForm;
+        window.saveEmployeeForm = saveEmployeeForm;
+        window.resetEmployeePassword = resetEmployeePassword;
     </script>
+
+    <!-- ===== MODAL TAMBAH/EDIT KARYAWAN (OWNER) ===== -->
+    <div class="modal-overlay" id="employeeFormModal">
+        <div class="modal-card" style="max-width:560px;width:min(94vw,560px);text-align:left;max-height:90vh;overflow-y:auto;">
+            <div style="margin-bottom:14px;">
+                <h3 id="empModalTitle" style="display:flex;align-items:center;gap:8px;font-size:1.05rem;margin:0;"><i class="fas fa-user-cog" style="color:var(--primary);"></i> Tambah Karyawan</h3>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px;">
+                <div class="form-group">
+                    <label>Nama Lengkap</label>
+                    <input type="text" id="empName" class="form-control" placeholder="Nama karyawan" />
+                </div>
+                <div class="form-group">
+                    <label>Nomor HP</label>
+                    <input type="tel" id="empPhone" class="form-control" placeholder="08xxxxxxxxxx" autocomplete="off" />
+                    <div style="font-size:0.62rem;color:var(--text-muted);margin-top:3px;">Nomor HP = identitas login karyawan (tidak dapat diubah setelah akun dibuat).</div>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <div class="form-group" style="flex:1;min-width:150px;">
+                        <label>Role / Jabatan</label>
+                        <select id="empRole" class="form-control">
+                            <option value="">— Pilih Role —</option>
+                            <option value="kasir">Kasir</option>
+                            <option value="gudang">Gudang</option>
+                            <option value="hr">HR</option>
+                            <option value="keuangan">Keuangan</option>
+                            <option value="kurir">Kurir</option>
+                            <option value="staf">Staf</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:1;min-width:150px;">
+                        <label>Label Jabatan</label>
+                        <input type="text" id="empRoleLabel" class="form-control" placeholder="mis. Kasir POS Utama" />
+                    </div>
+                    <div class="form-group" style="flex:1;min-width:130px;">
+                        <label>Status</label>
+                        <select id="empStatus" class="form-control">
+                            <option value="ACTIVE">Aktif</option>
+                            <option value="INACTIVE">Nonaktif</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="empPassRow" class="form-group">
+                    <label>Password (login awal)</label>
+                    <input type="password" id="empPassword" class="form-control" placeholder="Minimal 6 karakter" autocomplete="new-password" />
+                </div>
+                <div>
+                    <label style="font-weight:700;font-size:0.78rem;color:var(--text-primary);">Hak Akses Menu</label>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+                        <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="pos" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />POS</label>
+                        <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="penjualan" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />Penjualan</label>
+                        <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="katalog" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />Katalog</label>
+                        <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="persediaan" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />Persediaan</label>
+                        <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="pembelian" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />Pembelian</label>
+                        <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="gudang" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />Gudang</label>
+                        <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="pricing" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />Pricing</label>
+                        <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="hr" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />HR</label>
+                        <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="pengaturan" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />Pengaturan</label>
+                    </div>
+                </div>
+                <div id="empError" style="color:var(--danger);font-size:0.74rem;min-height:14px;"></div>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:16px;">
+                <button class="checkout-btn" style="flex:1;" onclick="saveEmployeeForm()">Simpan</button>
+                <button class="close-modal-btn" style="flex:0 0 auto;width:100px;background:var(--text-muted);" onclick="closeEmployeeForm()">Batal</button>
+            </div>
+        </div>
+    </div>
 
     <!-- ===== LOGIN SCREEN NOMOR HP (GATE — PROTOTYPE) ===== -->
     <div class="modal-overlay" id="phoneLoginModal" style="background:rgba(10,13,22,0.96);">

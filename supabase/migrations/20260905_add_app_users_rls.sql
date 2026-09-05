@@ -115,7 +115,7 @@ CREATE POLICY "app_users_self_read"
 --        au.email,
 --        'Rizkin',
 --        'owner',
---        'Owner / Super Admin',
+--        'Super Admin',
 --        '["pos","penjualan","katalog","persediaan","pembelian","gudang","pricing","hr","pengaturan"]'::jsonb,
 --        'ACTIVE'
 -- FROM auth.users au

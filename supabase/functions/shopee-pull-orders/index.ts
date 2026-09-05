@@ -493,12 +493,39 @@ async function autoImportOrder(account: ShopeeAccount, orderDetail: any) {
       throw new Error("insert order_items gagal: " + oiErr.message);
     }
 
-    // Kurangi stok SATU KALI (langsung ke products, TANPA stock_mutations
-    // agar tidak masuk antrean shopee-stock-sync / tidak push kembali ke Shopee)
+    // Kurangi stok SATU KALI, mengikuti aturan yang sama dengan POS:
+    // stock_after = stock_before - qty (negatif DIPERBOLEHKAN, tanpa clamp ke 0).
+    // Contoh: 10-2=8 · 1-2=-1 · 0-2=-2 · -1-2=-3
     for (const m of mapped) {
-      const cur = stockById[String(m.product_id)] || 0;
-      const newStock = Math.max(0, cur - m.qty);
-      await supabase.from("products").update({ stock: newStock }).eq("id", m.product_id);
+      const before = Number(stockById[String(m.product_id)] || 0);
+      const after = before - m.qty;
+      stockById[String(m.product_id)] = after;
+
+      const { error: updErr } = await supabase.from("products").update({ stock: after }).eq("id", m.product_id);
+      if (updErr) {
+        console.error("update product stock failed:", m.product_id, updErr.message);
+        continue;
+      }
+
+      // Catat perubahan stok (stock_mutations) agar shopee-stock-sync ikut push
+      // qty_after terbaru ke SEMUA listing ter-mapping (termasuk toko lain).
+      // stock_mutations HANYA perintah push — tidak pernah mengurangi products.stock
+      // lagi, sehingga tidak terjadi double-deduction / loop.
+      try {
+        await supabase.from("stock_mutations").insert({
+          product_id: m.product_id,
+          product_name: m.product_name,
+          type: "OUT",
+          quantity: m.qty,
+          qty_before: before,
+          qty_after: after,
+          source: "Shopee: " + (orderDetail.order_sn || orderId),
+          sync_status: "pending",
+          created_at: new Date().toISOString(),
+        });
+      } catch (mutErr: any) {
+        console.error("stock_mutations insert failed (best-effort):", m.product_id, mutErr && mutErr.message);
+      }
     }
 
     // Tandai processed + internal_order_id
