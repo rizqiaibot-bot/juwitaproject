@@ -2362,7 +2362,7 @@
             <div class="page-header">
                 <div>
                     <h1>Picking Area - Gudang</h1>
-                    <div class="page-header-desc">Daftar pesanan yang perlu diambil dari rak</div>
+                    <div class="page-header-desc">Daftar pesanan yang perlu dipick dari gudang</div>
                 </div>
             </div>
             <div class="filter-tabs" id="pickingFilter">
@@ -2370,7 +2370,7 @@
                 <button class="filter-tab" data-filter="pending">Perlu Dipick</button>
                 <button class="filter-tab" data-filter="done">Sudah Dipick</button>
             </div>
-            <div class="table-wrapper"><table><thead><tr><th>ORDER ID</th><th>PRODUK</th><th>RAK</th><th>JUMLAH</th><th>STATUS</th><th>DIPICK PADA</th><th>AKSI</th></tr></thead><tbody id="pickingTableBody"></tbody></table></div>
+            <div class="table-wrapper"><table><thead><tr><th>ORDER ID</th><th>PRODUK</th><th>JUMLAH</th><th>STATUS</th><th>DIPICK PADA</th><th>AKSI</th></tr></thead><tbody id="pickingTableBody"></tbody></table></div>
         </div>
 
         <div id="page-packing" class="page-content">
@@ -4802,11 +4802,10 @@
             const pickingOrders = ordersData.filter(o => o.wmsStatus === 'Baru' || o.wmsStatus === 'Perlu Verifikasi' || o.wmsStatus === 'Dipick');
             const filtered = f === 'done' ? pickingOrders.filter(o => o.wmsStatus === 'Dipick') : f === 'pending' ? pickingOrders.filter(o => o.wmsStatus !== 'Dipick') : pickingOrders;
             if (!filtered.length) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Tidak ada pesanan untuk dipick</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Tidak ada pesanan untuk dipick</td></tr>';
                 return;
             }
             tbody.innerHTML = filtered.map(o => {
-                const rack = warehouseRacks.length ? warehouseRacks[(o.orderId || "").split("").reduce((a, c) => a + c.charCodeAt(0), 0) % warehouseRacks.length] : null;
                 const isDone = o.wmsStatus === 'Dipick';
                 const items = orderItemsData.filter(i => i.orderid === o.orderId);
                 const productHtml = items.length ? items.map(i => i.product_name).join('<br>') : '<span style="color:var(--text-muted);">-</span>';
@@ -4817,7 +4816,6 @@
                 return `<tr>
                     <td><strong>${o.orderId}</strong><br><small style="color:var(--text-muted);">${o.date || ''}</small></td>
                     <td>${productHtml}</td>
-                    <td>${rack ? rack.zone + ' - ' + rack.rack_name : 'Belum ditentukan'}</td>
                     <td>${qtyHtml}</td>
                     <td>${wmsChainHtml(o.wmsStatus)}</td>
                     <td>${pickedInfo}</td>
