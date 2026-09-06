@@ -1390,6 +1390,29 @@
             flex-direction: column;
             gap: 6px;
         }
+
+        /* Layout struk (modal & cetak thermal) */
+        .receipt-print {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 11.5px;
+            line-height: 1.4;
+            color: #111;
+            max-width: 300px;
+            margin: 0 auto;
+        }
+        .receipt-print .rc { text-align: center; }
+        .receipt-print .rc-bold { font-weight: 700; }
+        .receipt-print .addr { font-size: 10.5px; }
+        .receipt-print .sep { border-top: 1px dashed #999; margin: 4px 0; }
+        .receipt-print .info { display: flex; justify-content: space-between; gap: 10px; text-align: left; }
+        .receipt-print .info .k { white-space: nowrap; flex-shrink: 0; }
+        .receipt-print .info .v { text-align: right; white-space: nowrap; }
+        .receipt-print .info.total { font-weight: 800; }
+        .receipt-print .item-name { text-align: left; word-break: break-word; }
+        .receipt-print .item-math { display: flex; justify-content: space-between; gap: 10px; text-align: left; }
+        .receipt-print .item-math .m { white-space: nowrap; }
+        .receipt-print .item-math .s { white-space: nowrap; text-align: right; }
+
         .close-modal-btn {
             background: var(--primary-gradient);
             color: white;
@@ -4094,6 +4117,23 @@
             return (Math.round((Number(w) || 0) * 1000) / 1000).toFixed(3).replace(".", ",");
         }
 
+        // Satu baris label+nilai untuk bagian info/total struk.
+        function strukRow(label, value) {
+            return `<div class="info"><span class="k">${label}</span><span class="v">${value}</span></div>`;
+        }
+
+        // Dua baris rincian barang di struk: baris nama, lalu "harga x qty  subtotal".
+        // Produk timbang menampilkan harga/kg dan berat (kg); logic barcode/berat tidak diubah.
+        function receiptItemHtml(i) {
+            const price = i.price || 0;
+            const qty = i.isWeighed ? (i.weightKg != null ? i.weightKg : (i.quantity || 0)) : (i.quantity || 0);
+            const lineTotal = cartLineTotal(i);
+            const priceLbl = price.toLocaleString('id-ID') + (i.isWeighed ? '/kg' : '');
+            const qtyLbl = i.isWeighed ? fmtKg(qty) + ' kg' : String(qty);
+            return `<div class="item-name">${i.name}</div>
+                    <div class="item-math"><span class="m">${priceLbl} x ${qtyLbl}</span><span class="s">${lineTotal.toLocaleString('id-ID')}</span></div>`;
+        }
+
         function setCartSummary(itemCount, totalQty, total) {
             const el = document.getElementById("cartSummaryBar");
             if (!el) return;
@@ -6027,18 +6067,27 @@
             updatePosTodayStats();
 
             document.getElementById("receiptContent").innerHTML = `
-                        <div style="display:flex;justify-content:space-between;"><span>Order ID</span><strong>${orderId}</strong></div>
-                        <div style="display:flex;justify-content:space-between;"><span>Tanggal</span><strong>${dateStr}</strong></div>
-                        <div style="display:flex;justify-content:space-between;"><span>Pelanggan</span><strong>${customer}</strong></div>
-                        <div style="display:flex;justify-content:space-between;"><span>Metode Bayar</span><strong>${methodLabel}</strong></div>
-                        <hr style="border-color:var(--border-color);margin:6px 0;">
-                        ${cart.map(i => `<div style="display:flex;justify-content:space-between;font-size:0.78rem;"><span>${i.isWeighed ? `${i.name} x${i.quantity} (${fmtKg(i.weightKg)} kg)` : `${i.name} x${i.quantity}`}</span><span>${cartLineTotal(i).toLocaleString('id-ID')}</span></div>`).join('')}
-                        <hr style="border-color:var(--border-color);margin:6px 0;">
-                        <div style="display:flex;justify-content:space-between;"><span>Subtotal</span><span>${subtotal.toLocaleString('id-ID')}</span></div>
-                        ${disc>0?`<div style="display:flex;justify-content:space-between;color:var(--danger);"><span>Diskon</span><span>-${disc.toLocaleString('id-ID')}</span></div>`:''}
-                        <div style="display:flex;justify-content:space-between;font-weight:800;font-size:1rem;"><span>Total</span><span>${total.toLocaleString('id-ID')}</span></div>
-                        <div style="display:flex;justify-content:space-between;"><span>Bayar</span><span>${pay.toLocaleString('id-ID')}</span></div>
-                        <div style="display:flex;justify-content:space-between;color:var(--success);"><span>Kembalian</span><span>${change.toLocaleString('id-ID')}</span></div>
+                        <div class="receipt-print">
+                            <div class="rc rc-bold">JUWITA FRESH &amp; FROZEN</div>
+                            <div class="rc addr">Jl. Kopra 1 Bosan RT.002/022<br>Pekayon Jaya<br>Bekasi Selatan</div>
+                            <div class="rc addr">Telp: 082163134233</div>
+                            <div class="sep"></div>
+                            ${strukRow('No', orderId)}
+                            ${strukRow('Tanggal', dateStr)}
+                            ${strukRow('Kasir', currentUserName())}
+                            ${strukRow('Pelanggan', customer || '-')}
+                            ${strukRow('Pembayaran', methodLabel)}
+                            <div class="sep"></div>
+                            ${cart.map(receiptItemHtml).join('')}
+                            <div class="sep"></div>
+                            ${strukRow('Subtotal', subtotal.toLocaleString('id-ID'))}
+                            ${strukRow('Diskon', disc > 0 ? '-' + disc.toLocaleString('id-ID') : '0')}
+                            <div class="info total"><span class="k">TOTAL</span><span class="v">${total.toLocaleString('id-ID')}</span></div>
+                            ${strukRow('Bayar', pay.toLocaleString('id-ID'))}
+                            ${strukRow('Kembalian', change.toLocaleString('id-ID'))}
+                            <div class="sep"></div>
+                            <div class="rc addr">Terima kasih telah<br>berbelanja di toko kami.</div>
+                        </div>
                     `;
 
             document.getElementById("checkoutModal").classList.add("active");
@@ -6150,14 +6199,23 @@
             const content = document.getElementById("receiptContent").innerHTML;
             const win = window.open("", "_blank", "width=300,height=600");
             win.document.write(`<!DOCTYPE html><html><head><title>Struk Pembayaran</title>
-                        <style>body{font-family:monospace;font-size:12px;padding:20px;text-align:center;}
-                        table{width:100%;border-collapse:collapse;}td{padding:4px 0;}
-                        .border-top{border-top:1px dashed #000;}.bold{font-weight:700;font-size:14px;}
-                        hr{border:1px dashed #ccc;margin:8px 0;}
+                        <style>
+                        body{font-family:'Courier New',Courier,monospace;margin:0;padding:10px;background:#fff;}
+                        .receipt-print{max-width:280px;margin:0 auto;font-size:11.5px;line-height:1.4;color:#000;}
+                        .receipt-print .rc{text-align:center;}
+                        .receipt-print .rc-bold{font-weight:700;}
+                        .receipt-print .addr{font-size:10.5px;}
+                        .receipt-print .sep{border-top:1px dashed #999;margin:4px 0;}
+                        .receipt-print .info{display:flex;justify-content:space-between;gap:10px;text-align:left;}
+                        .receipt-print .info .k{white-space:nowrap;flex-shrink:0;}
+                        .receipt-print .info .v{text-align:right;white-space:nowrap;}
+                        .receipt-print .info.total{font-weight:800;}
+                        .receipt-print .item-name{text-align:left;word-break:break-word;}
+                        .receipt-print .item-math{display:flex;justify-content:space-between;gap:10px;text-align:left;}
+                        .receipt-print .item-math .m{white-space:nowrap;}
+                        .receipt-print .item-math .s{white-space:nowrap;text-align:right;}
                         </style></head><body>
-                        <h3>JUWITA Fresh & Frozen</h3><p>Jl. Raya Juwita No. 45</p><hr>
-                        ${content.replace(/style="[^"]*"/g,'')}
-                        <hr><p>Terima kasih atas kunjungan Anda</p>
+                        ${content}
                         <script>window.onload=function(){window.print();window.close()}<\/script>
                         </body></html>`);
             win.document.close();
