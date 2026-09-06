@@ -4295,7 +4295,7 @@
                     .wmsStatus === "Batal" ? "badge-batal" : "badge-belum";
                 const channelHtml = renderChannelBadge(o.channel);
                 return `<tr>
-                            <td><strong style="cursor:pointer;color:var(--primary);" onclick="openOrderDetail('${o.orderId}')">${o.orderId}</strong><br><small style="color:var(--text-muted);">${o.date}</small></td>
+                            <td><strong style="cursor:pointer;color:var(--primary);" onclick="openOrderDetail('${o.orderId}')">${o.orderId}</strong><br><small style="color:var(--text-muted);">${fmtOrderDate(o)}</small></td>
                             <td>${channelHtml}</td>
                             <td>${o.customer}</td>
                             <td><strong>${o.total.toLocaleString('id-ID')}</strong></td>
@@ -4740,6 +4740,23 @@
             return p.replace('T', ' ').slice(0, 16);
         }
 
+        // Format tanggal/jam order untuk tampilan.
+        // orders.date tersimpan "YYYY-MM-DD HH:MM" tanpa timezone. Penulis server
+        // (Shopee/pull-orders) memakai jam UTC → tampilkan sebagai Asia/Jakarta.
+        // Order POS/local sudah memakai jam lokal (WIB) → jangan dikonversi lagi.
+        function fmtOrderDate(o) {
+            if (o && o.channel === "Shopee" && o.date) {
+                const d = new Date(String(o.date).replace(" ", "T") + "Z");
+                if (!isNaN(d.getTime())) {
+                    return new Intl.DateTimeFormat('sv-SE', {
+                        timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+                        hour: '2-digit', minute: '2-digit', hour12: false
+                    }).format(d).replace('T', ' ').slice(0, 16);
+                }
+            }
+            return o ? o.date : '';
+        }
+
         function currentUserName() {
             return (currentUser && currentUser.name) ? currentUser.name : 'Admin';
         }
@@ -4814,7 +4831,7 @@
                     ? `<strong>${fmtWIB(o.picked_at)}</strong><br><small style="color:var(--text-muted);">oleh ${o.picked_by || '-'}</small>`
                     : '<span style="color:var(--text-muted);">-</span>';
                 return `<tr>
-                    <td><strong>${o.orderId}</strong><br><small style="color:var(--text-muted);">${o.date || ''}</small></td>
+                    <td><strong>${o.orderId}</strong><br><small style="color:var(--text-muted);">${fmtOrderDate(o) || ''}</small></td>
                     <td>${productHtml}</td>
                     <td>${qtyHtml}</td>
                     <td>${wmsChainHtml(o.wmsStatus)}</td>
@@ -4875,7 +4892,7 @@
                     ? `<strong>${fmtWIB(o.packed_at)}</strong><br><small style="color:var(--text-muted);">oleh ${o.packed_by || '-'}</small>`
                     : '<span style="color:var(--text-muted);">-</span>';
                 return `<tr>
-                    <td><strong>${o.orderId}</strong><br><small style="color:var(--text-muted);">${o.date || ''}</small></td>
+                    <td><strong>${o.orderId}</strong><br><small style="color:var(--text-muted);">${fmtOrderDate(o) || ''}</small></td>
                     <td>${o.customer}</td>
                     <td>${renderChannelBadge(o.channel)}</td>
                     <td>Pesanan ${o.orderId}</td>
@@ -4933,7 +4950,7 @@
                     ? `<strong>${fmtWIB(o.shipped_at)}</strong><br><small style="color:var(--text-muted);">oleh ${o.shipped_by || '-'}</small>`
                     : '<span style="color:var(--text-muted);">-</span>';
                 return `<tr>
-                    <td><strong>${o.orderId}</strong><br><small style="color:var(--text-muted);">${o.date || ''}</small></td>
+                    <td><strong>${o.orderId}</strong><br><small style="color:var(--text-muted);">${fmtOrderDate(o) || ''}</small></td>
                     <td>${o.customer}</td>
                     <td>${o.courier || 'Belum ditentukan'}</td>
                     <td>${o.resi !== '-' ? o.resi : 'Belum ada'}</td>
@@ -5523,7 +5540,7 @@
                     detailBody.innerHTML = sorted.map(o => {
                         const items = orderItemsData.filter(i => i.orderid === o.orderId);
                         const itemStr = items.length ? items.map(i => `${i.product_name} ×${i.qty}`).join(', ') : '-';
-                        const time = (o.date || "").slice(11, 16);
+                        const time = (fmtOrderDate(o) || "").slice(11, 16);
                         const badge = o.payStatus === "Lunas" ? "badge-lunas" : o.payStatus === "Batal" ? "badge-batal" : "badge-belum";
                         return `<tr>
                             <td><strong>${o.orderId}</strong></td>
@@ -6083,7 +6100,7 @@
                 box.innerHTML = `
                     <div style="display:flex;flex-direction:column;gap:8px;">
                         <div style="display:flex;justify-content:space-between;"><span>ID Transaksi</span><strong>${o.orderid}</strong></div>
-                        <div style="display:flex;justify-content:space-between;"><span>Tanggal</span><strong>${o.date}</strong></div>
+                        <div style="display:flex;justify-content:space-between;"><span>Tanggal</span><strong>${fmtOrderDate(o)}</strong></div>
                         <div style="display:flex;justify-content:space-between;"><span>Pelanggan</span><strong>${o.customer || '-'}</strong></div>
                         <div style="display:flex;justify-content:space-between;"><span>Metode Bayar</span><strong>${methodLabel}</strong></div>
                         <div style="display:flex;justify-content:space-between;"><span>Status Gudang</span><strong>${wmsDisplay(o.wmsstatus)}</strong></div>
@@ -6152,7 +6169,7 @@
                         <h2>JUWITA Fresh & Frozen</h2>
                         <h4>Jl. Raya Juwita No. 45, Jakarta Selatan</h4>
                         <hr>
-                        <div class="info"><div><strong>INVOICE</strong><br>${o.orderId}</div><div><strong>Tanggal</strong><br>${o.date}</div></div>
+                        <div class="info"><div><strong>INVOICE</strong><br>${o.orderId}</div><div><strong>Tanggal</strong><br>${fmtOrderDate(o)}</div></div>
                         <div class="info"><div><strong>Kepada Yth.</strong><br>${o.customer}</div><div><strong>Channel</strong><br>${o.channel}</div></div>
                         <table><tr><th>Item</th><th>Qty</th><th>Harga</th><th>Subtotal</th></tr>
                         <tr><td>${o.customer}</td><td>1</td><td>${o.total.toLocaleString('id-ID')}</td><td>${o.total.toLocaleString('id-ID')}</td></tr></table>
@@ -6171,7 +6188,7 @@
                             <div style="font-size:28px;font-weight:700;margin:12px 0;letter-spacing:2px;">${o.orderId}</div>
                             <div style="font-size:14px;margin:6px 0;"><strong>${o.customer}</strong></div>
                             <div style="font-size:12px;color:#555;">${o.courier} ${o.resi!=="-"?"· "+o.resi:""}</div>
-                            <div style="margin-top:12px;padding-top:10px;border-top:1px solid #ccc;font-size:10px;color:#888;">${o.date}</div>
+                            <div style="margin-top:12px;padding-top:10px;border-top:1px solid #ccc;font-size:10px;color:#888;">${fmtOrderDate(o)}</div>
                         </div>
                     `);
         }
@@ -6184,7 +6201,7 @@
                         <h4>Jl. Raya Juwita No. 45, Jakarta Selatan</h4>
                         <hr>
                         <h3 style="text-align:center;">SURAT JALAN</h3>
-                        <div class="info"><div><strong>No. Surat</strong><br>${o.orderId}</div><div><strong>Tanggal</strong><br>${o.date}</div></div>
+                        <div class="info"><div><strong>No. Surat</strong><br>${o.orderId}</div><div><strong>Tanggal</strong><br>${fmtOrderDate(o)}</div></div>
                         <div class="info"><div><strong>Kepada</strong><br>${o.customer}</div><div><strong>Kurir</strong><br>${o.courier} ${o.resi!=="-"?"· "+o.resi:""}</div></div>
                         <table><tr><th>No</th><th>Nama Barang</th><th>Qty</th><th>Keterangan</th></tr>
                         <tr><td>1</td><td>Pesanan ${o.orderId}</td><td>1</td><td>-</td></tr></table>
