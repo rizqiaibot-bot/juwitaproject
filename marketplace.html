@@ -183,9 +183,355 @@
     .summary-grid { grid-template-columns: repeat(2, 1fr); }
     .header { flex-direction: column; align-items: flex-start; gap: 10px; }
   }
+
+  /* ===== NAVBAR JUWITA ONE (konsisten index.html) ===== */
+  #juwitaTopNav {
+    --bg-nav: rgba(255, 255, 255, 0.85);
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --primary: #4f46e5;
+    --primary-light: #eef2ff;
+    --border-color: #f1f5f9;
+    --card-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04), 0 2px 8px -1px rgba(15, 23, 42, 0.02);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 18px;
+    --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  #juwitaTopNav.top-nav {
+    background: var(--bg-nav);
+    border-bottom: 1px solid var(--border-color);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    padding: 0 24px;
+    position: sticky;
+    top: 0;
+    z-index: 9998;
+    transition: var(--transition);
+    max-width: 100vw;
+  }
+  #juwitaTopNav .nav-container {
+    max-width: 1600px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 72px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  #juwitaTopNav .logo-area {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 0;
+    cursor: pointer;
+    flex-shrink: 0;
+    color: var(--text-primary);
+  }
+  #juwitaTopNav .logo-icon img {
+    height: 44px;
+    width: auto;
+    display: block;
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+  }
+  #juwitaTopNav .logo-area:hover .logo-icon img {
+    transform: scale(1.05);
+  }
+  #juwitaTopNav .logo-text h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: #8b5cf6;
+    line-height: 1.2;
+  }
+  #juwitaTopNav .logo-text p {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: #000000;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+  #juwitaTopNav .nav-menu-horizontal {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    flex-wrap: wrap;
+  }
+  #juwitaTopNav .nav-menu-horizontal > li { position: relative; list-style: none; }
+  #juwitaTopNav .nav-menu-horizontal > li > a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: 40px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    transition: var(--transition);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  #juwitaTopNav .nav-menu-horizontal > li > a:hover {
+    background: var(--border-color);
+    color: var(--text-primary);
+  }
+  #juwitaTopNav .nav-menu-horizontal > li.active > a {
+    background: var(--primary-light);
+    color: var(--primary);
+    font-weight: 700;
+    box-shadow: inset 0 -2px 0 var(--primary);
+  }
+  #juwitaTopNav .nav-menu-horizontal > li.active > a:hover {
+    background: var(--primary-light);
+    color: var(--primary);
+  }
+  #juwitaTopNav .nav-menu-horizontal > li.active > a i { color: var(--primary); }
+  #juwitaTopNav .nav-menu-horizontal > li:nth-child(1) a i { color: #f97316; }
+  #juwitaTopNav .nav-menu-horizontal > li:nth-child(2) a i { color: #0ea5e9; }
+  #juwitaTopNav .nav-menu-horizontal > li:nth-child(3) a i { color: #8b5cf6; }
+  #juwitaTopNav .nav-menu-horizontal > li:nth-child(4) a i { color: #22c55e; }
+  #juwitaTopNav .nav-menu-horizontal > li:nth-child(5) a i { color: #10b981; }
+  #juwitaTopNav .nav-menu-horizontal > li:nth-child(6) a i { color: #f43f5e; }
+  #juwitaTopNav .nav-menu-horizontal > li:nth-child(7) a i { color: #f59e0b; }
+  #juwitaTopNav .nav-menu-horizontal > li:nth-child(8) a i { color: #ec4899; }
+  #juwitaTopNav .nav-menu-horizontal > li:nth-child(9) a i { color: #14b8a6; }
+  #juwitaTopNav .nav-menu-horizontal > li:nth-child(10) a i { color: #6366f1; }
+  #juwitaTopNav .dropdown { position: relative; }
+  #juwitaTopNav .dropdown > a .fa-chevron-down {
+    font-size: 0.65rem;
+    margin-left: auto;
+    transition: transform 0.25s ease;
+    align-self: center;
+    flex-shrink: 0;
+    position: relative;
+    top: 1px;
+  }
+  #juwitaTopNav .dropdown.active > a .fa-chevron-down { transform: rotate(180deg); }
+  #juwitaTopNav .dropdown-menu {
+    position: absolute;
+    top: 110%;
+    left: 0;
+    background: #ffffff;
+    border-radius: var(--radius-lg);
+    box-shadow: 0 12px 40px -8px rgba(15, 23, 42, 0.15);
+    min-width: 220px;
+    padding: 8px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px) scale(0.97);
+    transition: opacity 0.2s ease, transform 0.25s ease, visibility 0.2s;
+    z-index: 9999;
+    border: 1px solid var(--border-color);
+    pointer-events: none;
+    list-style: none;
+  }
+  #juwitaTopNav .dropdown.active .dropdown-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+  }
+  #juwitaTopNav .dropdown-menu li { list-style: none; }
+  #juwitaTopNav .dropdown-menu li a {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: var(--transition);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  #juwitaTopNav .dropdown-menu li a:hover {
+    background: var(--border-color);
+    color: var(--text-primary);
+  }
+  #juwitaTopNav .dropdown-menu li a i {
+    width: 20px;
+    text-align: center;
+    font-size: 0.9rem;
+  }
+  #juwitaTopNav .nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  #juwitaTopNav .mobile-toggle {
+    display: none;
+    background: transparent;
+    border: none;
+    font-size: 1.4rem;
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 4px 6px;
+  }
+  @media (max-width: 1024px) {
+    #juwitaTopNav .mobile-toggle { display: block; }
+    #juwitaTopNav .nav-menu-horizontal {
+      display: none;
+      flex-direction: column;
+      position: absolute;
+      top: 72px;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      border-bottom: 1px solid var(--border-color);
+      box-shadow: var(--card-shadow);
+      padding: 16px;
+      gap: 6px;
+      align-items: stretch;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+    #juwitaTopNav .nav-menu-horizontal.active { display: flex; max-width: 100vw; }
+    #juwitaTopNav .nav-menu-horizontal > li > a {
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      white-space: normal;
+      align-items: center;
+    }
+    #juwitaTopNav .dropdown > a .fa-chevron-down {
+      flex-shrink: 0;
+      align-self: center;
+      top: 1px;
+    }
+    #juwitaTopNav .dropdown-menu {
+      position: static !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+      transform: none !important;
+      transition: none !important;
+      display: none;
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+      border: none !important;
+      box-shadow: none !important;
+      background: transparent !important;
+      margin: 4px 0 0 0 !important;
+      padding: 0 0 0 24px !important;
+      border-radius: 0 !important;
+      z-index: auto !important;
+      pointer-events: auto !important;
+    }
+    #juwitaTopNav .dropdown {
+      position: static !important;
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    #juwitaTopNav .dropdown.active .dropdown-menu { display: block !important; }
+    #juwitaTopNav .dropdown-menu li a { white-space: normal; padding: 8px 12px; }
+  }
+  @media (max-width: 640px) {
+    #juwitaTopNav.top-nav { padding: 0 12px; }
+    #juwitaTopNav .nav-container { min-height: 60px; }
+    #juwitaTopNav .logo-text h2 { font-size: 1rem; }
+    #juwitaTopNav .logo-text p { font-size: 0.6rem; }
+    #juwitaTopNav .logo-icon img { height: 34px; }
+  }
+
 </style>
 </head>
 <body>
+<header id="juwitaTopNav" class="top-nav">
+  <div class="nav-container">
+    <div class="logo-area" onclick="location.href='index.html'" title="Ke Beranda Juwita One">
+      <div class="logo-icon"><img src="juwitalogo.png" alt="Juwita Logo" onerror="this.src='https://placehold.co/44x44/6366f1/ffffff?text=J1'" /></div>
+      <div class="logo-text">
+        <h2>Juwita One</h2>
+        <p>All-in-One Management</p>
+      </div>
+    </div>
+
+    <ul class="nav-menu-horizontal" id="navMenu">
+      <li class="nav-item" data-page="pos"><a href="index.html?page=pos"><i class="fas fa-cash-register"></i> POS</a></li>
+      <!-- PENJUALAN -->
+      <li class="dropdown">
+        <a href="#"><i class="fas fa-chart-line"></i> Penjualan <i class="fas fa-chevron-down"></i></a>
+        <ul class="dropdown-menu">
+          <li data-page="daftar-penjualan"><a href="index.html?page=daftar-penjualan"><i class="fas fa-list"></i> Daftar Penjualan</a></li>
+          <li data-page="daftar-pelanggan"><a href="index.html?page=daftar-pelanggan"><i class="fas fa-users"></i> Daftar Pelanggan</a></li>
+          <li data-page="rekap-penjualan"><a href="index.html?page=rekap-penjualan"><i class="fas fa-chart-bar"></i> Rekap Penjualan</a></li>
+        </ul>
+      </li>
+      <!-- KATALOG -->
+      <li class="dropdown">
+        <a href="#"><i class="fas fa-book"></i> Katalog <i class="fas fa-chevron-down"></i></a>
+        <ul class="dropdown-menu">
+          <li data-page="daftar-produk"><a href="index.html?page=daftar-produk"><i class="fas fa-list"></i> Daftar Produk</a></li>
+          <li data-page="tambah-produk"><a href="index.html?page=tambah-produk"><i class="fas fa-plus-circle"></i> Tambah Produk</a></li>
+        </ul>
+      </li>
+      <!-- PERSEDIAAN -->
+      <li class="dropdown">
+        <a href="#"><i class="fas fa-boxes-stacked"></i> Persediaan <i class="fas fa-chevron-down"></i></a>
+        <ul class="dropdown-menu">
+          <li data-page="monitor-stok"><a href="index.html?page=monitor-stok"><i class="fas fa-chart-simple"></i> Monitor Stok</a></li>
+          <li data-page="mutasi-stok"><a href="index.html?page=mutasi-stok"><i class="fas fa-arrows-left-right"></i> Mutasi Stok</a></li>
+        </ul>
+      </li>
+      <!-- PEMBELIAN -->
+      <li class="dropdown">
+        <a href="#"><i class="fas fa-shopping-cart"></i> Pembelian <i class="fas fa-chevron-down"></i></a>
+        <ul class="dropdown-menu">
+          <li data-page="data-pembelian"><a href="index.html?page=data-pembelian"><i class="fas fa-database"></i> Data Pembelian</a></li>
+        </ul>
+      </li>
+      <!-- GUDANG -->
+      <li class="dropdown">
+        <a href="#"><i class="fas fa-warehouse"></i> Gudang <i class="fas fa-chevron-down"></i></a>
+        <ul class="dropdown-menu">
+          <li data-page="picking"><a href="index.html?page=picking"><i class="fas fa-clipboard-list"></i> Picking</a></li>
+          <li data-page="packing"><a href="index.html?page=packing"><i class="fas fa-boxes"></i> Packing</a></li>
+          <li data-page="pengiriman"><a href="index.html?page=pengiriman"><i class="fas fa-truck"></i> Pengiriman</a></li>
+          <li data-page="opname-gudang"><a href="index.html?page=opname-gudang"><i class="fas fa-clipboard-check"></i> Stock Opname</a></li>
+          <li data-page="riwayat-gudang"><a href="index.html?page=riwayat-gudang"><i class="fas fa-clock-rotate-left"></i> Riwayat Gudang</a></li>
+        </ul>
+      </li>
+      <!-- PRICING -->
+      <li class="dropdown">
+        <a href="#"><i class="fas fa-tag"></i> Pricing <i class="fas fa-chevron-down"></i></a>
+        <ul class="dropdown-menu">
+          <li data-page="harga-belanja"><a href="index.html?page=harga-belanja"><i class="fas fa-shopping-bag"></i> Harga Belanja</a></li>
+          <li data-page="harga-jual"><a href="index.html?page=harga-jual"><i class="fas fa-tags"></i> Harga Jual</a></li>
+          <li data-page="ubah-harga"><a href="index.html?page=ubah-harga"><i class="fas fa-edit"></i> Ubah Harga</a></li>
+          <li data-page="margin-keuntungan"><a href="index.html?page=margin-keuntungan"><i class="fas fa-chart-line"></i> Margin Keuntungan</a></li>
+        </ul>
+      </li>
+      <!-- HR -->
+      <li class="dropdown">
+        <a href="#"><i class="fas fa-users"></i> HR <i class="fas fa-chevron-down"></i></a>
+        <ul class="dropdown-menu">
+          <li data-page="karyawan"><a href="index.html?page=karyawan"><i class="fas fa-user-tie"></i> Karyawan</a></li>
+          <li data-page="rekap-kehadiran"><a href="index.html?page=rekap-kehadiran"><i class="fas fa-calendar-check"></i> Rekap Kehadiran</a></li>
+          <li data-page="cuti"><a href="index.html?page=cuti"><i class="fas fa-umbrella-beach"></i> Izin dan Cuti</a></li>
+          <li data-page="jadwal-kerja"><a href="index.html?page=jadwal-kerja"><i class="fas fa-calendar-week"></i> Jadwal Kerja</a></li>
+        </ul>
+      </li>
+
+      <!-- MARKETPLACE (aktif di halaman ini) -->
+      <li class="nav-item active"><a href="marketplace.html"><i class="fas fa-store"></i> Marketplace</a></li>
+      <li class="nav-item" data-page="pengaturan"><a href="index.html?page=pengaturan"><i class="fas fa-cog"></i> Pengaturan</a></li>
+    </ul>
+
+    <div class="nav-actions">
+      <button class="mobile-toggle" id="mobileToggleBtn" aria-label="Buka Menu">
+        <i class="fas fa-bars"></i>
+      </button>
+    </div>
+  </div>
+</header>
 <div class="container">
   <div class="header">
     <h1><i class="fas fa-store-alt"></i> Marketplace Dashboard</h1>
@@ -807,6 +1153,57 @@ function init() {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+</script>
+
+<script>
+// ============================================================
+// NAVBAR JUWITA — toggle mobile, dropdown, tutup saat klik luar
+// ============================================================
+(function () {
+  function bindNav() {
+    var menu = document.getElementById("navMenu");
+    var toggle = document.getElementById("mobileToggleBtn");
+    if (!menu || !toggle) return;
+
+    toggle.addEventListener("click", function (e) {
+      e.stopPropagation();
+      menu.classList.toggle("active");
+    });
+
+    document.querySelectorAll("#juwitaTopNav .dropdown > a").forEach(function (el) {
+      el.addEventListener("click", function (e) {
+        e.preventDefault();
+        var parent = el.parentElement;
+        document.querySelectorAll("#juwitaTopNav .dropdown").forEach(function (d) {
+          if (d !== parent) d.classList.remove("active");
+        });
+        parent.classList.toggle("active");
+      });
+    });
+
+    // Tutup dropdown jika klik di luar navbar
+    document.addEventListener("click", function (e) {
+      if (!e.target.closest("#juwitaTopNav")) {
+        document.querySelectorAll("#juwitaTopNav .dropdown").forEach(function (d) {
+          d.classList.remove("active");
+        });
+      }
+    });
+
+    // Tutup drawer mobile saat submenu/link dipilih
+    document.querySelectorAll("#navMenu [data-page]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        menu.classList.remove("active");
+      });
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindNav);
+  } else {
+    bindNav();
+  }
+})();
 </script>
 
 </body>

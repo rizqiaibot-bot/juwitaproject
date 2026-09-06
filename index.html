@@ -3102,6 +3102,23 @@
         const JUWITA_AUTH_MODE = "auth"; // ubah ke "auth" saat siap
         const JUWITA_EMAIL_DOMAIN = "juwita.local"; // email internal: <noHp>@juwita.local
 
+        // Deep-link dari marketplace.html: index.html?page=<id> langsung membuka
+        // halaman tujuan setelah login/restore. Parameter dibaca sekali lalu dihapus.
+        let JUWITA_DEEP_PAGE = "";
+        (function () {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                JUWITA_DEEP_PAGE = params.get("page") || "";
+                if (JUWITA_DEEP_PAGE) {
+                    params.delete("page");
+                    const qs = params.toString();
+                    history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : ""));
+                }
+            } catch (e) {
+                JUWITA_DEEP_PAGE = "";
+            }
+        })();
+
         function realPhoneToEmail(phone) {
             return protoNormalizePhone(phone) + "@" + JUWITA_EMAIL_DOMAIN;
         }
@@ -3124,7 +3141,10 @@
             localStorage.removeItem(PROTO_SESSION_KEY);
             renderUserUI();
             filterMenuByRole();
-            const avail = currentUser.menus[0] || "pos";
+            const deepGroup = pageMenuGroup(JUWITA_DEEP_PAGE);
+            const avail = (JUWITA_DEEP_PAGE && deepGroup && currentUser.menus.includes(deepGroup))
+                ? JUWITA_DEEP_PAGE
+                : (currentUser.menus[0] || "pos");
             showPage(avail);
             ensureOrdersPolling();
         }
@@ -3232,7 +3252,10 @@
             closePhoneLogin();
             renderUserUI();
             filterMenuByRole();
-            const avail = (currentUser.menus && currentUser.menus[0]) || "pos";
+            const deepGroup = pageMenuGroup(JUWITA_DEEP_PAGE);
+            const avail = (JUWITA_DEEP_PAGE && deepGroup && currentUser.menus && currentUser.menus.includes(deepGroup))
+                ? JUWITA_DEEP_PAGE
+                : ((currentUser.menus && currentUser.menus[0]) || "pos");
             showPage(avail);
             ensureOrdersPolling();
             showToast("Login berhasil sebagai " + currentUser.name);
@@ -6234,22 +6257,26 @@
         // ============================================================
         // NAVIGATION
         // ============================================================
+        function pageMenuGroup(pageId) {
+            const menuMap = {
+                pos: "pos",
+                "daftar-penjualan": "penjualan", "daftar-pelanggan": "penjualan", "rekap-penjualan": "penjualan",
+                "daftar-produk": "katalog", "tambah-produk": "katalog",
+                "monitor-stok": "persediaan", "mutasi-stok": "persediaan",
+                "data-pembelian": "pembelian",
+                penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "opname-gudang": "gudang", "riwayat-gudang": "gudang",
+                "harga-belanja": "pricing", "harga-jual": "pricing", "ubah-harga": "pricing", "diskon-promo": "pricing", "margin-keuntungan": "pricing",
+                karyawan: "hr", absensi: "hr", "rekap-kehadiran": "hr", cuti: "hr", "jadwal-kerja": "hr", penggajian: "hr", "slip-gaji": "hr",
+
+                pengaturan: "pengaturan"
+            };
+            return menuMap[pageId] || "";
+        }
+
         function showPage(pageId) {
             // Permission check
             if (currentUser) {
-                const menuMap = {
-                    pos: "pos",
-                    "daftar-penjualan": "penjualan", "daftar-pelanggan": "penjualan", "rekap-penjualan": "penjualan",
-                    "daftar-produk": "katalog", "tambah-produk": "katalog",
-                    "monitor-stok": "persediaan", "mutasi-stok": "persediaan",
-                    "data-pembelian": "pembelian",
-                    penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "opname-gudang": "gudang", "riwayat-gudang": "gudang",
-                    "harga-belanja": "pricing", "harga-jual": "pricing", "ubah-harga": "pricing", "diskon-promo": "pricing", "margin-keuntungan": "pricing",
-                    karyawan: "hr", absensi: "hr", "rekap-kehadiran": "hr", cuti: "hr", "jadwal-kerja": "hr", penggajian: "hr", "slip-gaji": "hr",
-
-                    pengaturan: "pengaturan"
-                };
-                const group = menuMap[pageId];
+                const group = pageMenuGroup(pageId);
                 if (group && !currentUser.menus.includes(group)) {
                     showToast("Akses ditolak untuk menu ini");
                     return;
@@ -6668,7 +6695,10 @@
 
                 // --- DEFAULT PAGE ---
                 if (currentUser) {
-                    const available = currentUser.menus[0] || "pos";
+                    const deepGroup = pageMenuGroup(JUWITA_DEEP_PAGE);
+                    const available = (JUWITA_DEEP_PAGE && deepGroup && currentUser.menus.includes(deepGroup))
+                        ? JUWITA_DEEP_PAGE
+                        : (currentUser.menus[0] || "pos");
                     showPage(available);
                 } else {
                     openPhoneLogin(); // login screen sebagai halaman awal (gate)
