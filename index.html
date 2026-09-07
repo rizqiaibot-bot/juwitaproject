@@ -1105,11 +1105,13 @@
 
         .payment-btns {
             display: flex;
+            flex-wrap: wrap;
             gap: 6px;
             margin-top: 4px;
         }
         .payment-btn {
             flex: 1;
+            min-width: 54px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -1164,6 +1166,13 @@
             background: var(--primary);
             border-color: var(--primary);
             color: white;
+        }
+        .cash-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            background: var(--bg-primary);
+            border-color: var(--border-color);
+            color: var(--text-muted);
         }
         .checkout-btn {
             background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
@@ -2126,10 +2135,8 @@
                             <span>Bayar</span>
                             <input type="number" id="payAmount" value="0" min="0" class="discount-input" style="width:90px;" />
                         </div>
-                        <div class="cash-quick-btns">
+                        <div class="cash-quick-btns" id="cashQuickBtns">
                             <button class="cash-btn" data-amount="pas">Uang Pas</button>
-                            <button class="cash-btn" data-amount="10000">10.000</button>
-                            <button class="cash-btn" data-amount="20000">20.000</button>
                             <button class="cash-btn" data-amount="50000">50.000</button>
                             <button class="cash-btn" data-amount="100000">100.000</button>
                         </div>
@@ -2151,8 +2158,22 @@
                             <div class="payment-btn" data-value="EDC" onclick="selectPayment(this)">
                                 <i class="fas fa-credit-card"></i> EDC
                             </div>
+                            <div class="payment-btn" data-value="Transfer" onclick="selectPayment(this)">
+                                <i class="fas fa-building-columns"></i> Transfer
+                            </div>
+                            <div class="payment-btn" data-value="Piutang" onclick="selectPayment(this)">
+                                <i class="fas fa-hand-holding-dollar"></i> Piutang
+                            </div>
                         </div>
                         <input type="hidden" id="paymentMethod" value="Cash" />
+                        <div id="transferBankWrap" style="display:none;margin-top:6px;">
+                            <label style="font-size:0.68rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:3px;">Pilih Bank <i class="fas fa-chevron-down" style="font-size:0.6rem;"></i></label>
+                            <select id="transferBank" class="form-control" style="padding:8px 10px;font-size:0.8rem;">
+                                <option value="">Pilih Bank</option>
+                                <option value="BRI">BRI</option>
+                                <option value="BCA">BCA</option>
+                            </select>
+                        </div>
                         <div style="margin-top:2px;">
                             <label style="display:flex;align-items:center;gap:6px;font-size:0.7rem;font-weight:600;color:var(--text-muted);cursor:pointer;padding:2px 0;">
                                 <input type="checkbox" id="splitToggle" onchange="toggleSplit()" /> <i class="fas fa-split"></i> Bayar Split (Cash + Non-Tunai)
@@ -4500,6 +4521,7 @@
             const checked = document.getElementById("splitToggle").checked;
             document.getElementById("splitRows").style.display = checked ? "flex" : "none";
             if (checked) updateSplit();
+            refreshPaymentState();
         }
 
         function updateSplit() {
@@ -4513,6 +4535,23 @@
             document.querySelectorAll(".payment-btn").forEach(b => b.classList.remove("active"));
             el.classList.add("active");
             document.getElementById("paymentMethod").value = el.dataset.value;
+            refreshPaymentState();
+        }
+
+        // Perbarui state UI pembayaran sesuai metode + split:
+        // - shortcut Uang Pas/50rb/100rb aktif HANYA saat Cash & bukan Split.
+        // - dropdown bank tampil HANYA saat Transfer.
+        function refreshPaymentState() {
+            const method = (document.getElementById("paymentMethod") && document.getElementById("paymentMethod").value) || "Cash";
+            const splitEl = document.getElementById("splitToggle");
+            const split = !!(splitEl && splitEl.checked);
+            const bankWrap = document.getElementById("transferBankWrap");
+            if (bankWrap) bankWrap.style.display = method === "Transfer" ? "block" : "none";
+            const enableCash = method === "Cash" && !split;
+            document.querySelectorAll("#cashQuickBtns .cash-btn").forEach(function (b) {
+                b.disabled = !enableCash;
+                if (!enableCash) b.classList.remove("active");
+            });
         }
 
         // ============================================================
@@ -6149,9 +6188,17 @@
                 method = cash > 0 && nonCash > 0 ? "Split" : nonCash > 0 ? "QRIS" : "Cash";
             } else {
                 pay = parseInt(document.getElementById("payAmount").value.replace(/\D/g, "")) || 0;
-                if (pay < total) { showToast("Jumlah bayar kurang!"); return; }
-                change = pay - total;
-                methodLabel = method;
+                const isPiutang = method === "Piutang";
+                if (!isPiutang && pay < total) { showToast("Jumlah bayar kurang!"); return; }
+                // Piutang = non-tunai: tanpa pengembalian (kembalian 0), tidak seperti Cash.
+                change = isPiutang ? 0 : pay - total;
+                if (method === "Transfer") {
+                    const bankSel = document.getElementById("transferBank");
+                    const bank = (bankSel && bankSel.value) || "";
+                    methodLabel = bank ? ("Transfer (" + bank + ")") : "Transfer";
+                } else {
+                    methodLabel = method;
+                }
             }
 
             const now = new Date();
@@ -6159,7 +6206,7 @@
             const todayCount = ordersData.filter(o => o.orderId && o.orderId.startsWith("ORD-" + todayStamp)).length;
             const orderId = "ORD-" + todayStamp + "-" + String(todayCount + 1).padStart(2, "0");
             const dateStr = now.toISOString().slice(0, 10) + " " + now.toTimeString().slice(0, 5);
-            const channel = method === "QRIS" || method === "EDC" || method === "Split" ? "POS2" : "POS1";
+            const channel = ["QRIS", "EDC", "Split", "Transfer", "Piutang"].indexOf(method) !== -1 ? "POS2" : "POS1";
 
             const order = { orderId, date: dateStr, channel, customer, total, payStatus: "Lunas",
                 wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-" };
@@ -6304,6 +6351,11 @@
             document.getElementById("splitRows").style.display = "none";
             document.getElementById("splitCash").value = "0";
             document.getElementById("splitNonCash").value = "0";
+            document.getElementById("paymentMethod").value = "Cash";
+            document.querySelectorAll(".payment-btn").forEach(b => {
+                b.classList.toggle("active", b.dataset.value === "Cash");
+            });
+            refreshPaymentState();
             if (orderResult && orderResult.status === "queued") {
                 showToast(`Transaksi ${orderId} tersimpan lokal (menunggu sinkronisasi)`);
             } else {
@@ -6950,6 +7002,7 @@
 
             // --- SPLIT ---
             document.getElementById("splitToggle").addEventListener("change", toggleSplit);
+            refreshPaymentState();
 
             // --- POS STATS & CLOCK ---
             updatePosTodayStats();
