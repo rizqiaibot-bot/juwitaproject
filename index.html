@@ -2046,10 +2046,9 @@
                     <h3 id="posTodayTotal" style="font-size:1.4rem;font-weight:800;margin:0;line-height:1.1;">Rp0</h3>
                     <p style="font-size:0.7rem;color:var(--text-muted);font-weight:600;margin:0;">Penjualan Hari Ini</p>
                 </div>
-                <div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px 18px;border:1px solid var(--border-color);box-shadow:var(--card-shadow);display:flex;align-items:center;gap:12px;">
-                    <i class="fas fa-shopping-basket" style="color:var(--warning);font-size:1.2rem;"></i>
-                    <h3 id="posCartCount" style="font-size:1.4rem;font-weight:800;margin:0;line-height:1.1;">0</h3>
-                    <p style="font-size:0.7rem;color:var(--text-muted);font-weight:600;margin:0;">Item di Keranjang</p>
+                <div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px 18px;border:1px solid var(--primary);box-shadow:var(--card-shadow);display:flex;align-items:center;gap:12px;cursor:pointer;text-align:left;font:inherit;color:var(--text-primary);" onclick="wmOpen()" role="button" tabindex="0" title="Input berat manual untuk produk timbang">
+                    <i class="fas fa-weight-scale" style="color:var(--primary);font-size:1.6rem;"></i>
+                    <p style="font-size:0.82rem;font-weight:800;margin:0;line-height:1.25;">Input Berat<br>Manual</p>
                 </div>
                 <div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px 18px;border:1px solid var(--border-color);box-shadow:var(--card-shadow);display:flex;align-items:center;gap:12px;">
                     <i class="fas fa-clock" style="color:var(--accent);font-size:1.2rem;"></i>
@@ -2215,8 +2214,8 @@
                         </div>
                         <div class="form-group">
                             <label>SKU</label>
-                            <input type="text" id="newProdSKU" class="form-control" placeholder="SKU-001 atau auto-generate" />
-                            <button type="button" class="aksi-btn" onclick="generateSKU()" style="margin-top:6px;width:fit-content;"><i class="fas fa-sync-alt"></i> Generate SKU</button>
+                            <input type="text" id="newProdSKU" class="form-control" placeholder="SKU utama produk (input manual)" />
+                            <small style="font-size:0.65rem;color:var(--text-muted);">SKU diisi manual — 1 produk = 1 SKU utama.</small>
                         </div>
                         <div class="form-group">
                             <label>Kategori</label>
@@ -2239,20 +2238,28 @@
                             <label>Stok Awal</label>
                             <input type="number" id="newProdStock" class="form-control" placeholder="Contoh: 100" required />
                         </div>
-                        <div class="form-group">
-                            <label>Supplier</label>
-                            <select id="newProdSupplier" class="form-control"></select>
-                        </div>
-                        <div class="form-group form-grid-full">
-                            <label>Spesifikasi Produk</label>
-                            <textarea id="newProdSpec" class="form-control" rows="3" placeholder="Contoh: Bahan premium, tanpa pengawet, kemasan vacuum sealed..."></textarea>
+                    </div>
+
+                    <!-- CARD: BARCODE -->
+                    <div class="form-card" style="background:var(--bg-primary);border:2px dashed var(--primary-light);margin:16px 0 0;padding:16px 18px;">
+                        <h4 style="font-size:0.9rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--text-primary);"><i class="fas fa-barcode" style="color:var(--primary);"></i> Barcode Produk</h4>
+                        <div class="form-grid" style="grid-template-columns: 1fr 1fr;row-gap:14px;">
+                            <div class="form-group">
+                                <label>Barcode Kemasan</label>
+                                <input type="text" id="newProdBarcode" class="form-control" placeholder="Scan barcode kemasan produk..." />
+                            </div>
+                            <div class="form-group">
+                                <label>PLU / Kode Timbangan</label>
+                                <input type="text" id="newProdPLU" class="form-control" placeholder="Contoh: 10022 (scan label timbangan)" />
+                                <small style="font-size:0.65rem;color:var(--text-muted);">Isi hanya jika produk dijual berdasarkan berat.</small>
+                            </div>
                         </div>
                     </div>
 
                     <!-- CARD: UKURAN & BERAT -->
-                    <div class="form-card" style="background:var(--bg-primary);border:2px dashed var(--purple-light);margin-bottom:18px;padding:18px 20px;">
+                    <div class="form-card" style="background:var(--bg-primary);border:2px dashed var(--purple-light);margin:14px 0 0;padding:16px 18px;">
                         <h4 style="font-size:0.9rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--text-primary);"><i class="fas fa-weight-scale" style="color:var(--purple);"></i> Ukuran &amp; Berat Produk</h4>
-                        <div class="form-grid" style="grid-template-columns: 1fr 1fr 1fr 1fr;">
+                        <div class="form-grid" style="grid-template-columns: repeat(4, 1fr);row-gap:14px;">
                             <div class="form-group">
                                 <label>Panjang (cm)</label>
                                 <input type="number" id="newProdLength" class="form-control" placeholder="0" step="0.1" min="0" />
@@ -2273,7 +2280,7 @@
                     </div>
 
                     <!-- CARD: UPLOAD FOTO -->
-                    <div class="form-card" style="background:var(--bg-primary);border:2px dashed var(--accent-light);margin-bottom:18px;padding:18px 20px;">
+                    <div class="form-card" style="background:var(--bg-primary);border:2px dashed var(--accent-light);margin:14px 0 0;padding:16px 18px;">
                         <h4 style="font-size:0.9rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--text-primary);"><i class="fas fa-camera" style="color:var(--accent);"></i> Foto Produk</h4>
                         <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
                             <div id="photoPreviewContainer" style="width:120px;height:120px;border:2px dashed var(--border-color);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;color:var(--text-muted);overflow:hidden;background:var(--bg-card);flex-shrink:0;">
@@ -2293,25 +2300,10 @@
                         </div>
                     </div>
 
-                    <!-- CARD: BARCODE -->
-                    <div class="form-card" style="background:var(--bg-primary);border:2px dashed var(--primary-light);margin-bottom:18px;padding:18px 20px;">
-                        <h4 style="font-size:0.9rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--text-primary);"><i class="fas fa-barcode" style="color:var(--primary);"></i> Barcode Produk</h4>
-                        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
-                            <div class="form-group" style="flex:1;min-width:180px;">
-                                <label>Kode Barcode</label>
-                                <input type="text" id="newProdBarcode" class="form-control" placeholder="Scan barcode kemasan produk..." />
-                            </div>
-                            <div class="form-group" style="flex:1;min-width:180px;">
-                                <label>PLU Timbangan (Precio)</label>
-                                <input type="text" id="newProdPLU" class="form-control" placeholder="Contoh: 10022 (scan label timbangan)" />
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- CARD: SHOPEE SYNC -->
-                    <div class="form-card" style="background:var(--bg-primary);border:2px dashed #f97316;margin-bottom:18px;padding:18px 20px;">
+                    <div class="form-card" style="background:var(--bg-primary);border:2px dashed #f97316;margin:14px 0 0;padding:16px 18px;">
                         <h4 style="font-size:0.9rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--text-primary);"><i class="fas fa-store" style="color:#f97316;"></i> Integrasi Shopee</h4>
-                        <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+                        <div class="form-grid" style="grid-template-columns: 1fr 1fr;row-gap:14px;">
                             <div class="form-group">
                                 <label>Shopee Item ID</label>
                                 <input type="number" id="newProdShopeeId" class="form-control" placeholder="ID produk di Shopee" />
@@ -2908,6 +2900,33 @@
         <div class="footer-info">
             <span>Sistem Operasional Terintegrasi - Juwita One</span>
             <span>&copy; 2026 Juwita Inc.</span>
+        </div>
+    </div>
+
+    <!-- ===== MODAL INPUT BERAT MANUAL (PLU/WEIGHTED) ===== -->
+    <div class="modal-overlay" id="weightManualModal" onclick="if(event.target===this)wmClose()">
+        <div class="modal-card" style="max-width:480px;width:min(92vw,480px);text-align:left;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+                <h3 style="margin:0;font-size:1.1rem;display:flex;align-items:center;gap:8px;"><i class="fas fa-weight-scale" style="color:var(--primary);"></i> Input Berat Manual</h3>
+            </div>
+            <div class="form-group" style="margin-bottom:10px;">
+                <label>Cari Produk (PLU / Nama)</label>
+                <input type="text" id="wmSearch" class="form-control" placeholder="Ketik PLU atau nama produk..." autocomplete="off" />
+            </div>
+            <div id="wmResults" style="max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
+            <div id="wmSelected" style="display:none;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:var(--radius-md);padding:10px 12px;margin-bottom:10px;font-size:0.8rem;line-height:1.5;">
+                <div><strong id="wmSelName">-</strong></div>
+                <div style="color:var(--text-muted);" id="wmSelInfo"></div>
+            </div>
+            <div class="form-group" style="margin-bottom:10px;">
+                <label>Berat (kg) — contoh 0,600 atau 0.600</label>
+                <input type="text" id="wmWeight" class="form-control" placeholder="0,600" inputmode="decimal" autocomplete="off" />
+            </div>
+            <div id="wmPreview" style="display:none;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:var(--radius-md);padding:10px 12px;margin-bottom:4px;font-size:0.85rem;"></div>
+            <div style="display:flex;gap:10px;margin-top:16px;">
+                <button id="wmAdd" class="close-modal-btn" style="flex:2;background:var(--primary-gradient);" onclick="wmAdd()" disabled>Tambahkan ke Keranjang</button>
+                <button class="close-modal-btn" style="flex:1;background:var(--text-muted);" onclick="wmClose()">Batal</button>
+            </div>
         </div>
     </div>
 
@@ -4105,6 +4124,146 @@
             playAddSound();
         }
 
+        // ============================================================
+        // INPUT BERAT MANUAL (produk timbang/PLU) — alternatif saat label
+        // barcode timbangan habis. Hanya produk ber-PLU. Menambah lewat
+        // addWeighedItem() yang sama dengan alur barcode timbangan, sehingga
+        // weightKg/quantity/cartLineTotal/receipt mengikuti logic yang ada.
+        // ============================================================
+        let wmLastResults = [];
+        let wmProduct = null;
+
+        function wmPluOf(p) {
+            return (p && p.plu != null) ? String(p.plu).trim() : "";
+        }
+
+        function wmParseKg(v) {
+            if (v == null) return NaN;
+            const s = String(v).trim().replace(/,/g, ".");
+            const n = parseFloat(s);
+            return isNaN(n) ? NaN : n;
+        }
+
+        function wmOpen() {
+            wmProduct = null;
+            wmLastResults = [];
+            const s = document.getElementById("wmSearch");
+            const w = document.getElementById("wmWeight");
+            if (s) s.value = "";
+            if (w) w.value = "";
+            wmRenderSearch();
+            const modal = document.getElementById("weightManualModal");
+            if (modal) modal.classList.add("active");
+            if (s) setTimeout(function () { s.focus(); }, 60);
+        }
+
+        function wmClose() {
+            const modal = document.getElementById("weightManualModal");
+            if (modal) modal.classList.remove("active");
+            wmProduct = null;
+            wmLastResults = [];
+        }
+
+        function wmWeightedProducts() {
+            const arr = [];
+            (products || []).forEach(function (p) {
+                if (wmPluOf(p) !== "") arr.push(p);
+            });
+            return arr;
+        }
+
+        function wmRenderSearch() {
+            const box = document.getElementById("wmResults");
+            if (!box) return;
+            const input = document.getElementById("wmSearch");
+            const q = (input && input.value ? input.value : "").trim();
+            box.innerHTML = "";
+            if (!q) {
+                box.innerHTML = '<div style="font-size:0.75rem;color:var(--text-muted);padding:4px 2px;">Ketik PLU atau nama produk...</div>';
+                return;
+            }
+            const ql = q.toLowerCase();
+            const all = wmWeightedProducts();
+            const exactPlu = all.filter(function (p) { return wmPluOf(p) === q; });
+            const byPluInc = all.filter(function (p) { return wmPluOf(p).indexOf(ql) !== -1; });
+            const byName = all.filter(function (p) { return p.name && p.name.toLowerCase().indexOf(ql) !== -1; });
+
+            const merged = [];
+            const seen = {};
+            function pushList(list) {
+                list.forEach(function (p) {
+                    if (!seen[p.id]) { seen[p.id] = 1; merged.push(p); }
+                });
+            }
+            pushList(exactPlu);
+            pushList(byPluInc);
+            pushList(byName);
+
+            if (!merged.length) {
+                box.innerHTML = '<div style="font-size:0.75rem;color:var(--danger);padding:4px 2px;">Produk tidak ditemukan.</div>';
+                return;
+            }
+            if (exactPlu.length === 1 || merged.length === 1) {
+                wmPick(merged[0]);
+                return;
+            }
+
+            wmLastResults = merged;
+            box.innerHTML = merged.map(function (p, idx) {
+                return '<button type="button" onclick="wmPickResult(' + idx + ')" style="display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;text-align:left;background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius-md);padding:8px 10px;cursor:pointer;font-size:0.8rem;">'
+                    + '<span>' + p.name + ' <small style="color:var(--text-muted);">PLU ' + wmPluOf(p) + '</small></span>'
+                    + '<span style="white-space:nowrap;font-weight:700;color:var(--primary);">Rp ' + (p.price || 0).toLocaleString('id-ID') + '/kg</span>'
+                    + '</button>';
+            }).join('');
+        }
+
+        function wmPickResult(idx) {
+            const p = wmLastResults[idx];
+            if (p) wmPick(p);
+        }
+
+        function wmPick(p) {
+            if (!p) return;
+            wmProduct = p;
+            const sel = document.getElementById("wmSelected");
+            const nameEl = document.getElementById("wmSelName");
+            const infoEl = document.getElementById("wmSelInfo");
+            if (sel) sel.style.display = "block";
+            if (nameEl) nameEl.textContent = p.name || "-";
+            if (infoEl) infoEl.textContent = 'PLU ' + wmPluOf(p) + ' • Harga Rp ' + (p.price || 0).toLocaleString('id-ID') + '/kg';
+            const w = document.getElementById("wmWeight");
+            if (w) { w.focus(); w.select(); }
+            wmPreview();
+        }
+
+        function wmPreview() {
+            const addBtn = document.getElementById("wmAdd");
+            const prev = document.getElementById("wmPreview");
+            const weightInput = document.getElementById("wmWeight");
+            const kg = wmParseKg(weightInput && weightInput.value ? weightInput.value : "");
+            const ok = !!(wmProduct && kg > 0);
+            if (prev) prev.style.display = ok ? "block" : "none";
+            if (prev && ok) {
+                // Subtotal memakai cartLineTotal agar sama persis dengan logic weighted.
+                const line = cartLineTotal(Object.assign({}, wmProduct, { quantity: 1, weightKg: kg, isWeighed: true }));
+                prev.innerHTML = '<div style="display:flex;justify-content:space-between;font-weight:700;"><span>Subtotal (' + fmtKg(kg) + ' kg)</span><span>Rp ' + line.toLocaleString('id-ID') + '</span></div>';
+            }
+            if (addBtn) addBtn.disabled = !ok;
+        }
+
+        function wmAdd() {
+            if (!wmProduct) { showToast("Pilih produk dahulu", "error"); return; }
+            const weightInput = document.getElementById("wmWeight");
+            const kg = wmParseKg(weightInput && weightInput.value ? weightInput.value : "");
+            if (!(kg > 0)) { showToast("Berat harus lebih dari 0", "error"); return; }
+            const p = wmProduct;
+            addWeighedItem(p, kg);
+            showToast(p.name + ": " + kg.toFixed(3) + " kg x Rp " + (p.price || 0).toLocaleString('id-ID') + " = Rp " + Math.round((p.price || 0) * kg).toLocaleString('id-ID'));
+            wmClose();
+            const scan = document.getElementById("scanInput");
+            if (scan) scan.focus();
+        }
+
         // Subtotal satu baris keranjang: produk timbang = harga/kg × berat (kg),
         // produk biasa = harga × qty unit.
         function cartLineTotal(i) {
@@ -4152,7 +4311,8 @@
                 document.getElementById("total").innerText = "0";
                 document.getElementById("payAmount").value = "0";
                 document.getElementById("change").innerText = "0";
-                document.getElementById("posCartCount").textContent = "0";
+                const pcEl0 = document.getElementById("posCartCount");
+                if (pcEl0) pcEl0.textContent = "0";
                 setCartSummary(0, 0, 0);
                 return;
             }
@@ -4191,7 +4351,8 @@
             document.getElementById("disc").innerText = `-${disc.toLocaleString('id-ID')}`;
             document.getElementById("total").innerText = total.toLocaleString('id-ID');
             document.getElementById("change").innerText = change.toLocaleString('id-ID');
-            document.getElementById("posCartCount").textContent = totalQty;
+            const pcEl = document.getElementById("posCartCount");
+            if (pcEl) pcEl.textContent = totalQty;
             setCartSummary(cart.length, totalQty, total);
             updateSplit();
         }
@@ -4492,7 +4653,7 @@
             if (t) t.textContent = "Tambah Produk Baru";
             const b = document.getElementById("addProductSubmit");
             if (b) b.textContent = "Simpan Produk";
-            ["newProdName","newProdSKU","newProdModal","newProdPrice","newProdStock","newProdSpec","newProdLength","newProdWidth","newProdHeight","newProdWeight","newProdBarcode","newProdPLU","newProdShopeeId","newProdShopeeSku"].forEach(id => {
+            ["newProdName","newProdSKU","newProdModal","newProdPrice","newProdStock","newProdLength","newProdWidth","newProdHeight","newProdWeight","newProdBarcode","newProdPLU","newProdShopeeId","newProdShopeeSku"].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.value = "";
             });
@@ -4517,7 +4678,6 @@
             document.getElementById("newProdModal").value = p.modal || 0;
             document.getElementById("newProdPrice").value = p.price || 0;
             document.getElementById("newProdStock").value = p.stock || 0;
-            document.getElementById("newProdSupplier").value = p.supplier || "";
             document.getElementById("newProdBarcode").value = p.barcode || "";
             document.getElementById("newProdPLU").value = p.plu || "";
             document.getElementById("newProdShopeeId").value = p.shopee_item_id || "";
@@ -5712,7 +5872,8 @@
             document.getElementById("posTodayCount").textContent = todayOrders.length;
             const total = todayOrders.reduce((s, o) => s + o.total, 0);
             document.getElementById("posTodayTotal").textContent = 'Rp' + total.toLocaleString('id-ID');
-            document.getElementById("posCartCount").textContent = cart.reduce((s, i) => s + (i.quantity || 0), 0);
+            const pcEl2 = document.getElementById("posCartCount");
+            if (pcEl2) pcEl2.textContent = cart.reduce((s, i) => s + (i.quantity || 0), 0);
         }
 
         function posClockTick() {
@@ -6500,7 +6661,12 @@
                 const modal = parseInt(document.getElementById("newProdModal").value);
                 const price = parseInt(document.getElementById("newProdPrice").value);
                 const stock = parseFloat(document.getElementById("newProdStock").value);
-                const supplier = document.getElementById("newProdSupplier").value;
+                // Supplier tidak tampil di form Tambah Produk; pertahankan nilai lama
+                // saat edit (bila ada), kosong untuk produk baru.
+                const supEl = document.getElementById("newProdSupplier");
+                const supplier = supEl && supEl.value
+                    ? supEl.value
+                    : (editingProductId != null ? ((products.find(x => x.id === editingProductId) || {}).supplier || "") : "");
                 const barcode = document.getElementById("newProdBarcode").value.trim();
                 const plu = document.getElementById("newProdPLU").value.trim() || null;
                 const shopee_item_id = parseInt(document.getElementById("newProdShopeeId").value) || null;
@@ -6687,6 +6853,24 @@
                 currentSearch = e.target.value;
                 renderProducts(currentSearch, posCategory);
             });
+
+            // --- INPUT BERAT MANUAL ---
+            document.getElementById("wmSearch").addEventListener("input", wmRenderSearch);
+            document.getElementById("wmSearch").addEventListener("keydown", function(e) {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (wmLastResults.length === 1) wmPickResult(0);
+                }
+            });
+            document.getElementById("wmWeight").addEventListener("input", wmPreview);
+            document.getElementById("wmWeight").addEventListener("keydown", function(e) {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    const kg = wmParseKg(this.value);
+                    if (wmProduct && kg > 0) wmAdd();
+                }
+            });
+            document.getElementById("wmAdd").addEventListener("click", wmAdd);
 
             // --- CART BUTTONS ---
             document.getElementById("clearCartBtn").addEventListener("click", function() { cart = [];
