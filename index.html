@@ -445,6 +445,29 @@
             background: var(--danger-gradient);
         }
 
+        /* Breakdown Pembayaran POS: 6 kartu disusun 2 baris (3 kolom) agar card tidak memanjang */
+        #posPayGrid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            margin-bottom: 4px;
+        }
+        #posPayGrid .stat-item {
+            cursor: default;
+            padding: 16px 18px;
+        }
+        #posPayGrid .stat-number {
+            font-size: 1.15rem;
+        }
+        @media (max-width: 900px) {
+            #posPayGrid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+        @media (max-width: 520px) {
+            #posPayGrid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         /* ===== FILTER ===== */
         .filter-section {
             background: var(--bg-card);
@@ -1968,6 +1991,20 @@
                     <i class="fas fa-search"></i>
                     <input type="text" id="searchInput" class="filter-control" placeholder="Cari pelanggan / Order ID..." />
                 </div>
+                <div class="filter-group" style="min-width:150px;max-width:180px;">
+                    <label>Dari</label>
+                    <input type="date" id="dateFrom" class="filter-control" />
+                </div>
+                <div class="filter-group" style="min-width:150px;max-width:180px;">
+                    <label>Sampai</label>
+                    <input type="date" id="dateTo" class="filter-control" />
+                </div>
+                <div class="filter-group" style="flex:0 0 auto;min-width:0;">
+                    <div style="display:flex;gap:8px;">
+                        <button type="button" onclick="applyPenjualanDateFilter()" style="background:var(--primary);color:#fff;border:none;border-radius:var(--radius-md);padding:10px 18px;font-weight:700;font-size:0.85rem;cursor:pointer;white-space:nowrap;">Terapkan</button>
+                        <button type="button" onclick="resetPenjualanFilters()" style="background:var(--bg-primary);color:var(--text-secondary);border:1px solid var(--border-color);border-radius:var(--radius-md);padding:10px 18px;font-weight:700;font-size:0.85rem;cursor:pointer;white-space:nowrap;">Reset</button>
+                    </div>
+                </div>
             </div>
 
             <div class="table-wrapper">
@@ -2025,6 +2062,27 @@
                 <div class="stat-item"><div><div class="stat-number" id="rekapItem">-</div><div class="stat-label">Item Terjual</div></div><div class="stat-icon-wrapper"><i class="fas fa-box"></i></div></div>
             </div>
             <div class="table-wrapper"><table><thead><tr><th>CHANNEL</th><th>OMZET</th><th>TRANSAKSI</th><th>ITEM</th></tr></thead><tbody id="rekapTableBody"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Pilih tanggal lalu klik Tampilkan</td></tr></tbody></table></div>
+            <!-- ===== BREAKDOWN PEMBAYARAN POS ===== -->
+            <div id="posBreakdownSection" style="margin-top:20px;">
+                <div style="font-size:0.9rem;font-weight:800;margin-bottom:10px;color:var(--text-primary);"><i class="fas fa-wallet" style="color:var(--primary);margin-right:6px;"></i>Breakdown Pembayaran POS</div>
+                <div class="stats-row" id="posPayGrid">
+                    <div class="stat-item"><div><div class="stat-number" id="posPayCash">Rp0</div><div class="stat-label">CASH</div></div><div class="stat-icon-wrapper"><i class="fas fa-money-bill-wave"></i></div></div>
+                    <div class="stat-item"><div><div class="stat-number" id="posPayQris">Rp0</div><div class="stat-label">QRIS</div></div><div class="stat-icon-wrapper"><i class="fas fa-qrcode"></i></div></div>
+                    <div class="stat-item"><div><div class="stat-number" id="posPayEdc">Rp0</div><div class="stat-label">EDC</div></div><div class="stat-icon-wrapper"><i class="fas fa-credit-card"></i></div></div>
+                    <div class="stat-item"><div><div class="stat-number" id="posPayBri">Rp0</div><div class="stat-label">TRANSFER BRI</div></div><div class="stat-icon-wrapper"><i class="fas fa-building-columns"></i></div></div>
+                    <div class="stat-item"><div><div class="stat-number" id="posPayBca">Rp0</div><div class="stat-label">TRANSFER BCA</div></div><div class="stat-icon-wrapper"><i class="fas fa-building-columns"></i></div></div>
+                    <div class="stat-item"><div><div class="stat-number" id="posPayPiutang">Rp0</div><div class="stat-label">PIUTANG</div></div><div class="stat-icon-wrapper"><i class="fas fa-hand-holding-dollar"></i></div></div>
+                </div>
+                <div id="posPayOtherNote" style="display:none;font-size:0.72rem;color:var(--text-muted);margin:4px 0 2px;"></div>
+            </div>
+            <!-- ===== PER KASIR (POS) ===== -->
+            <div id="posKasirSection" style="margin-top:18px;">
+                <div style="font-size:0.9rem;font-weight:800;margin-bottom:10px;color:var(--text-primary);"><i class="fas fa-user-tie" style="color:var(--primary);margin-right:6px;"></i>Per Kasir (POS)</div>
+                <div class="table-wrapper"><table>
+                    <thead><tr><th>KASIR</th><th>TRX</th><th>OMZET</th><th>CASH</th><th>QRIS</th><th>EDC</th><th>TRANSFER</th><th>PIUTANG</th></tr></thead>
+                    <tbody id="rekapKasirBody"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted);">Pilih tanggal lalu klik Tampilkan</td></tr></tbody>
+                </table></div>
+            </div>
             <div class="table-wrapper" style="margin-top:16px;">
                 <table>
                     <thead><tr><th>ORDER ID</th><th>CHANNEL</th><th>WAKTU</th><th>TOTAL</th><th>STATUS</th><th>ITEM</th></tr></thead>
@@ -3391,6 +3449,9 @@
         let filterStatus = "all";
         let filterChannel = "all";
         let filterSearchText = "";
+        // Filter periode tanggal Daftar Penjualan (normalisasi yyyy-mm-dd, tidak menyentuh data).
+        let penjDateFrom = "";
+        let penjDateTo = "";
         let rekapBulan = new Date().getMonth();
         let rekapTahun = new Date().getFullYear();
         let currentUser = null;
@@ -3512,7 +3573,13 @@
                 shop_id: o.shop_id || null,
                 picked_at: o.picked_at || null, picked_by: o.picked_by || null,
                 packed_at: o.packed_at || null, packed_by: o.packed_by || null,
-                shipped_at: o.shipped_at || null, shipped_by: o.shipped_by || null
+                shipped_at: o.shipped_at || null, shipped_by: o.shipped_by || null,
+                // Dipakai Rekap Penjualan (breakdown POS / split payment).
+                // Kasir dibaca bila kolom tersedia di DB; tidak ditebak.
+                payment_method: o.payment_method || null,
+                bayar: o.bayar != null ? o.bayar : null,
+                kembalian: o.kembalian != null ? o.kembalian : null,
+                kasir: o.kasir || null
             };
         }
 
@@ -3605,7 +3672,7 @@
             try {
                 const [oRes, oiRes] = await Promise.all([
                     sb.from('orders')
-                        .select('orderid,date,channel,customer,total,paystatus,wmsstatus,courier,resi,shop_id,picked_at,picked_by,packed_at,packed_by,shipped_at,shipped_by')
+                        .select('orderid,date,channel,customer,total,paystatus,wmsstatus,courier,resi,shop_id,picked_at,picked_by,packed_at,packed_by,shipped_at,shipped_by,payment_method,bayar,kembalian')
                         .order('date', { ascending: false }),
                     sb.from('order_items')
                         .select('id,orderid,product_id,product_name,qty,price,subtotal')
@@ -4677,6 +4744,77 @@
         // ============================================================
         // PENJUALAN TABLE
         // ============================================================
+        // ============================================================
+        // FILTER TANGGAL DAFTAR PENJUALAN (dd/mm/yyyy di UI, inklusif)
+        // ============================================================
+        function penjPad2(n) { return String(n).padStart(2, "0"); }
+
+        // Terima "dd/mm/yyyy" (atau "yyyy-mm-dd") → "yyyy-mm-dd"; invalid → "".
+        function parsePenjDate(raw) {
+            if (!raw) return "";
+            const s = String(raw).trim();
+            if (!s) return "";
+            let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+            if (m) {
+                const d = parseInt(m[1], 10), mo = parseInt(m[2], 10), y = parseInt(m[3], 10);
+                const dt = new Date(y, mo - 1, d);
+                if (y >= 2000 && y <= 2100 && dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d) {
+                    return y + "-" + penjPad2(mo) + "-" + penjPad2(d);
+                }
+                return "";
+            }
+            m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+            if (m) {
+                const y = parseInt(m[1], 10), mo = parseInt(m[2], 10), d = parseInt(m[3], 10);
+                const dt = new Date(y, mo - 1, d);
+                if (dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d) {
+                    return y + "-" + penjPad2(mo) + "-" + penjPad2(d);
+                }
+                return "";
+            }
+            return "";
+        }
+
+        function applyPenjualanDateFilter() {
+            const fEl = document.getElementById("dateFrom");
+            const tEl = document.getElementById("dateTo");
+            const fv = fEl && fEl.value ? String(fEl.value).trim() : "";
+            const tv = tEl && tEl.value ? String(tEl.value).trim() : "";
+            const from = parsePenjDate(fv);
+            const to = parsePenjDate(tv);
+            if (fv && !from) { showToast("Format tanggal 'Dari' tidak valid (dd/mm/yyyy)", "error"); return; }
+            if (tv && !to) { showToast("Format tanggal 'Sampai' tidak valid (dd/mm/yyyy)", "error"); return; }
+            if (from && to && from > to) {
+                showToast("Tanggal 'Dari' tidak boleh lebih besar dari 'Sampai'", "error");
+                return;
+            }
+            penjDateFrom = from;
+            penjDateTo = to;
+            renderPenjualanTable();
+        }
+
+        function resetPenjualanFilters() {
+            const fEl = document.getElementById("dateFrom");
+            const tEl = document.getElementById("dateTo");
+            if (fEl) fEl.value = "";
+            if (tEl) tEl.value = "";
+            penjDateFrom = "";
+            penjDateTo = "";
+            const stEl = document.getElementById("statusFilter");
+            const chEl = document.getElementById("channelFilter");
+            const seEl = document.getElementById("searchInput");
+            filterStatus = "all";
+            filterChannel = "all";
+            filterSearchText = "";
+            if (stEl) stEl.value = "all";
+            if (chEl) chEl.value = "all";
+            if (seEl) seEl.value = "";
+            document.querySelectorAll("#statsFilter .stat-item").forEach(s => s.classList.remove("active"));
+            const firstStat = document.querySelector('#statsFilter .stat-item[data-filter="all"]');
+            if (firstStat) firstStat.classList.add("active");
+            renderPenjualanTable();
+        }
+
         function renderPenjualanTable() {
             const tbody = document.getElementById("tableBody");
             if (!tbody) return;
@@ -4703,6 +4841,18 @@
                 o.customer.toLowerCase().includes(filterSearchText.toLowerCase()) ||
                 o.orderId.toLowerCase().includes(filterSearchText.toLowerCase())
             );
+            // Filter periode (inklusif), berdasarkan tanggal yang TAMPAK (Asia/Jakarta)
+            // via fmtOrderDate, bukan mentah kolom date.
+            if (penjDateFrom || penjDateTo) {
+                filtered = filtered.filter(o => {
+                    const shown = fmtOrderDate(o) || o.date || "";
+                    const key = shown.slice(0, 10);
+                    if (!key) return false;
+                    if (penjDateFrom && key < penjDateFrom) return false;
+                    if (penjDateTo && key > penjDateTo) return false;
+                    return true;
+                });
+            }
 
             document.getElementById("stat-total").innerText = filtered.length;
             document.getElementById("stat-lunas").innerText = filtered.filter(o => o.payStatus === "Lunas").length;
@@ -5904,6 +6054,120 @@
         // ============================================================
         // POS HISTORY & CLOSING
         // ============================================================
+        // ============================================================
+        // REKAP POS — breakdown pembayaran + per kasir (dari data POS)
+        // ============================================================
+        function rekapBankFrom(str) {
+            const m = String(str || "").match(/\(([A-Za-z]+)\)/);
+            return m ? m[1].toUpperCase() : "";
+        }
+
+        // Pecah payment_method "Split: CASH 60.000 + QRIS 40.000 ..." → legs.
+        function rekapSplitLegs(pm) {
+            const legs = [];
+            String(pm || "").split("+").forEach(function (part) {
+                const mm = part.match(/(CASH|QRIS|EDC|TRANSFER|PIUTANG)/i);
+                const am = part.match(/(\d[\d.]*)/);
+                if (!mm) return;
+                const amount = am ? parseInt(am[1].replace(/\./g, ""), 10) : 0;
+                legs.push({ method: String(mm[1]).toUpperCase(), amount: isNaN(amount) ? 0 : amount, bank: rekapBankFrom(part) });
+            });
+            return legs;
+        }
+
+        // Leg pembayaran sebuah order POS. Split dipecah per metode; non-split
+        // satu leg sesuai payment_method. Data lama tanpa metode → default CASH.
+        function rekapOrderLegs(o) {
+            const pm = o && o.payment_method;
+            const total = Number(o && o.total) || 0;
+            const s = String(pm || "").trim();
+            if (!s) return [{ method: "CASH", amount: total, bank: "" }];
+            if (/^split/i.test(s)) {
+                const legs = rekapSplitLegs(s);
+                return legs.length ? legs : [{ method: "CASH", amount: total, bank: "" }];
+            }
+            const low = s.toLowerCase();
+            if (low.indexOf("piutang") !== -1) return [{ method: "PIUTANG", amount: total, bank: "" }];
+            if (low.indexOf("transfer") !== -1) return [{ method: "TRANSFER", amount: total, bank: rekapBankFrom(s) }];
+            if (low.indexOf("edc") !== -1) return [{ method: "EDC", amount: total, bank: "" }];
+            if (low.indexOf("qris") !== -1) return [{ method: "QRIS", amount: total, bank: "" }];
+            return [{ method: "CASH", amount: total, bank: "" }];
+        }
+
+        function rekapPosAggregate(orders) {
+            const r = { cash: 0, qris: 0, edc: 0, transferBri: 0, transferBca: 0, transferOther: 0, piutang: 0 };
+            (orders || []).forEach(function (o) {
+                rekapOrderLegs(o).forEach(function (leg) {
+                    const a = leg.amount || 0;
+                    if (leg.method === "CASH") r.cash += a;
+                    else if (leg.method === "QRIS") r.qris += a;
+                    else if (leg.method === "EDC") r.edc += a;
+                    else if (leg.method === "PIUTANG") r.piutang += a;
+                    else if (leg.method === "TRANSFER") {
+                        const b = (leg.bank || "").toUpperCase();
+                        if (b === "BRI") r.transferBri += a;
+                        else if (b === "BCA") r.transferBca += a;
+                        else r.transferOther += a;
+                    }
+                });
+            });
+            return r;
+        }
+
+        function renderRekapPosBreakdown(posOrders) {
+            const agg = rekapPosAggregate(posOrders);
+            const ids = { posPayCash: agg.cash, posPayQris: agg.qris, posPayEdc: agg.edc, posPayBri: agg.transferBri, posPayBca: agg.transferBca, posPayPiutang: agg.piutang };
+            Object.keys(ids).forEach(function (id) {
+                const el = document.getElementById(id);
+                if (el) el.textContent = "Rp" + (ids[id] || 0).toLocaleString('id-ID');
+            });
+            const note = document.getElementById("posPayOtherNote");
+            if (note) {
+                if (agg.transferOther > 0) {
+                    note.style.display = "block";
+                    note.textContent = "Catatan: ada TRANSFER tanpa keterangan bank (data lama) sebesar Rp" + agg.transferOther.toLocaleString('id-ID') + ".";
+                } else {
+                    note.style.display = "none";
+                }
+            }
+        }
+
+        function renderRekapPosKasir(posOrders) {
+            const body = document.getElementById("rekapKasirBody");
+            if (!body) return;
+            if (!posOrders.length) {
+                body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted);">Tidak ada transaksi POS pada periode ini</td></tr>';
+                return;
+            }
+            const groups = {};
+            posOrders.forEach(function (o) {
+                const k = (o.kasir && String(o.kasir).trim()) ? String(o.kasir).trim() : "(kasir tidak tersimpan)";
+                if (!groups[k]) groups[k] = [];
+                groups[k].push(o);
+            });
+            const fmt = function (n) { return Number(n || 0).toLocaleString('id-ID'); };
+            const rows = Object.keys(groups).map(function (k) {
+                const list = groups[k];
+                const trx = list.length;
+                const omzet = list.reduce(function (s, o) { return s + (Number(o.total) || 0); }, 0);
+                const agg = rekapPosAggregate(list);
+                return { k: k, trx: trx, omzet: omzet, agg: agg };
+            });
+            rows.sort(function (a, b) { return b.omzet - a.omzet; });
+            body.innerHTML = rows.map(function (r) {
+                return '<tr>' +
+                    '<td><strong>' + r.k + '</strong></td>' +
+                    '<td>' + r.trx + '</td>' +
+                    '<td>' + fmt(r.omzet) + '</td>' +
+                    '<td>' + fmt(r.agg.cash) + '</td>' +
+                    '<td>' + fmt(r.agg.qris) + '</td>' +
+                    '<td>' + fmt(r.agg.edc) + '</td>' +
+                    '<td>' + fmt(r.agg.transferBri + r.agg.transferBca + r.agg.transferOther) + '</td>' +
+                    '<td>' + fmt(r.agg.piutang) + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
         function renderRekapPenjualan() {
             const dateEl = document.getElementById("rekapTanggal");
             const date = (dateEl && dateEl.value) ? dateEl.value : new Date().toISOString().slice(0, 10);
@@ -5955,6 +6219,11 @@
                     </tr>`;
                 }
             }
+
+            // Detail khusus POS: breakdown pembayaran + per kasir (mengikuti periode yang sama).
+            const posOrders = dayOrders.filter(x => x.channel === "POS1" || x.channel === "POS2");
+            renderRekapPosBreakdown(posOrders);
+            renderRekapPosKasir(posOrders);
 
             // Rincian detail transaksi
             const detailBody = document.getElementById("rekapDetailBody");
