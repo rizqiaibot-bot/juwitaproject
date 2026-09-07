@@ -1174,6 +1174,16 @@
             border-color: var(--border-color);
             color: var(--text-muted);
         }
+        .payment-btn.pm-disabled {
+            opacity: 0.45;
+            pointer-events: none;
+            cursor: not-allowed;
+        }
+        .discount-input:disabled {
+            opacity: 0.5;
+            background: var(--bg-primary);
+            cursor: not-allowed;
+        }
         .checkout-btn {
             background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
             color: white;
@@ -2178,19 +2188,54 @@
                             <label style="display:flex;align-items:center;gap:6px;font-size:0.7rem;font-weight:600;color:var(--text-muted);cursor:pointer;padding:2px 0;">
                                 <input type="checkbox" id="splitToggle" onchange="toggleSplit()" /> <i class="fas fa-split"></i> Bayar Split (Cash + Non-Tunai)
                             </label>
-                            <div id="splitRows" style="display:none;flex-direction:column;gap:4px;margin-top:4px;padding:6px 8px;background:var(--bg-primary);border-radius:var(--radius-sm);">
-                                <div style="display:flex;gap:6px;align-items:center;">
-                                    <span style="font-size:0.68rem;font-weight:600;color:var(--text-secondary);min-width:40px;"><i class="fas fa-money-bill-wave" style="color:var(--success);font-size:0.6rem;"></i> Cash</span>
-                                    <input type="number" id="splitCash" value="0" min="0" class="discount-input" style="width:80px;font-size:0.72rem;" oninput="updateSplit()" />
+                            <span id="splitActiveBadge" style="display:none;align-items:center;gap:4px;background:var(--warning-light);color:var(--warning-text);border:1px solid var(--warning);border-radius:50px;padding:3px 10px;font-size:0.66rem;font-weight:700;margin:4px 0;">🔀 Mode Pembayaran Split Aktif</span>
+                            <div id="splitRows" style="display:none;flex-direction:column;gap:8px;margin-top:4px;padding:6px 8px;background:var(--bg-primary);border-radius:var(--radius-sm);">
+                                <div style="padding-bottom:6px;border-bottom:1px dashed var(--border-color);">
+                                    <div style="font-size:0.68rem;font-weight:700;color:var(--text-muted);margin-bottom:4px;">Pembayaran 1</div>
+                                    <div style="display:flex;gap:6px;align-items:center;">
+                                        <select id="splitM1" class="form-control" style="flex:1;min-width:0;padding:6px 8px;font-size:0.75rem;" onchange="splitSelectChanged(1)">
+                                            <option value="Cash">CASH</option>
+                                            <option value="QRIS">QRIS</option>
+                                            <option value="EDC">EDC</option>
+                                            <option value="Transfer">TRANSFER</option>
+                                            <option value="Piutang">PIUTANG</option>
+                                        </select>
+                                        <input type="number" id="splitAmt1" value="0" min="0" class="discount-input" style="width:84px;font-size:0.75rem;" oninput="updateSplit()" />
+                                    </div>
+                                    <select id="splitBank1" class="form-control" style="display:none;margin-top:4px;padding:6px 8px;font-size:0.72rem;" onchange="updateSplit()">
+                                        <option value="">Pilih Bank</option>
+                                        <option value="BRI">BRI</option>
+                                        <option value="BCA">BCA</option>
+                                    </select>
                                 </div>
-                                <div style="display:flex;gap:6px;align-items:center;">
-                                    <span style="font-size:0.68rem;font-weight:600;color:var(--text-secondary);min-width:40px;"><i class="fas fa-qrcode" style="color:var(--primary);font-size:0.6rem;"></i> Non-Tunai</span>
-                                    <input type="number" id="splitNonCash" value="0" min="0" class="discount-input" style="width:80px;font-size:0.72rem;" oninput="updateSplit()" />
+                                <div style="padding-bottom:6px;border-bottom:1px dashed var(--border-color);">
+                                    <div style="font-size:0.68rem;font-weight:700;color:var(--text-muted);margin-bottom:4px;">Pembayaran 2 (otomatis = sisa)</div>
+                                    <div style="display:flex;gap:6px;align-items:center;">
+                                        <select id="splitM2" class="form-control" style="flex:1;min-width:0;padding:6px 8px;font-size:0.75rem;" onchange="splitSelectChanged(2)">
+                                            <option value="Cash">CASH</option>
+                                            <option value="QRIS">QRIS</option>
+                                            <option value="EDC">EDC</option>
+                                            <option value="Transfer">TRANSFER</option>
+                                            <option value="Piutang">PIUTANG</option>
+                                        </select>
+                                        <input type="number" id="splitAmt2" value="0" min="0" readonly title="Otomatis: total - pembayaran 1" class="discount-input" style="width:84px;font-size:0.75rem;background:var(--bg-card);color:var(--text-muted);cursor:not-allowed;opacity:0.85;" />
+                                    </div>
+                                    <select id="splitBank2" class="form-control" style="display:none;margin-top:4px;padding:6px 8px;font-size:0.72rem;" onchange="updateSplit()">
+                                        <option value="">Pilih Bank</option>
+                                        <option value="BRI">BRI</option>
+                                        <option value="BCA">BCA</option>
+                                    </select>
                                 </div>
-                                <div style="display:flex;justify-content:space-between;font-size:0.7rem;font-weight:700;color:var(--text-primary);padding-top:2px;border-top:1px solid var(--border-color);">
-                                    <span>Sisa</span>
-                                    <span id="splitRemain">0</span>
+                                <div style="display:flex;justify-content:space-between;font-size:0.72rem;font-weight:700;color:var(--text-primary);">
+                                    <span>Total</span><span id="splitTotalDisp">0</span>
                                 </div>
+                                <div style="display:flex;justify-content:space-between;font-size:0.72rem;font-weight:700;color:var(--text-primary);">
+                                    <span>Terbayar</span><span id="splitPaidDisp">0</span>
+                                </div>
+                                <div style="display:flex;justify-content:space-between;font-size:0.72rem;font-weight:700;color:var(--text-secondary);">
+                                    <span>Sisa</span><span id="splitRemain">0</span>
+                                </div>
+                                <div id="splitError" style="display:none;font-size:0.68rem;font-weight:700;color:var(--danger);"></div>
                             </div>
                         </div>
                         <button class="checkout-btn" id="checkoutBtn">
@@ -4517,18 +4562,81 @@
             }).join('');
         }
 
+        const SPLIT_METHODS = ["Cash", "QRIS", "EDC", "Transfer", "Piutang"];
+
+        function splitEl(id) { return document.getElementById(id); }
+        function splitMethod(n) { const el = splitEl("splitM" + n); return el ? el.value : "Cash"; }
+        function splitAmount(n) {
+            const el = splitEl("splitAmt" + n);
+            return parseInt(el && el.value ? String(el.value).replace(/\D/g, "") : "0") || 0;
+        }
+        function splitBank(n) { const el = splitEl("splitBank" + n); return el ? el.value : ""; }
+        function splitTotalValue() {
+            const el = splitEl("total");
+            return parseInt(el && el.innerText ? el.innerText.replace(/\D/g, "") : "0") || 0;
+        }
+        function splitShowError(msg) {
+            const err = splitEl("splitError");
+            if (err) { if (msg) { err.style.display = "block"; err.textContent = msg; } else { err.style.display = "none"; err.textContent = ""; } }
+        }
+
         function toggleSplit() {
-            const checked = document.getElementById("splitToggle").checked;
-            document.getElementById("splitRows").style.display = checked ? "flex" : "none";
-            if (checked) updateSplit();
+            const checked = splitEl("splitToggle").checked;
+            splitEl("splitRows").style.display = checked ? "flex" : "none";
+            if (checked) {
+                // Default: CASH + QRIS, nominal pertama 0 → kedua otomatis total.
+                if (!splitMethod(1)) splitEl("splitM1").value = "Cash";
+                if (!splitMethod(2)) splitEl("splitM2").value = "QRIS";
+                splitEnsureDistinct();
+                updateSplit();
+            }
             refreshPaymentState();
         }
 
+        // 2 metode harus berbeda; bila sama, metode ke-2 otomatis diganti.
+        function splitEnsureDistinct() {
+            const m1 = splitMethod(1);
+            const m2 = splitMethod(2);
+            if (m1 && m2 && m1 === m2) {
+                const next = SPLIT_METHODS.find(m => m !== m1);
+                splitEl("splitM2").value = next || "QRIS";
+            }
+        }
+
+        function splitSelectChanged(n) {
+            splitEnsureDistinct();
+            updateSplit();
+        }
+
+        // Nominal pembayaran ke-2 selalu = total − nominal pembayaran ke-1.
         function updateSplit() {
-            const total = parseInt((document.getElementById("total").innerText || "0").replace(/\D/g, "")) || 0;
-            const cash = parseInt(document.getElementById("splitCash").value.replace(/\D/g, "")) || 0;
-            const nonCash = parseInt(document.getElementById("splitNonCash").value.replace(/\D/g, "")) || 0;
-            document.getElementById("splitRemain").textContent = (total - cash - nonCash).toLocaleString('id-ID');
+            const total = splitTotalValue();
+            let a1 = splitAmount(1);
+            const err = splitEl("splitError");
+            const a2El = splitEl("splitAmt2");
+            if (a1 < 0) a1 = 0;
+            const valid = a1 <= total;
+            const a2 = total - a1;
+            if (a2El) a2El.value = String(a2);
+
+            // Dropdown bank per metode TRANSFER
+            [1, 2].forEach(function (n) {
+                const bankEl = splitEl("splitBank" + n);
+                if (bankEl) bankEl.style.display = splitMethod(n) === "Transfer" ? "block" : "none";
+            });
+
+            const paid = a1 + a2;
+            const sisa = total - paid;
+            const td = splitEl("splitTotalDisp");
+            const pd = splitEl("splitPaidDisp");
+            const rm = splitEl("splitRemain");
+            if (td) td.textContent = total.toLocaleString('id-ID');
+            if (pd) pd.textContent = paid.toLocaleString('id-ID');
+            if (rm) rm.textContent = sisa.toLocaleString('id-ID');
+
+            let msg = "";
+            if (!valid) msg = "Nominal pembayaran pertama tidak boleh melebihi total transaksi.";
+            splitShowError(msg);
         }
 
         function selectPayment(el) {
@@ -4538,19 +4646,31 @@
             refreshPaymentState();
         }
 
-        // Perbarui state UI pembayaran sesuai metode + split:
-        // - shortcut Uang Pas/50rb/100rb aktif HANYA saat Cash & bukan Split.
-        // - dropdown bank tampil HANYA saat Transfer.
+        // Saat Split aktif, seluruh payment normal dikunci; hanya area split yang aktif.
         function refreshPaymentState() {
-            const method = (document.getElementById("paymentMethod") && document.getElementById("paymentMethod").value) || "Cash";
-            const splitEl = document.getElementById("splitToggle");
-            const split = !!(splitEl && splitEl.checked);
+            const methodEl = document.getElementById("paymentMethod");
+            const method = (methodEl && methodEl.value) || "Cash";
+            const splitToggleEl = document.getElementById("splitToggle");
+            const split = !!(splitToggleEl && splitToggleEl.checked);
+
+            const badge = document.getElementById("splitActiveBadge");
+            if (badge) badge.style.display = split ? "inline-flex" : "none";
+
+            const payAmount = document.getElementById("payAmount");
+            if (payAmount) payAmount.disabled = split;
+
             const bankWrap = document.getElementById("transferBankWrap");
-            if (bankWrap) bankWrap.style.display = method === "Transfer" ? "block" : "none";
+            if (bankWrap) bankWrap.style.display = (!split && method === "Transfer") ? "block" : "none";
+
             const enableCash = method === "Cash" && !split;
             document.querySelectorAll("#cashQuickBtns .cash-btn").forEach(function (b) {
                 b.disabled = !enableCash;
                 if (!enableCash) b.classList.remove("active");
+            });
+
+            // Tombol metode normal dikunci saat split (visual + tidak bisa diklik).
+            document.querySelectorAll(".payment-btn").forEach(function (b) {
+                b.classList.toggle("pm-disabled", split);
             });
         }
 
@@ -6179,13 +6299,28 @@
             let pay, change, methodLabel;
 
             if (isSplit) {
-                let cash = parseInt(document.getElementById("splitCash").value.replace(/\D/g, "")) || 0;
-                let nonCash = parseInt(document.getElementById("splitNonCash").value.replace(/\D/g, "")) || 0;
-                if (cash + nonCash < total) { showToast("Jumlah split kurang!"); return; }
-                pay = cash + nonCash;
-                change = pay - total;
-                methodLabel = "Split (Cash + Non-Tunai)";
-                method = cash > 0 && nonCash > 0 ? "Split" : nonCash > 0 ? "QRIS" : "Cash";
+                // Split = 2 metode berbeda; nominal kedua otomatis = total - nominal pertama.
+                const m1 = splitMethod(1);
+                const m2 = splitMethod(2);
+                if (!m1 || !m2 || m1 === m2) { showToast("Pilih 2 metode pembayaran berbeda", "error"); return; }
+                let a1 = splitAmount(1);
+                if (a1 < 0) a1 = 0;
+                if (a1 > total) { showToast("Nominal pembayaran pertama melebihi total transaksi", "error"); return; }
+                const a2 = total - a1;
+                const b1 = m1 === "Transfer" ? splitBank(1) : "";
+                const b2 = m2 === "Transfer" ? splitBank(2) : "";
+                if ((m1 === "Transfer" && !b1) || (m2 === "Transfer" && !b2)) {
+                    showToast("Pilih bank untuk pembayaran Transfer", "error");
+                    return;
+                }
+                pay = a1 + a2; // selalu = total
+                change = 0;
+                const legLbl = function (m, a, b) {
+                    const amt = a.toLocaleString('id-ID');
+                    return m === "Transfer" ? ("TRANSFER " + amt + " (" + b + ")") : (String(m).toUpperCase() + " " + amt);
+                };
+                methodLabel = "Split: " + legLbl(m1, a1, b1) + " + " + legLbl(m2, a2, b2);
+                method = "Split";
             } else {
                 pay = parseInt(document.getElementById("payAmount").value.replace(/\D/g, "")) || 0;
                 const isPiutang = method === "Piutang";
@@ -6210,9 +6345,10 @@
 
             const order = { orderId, date: dateStr, channel, customer, total, payStatus: "Lunas",
                 wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-" };
+            const storedPayMethod = isSplit ? methodLabel : String(method || "Cash").toLowerCase();
             const orderRow = { orderid: orderId, date: dateStr, channel, customer, total,
                 paystatus: "Lunas", wmsstatus: "Selesai", courier: "Self-Pickup", resi: "-",
-                payment_method: String(method || "Cash").toLowerCase(), subtotal, diskon: disc, bayar: pay, kembalian: change };
+                payment_method: storedPayMethod, subtotal, diskon: disc, bayar: pay, kembalian: change };
 
             // Stock backup untuk rollback
             const stockBackup = {};
@@ -6349,8 +6485,13 @@
             document.getElementById("customerName").value = "";
             document.getElementById("splitToggle").checked = false;
             document.getElementById("splitRows").style.display = "none";
-            document.getElementById("splitCash").value = "0";
-            document.getElementById("splitNonCash").value = "0";
+            ["splitM1", "splitM2", "splitBank1", "splitBank2"].forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.tagName === "SELECT") el.value = id.indexOf("M1") !== -1 ? "Cash" : id.indexOf("M2") !== -1 ? "QRIS" : "";
+            });
+            ["splitAmt1", "splitAmt2"].forEach(id => { const el = document.getElementById(id); if (el) el.value = "0"; });
+            ["splitBank1", "splitBank2"].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = "none"; });
+            splitShowError("");
             document.getElementById("paymentMethod").value = "Cash";
             document.querySelectorAll(".payment-btn").forEach(b => {
                 b.classList.toggle("active", b.dataset.value === "Cash");
