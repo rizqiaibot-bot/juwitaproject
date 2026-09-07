@@ -2074,6 +2074,14 @@
                         <i class="fas fa-barcode"></i>
                         <input type="text" id="scanInput" autofocus placeholder="Scan Barcode / ketik nama produk lalu ENTER..." />
                     </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0 2px;font-size:0.74rem;font-weight:700;color:var(--text-secondary);">
+                        <span id="posPageInfo" style="white-space:nowrap;">1–50 dari 0</span>
+                        <div style="display:flex;align-items:center;gap:4px;">
+                            <span title="Produk per halaman" style="display:inline-flex;align-items:center;justify-content:center;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);padding:4px 8px;font-size:0.72rem;">50</span>
+                            <button type="button" id="posPrevBtn" aria-label="Halaman sebelumnya" title="Halaman sebelumnya" style="border:1px solid var(--border-color);background:var(--bg-card);border-radius:var(--radius-sm);cursor:pointer;padding:4px 12px;font-weight:800;font-size:0.9rem;line-height:1;">←</button>
+                            <button type="button" id="posNextBtn" aria-label="Halaman berikutnya" title="Halaman berikutnya" style="border:1px solid var(--border-color);background:var(--bg-card);border-radius:var(--radius-sm);cursor:pointer;padding:4px 12px;font-weight:800;font-size:0.9rem;line-height:1;">→</button>
+                        </div>
+                    </div>
                     <div class="product-grid" id="productGrid"></div>
                 </div>
 
@@ -3310,6 +3318,10 @@
         let savedOrders = [];
         let currentSearch = "";
         let posCategory = "all";
+        // Pagination display POS: maksimal 50 produk per halaman (data tidak diubah).
+        const POS_PAGE_SIZE = 50;
+        let posProductPage = 1;
+        let posLastTotal = 0;
         let filterStatus = "all";
         let filterChannel = "all";
         let filterSearchText = "";
@@ -4011,19 +4023,51 @@
         // ============================================================
         // RENDER FUNCTIONS
         // ============================================================
+        function posFilteredProducts(search, category) {
+            const s = search || currentSearch;
+            const c = category || posCategory;
+            let list = products;
+            if (s) list = list.filter(p => (p.name || "").toLowerCase().indexOf(s.toLowerCase()) !== -1);
+            if (c && c !== "all") list = list.filter(p => p.category === c);
+            return list;
+        }
+
+        function posUpdatePagination(total) {
+            const info = document.getElementById("posPageInfo");
+            const prev = document.getElementById("posPrevBtn");
+            const next = document.getElementById("posNextBtn");
+            const totalPages = Math.max(1, Math.ceil(total / POS_PAGE_SIZE));
+            if (posProductPage > totalPages) posProductPage = totalPages;
+            if (posProductPage < 1) posProductPage = 1;
+            const from = total === 0 ? 0 : (posProductPage - 1) * POS_PAGE_SIZE + 1;
+            const to = Math.min(posProductPage * POS_PAGE_SIZE, total);
+            if (info) info.textContent = total ? (from + "–" + to + " dari " + total) : "0 produk";
+            if (prev) prev.disabled = posProductPage <= 1;
+            if (next) next.disabled = posProductPage >= totalPages;
+        }
+
+        function posGoPrev() {
+            if (posProductPage > 1) { posProductPage--; renderProducts(currentSearch, posCategory); }
+        }
+        function posGoNext() {
+            const totalPages = Math.max(1, Math.ceil(posLastTotal / POS_PAGE_SIZE));
+            if (posProductPage < totalPages) { posProductPage++; renderProducts(currentSearch, posCategory); }
+        }
+
         function renderProducts(search, category) {
             const grid = document.getElementById("productGrid");
             if (!grid) return;
-            const s = search || currentSearch;
-            const c = category || posCategory;
-            let filtered = products;
-            if (s) filtered = filtered.filter(p => p.name.toLowerCase().includes(s.toLowerCase()));
-            if (c && c !== "all") filtered = filtered.filter(p => p.category === c);
-            if (!filtered.length) {
+            const filtered = posFilteredProducts(search, category);
+            const total = filtered.length;
+            posLastTotal = total;
+            posUpdatePagination(total);
+            if (!total) {
                 grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Produk tidak ditemukan</div>';
                 return;
             }
-            grid.innerHTML = filtered.map(p => {
+            const start = (posProductPage - 1) * POS_PAGE_SIZE;
+            const pageItems = filtered.slice(start, start + POS_PAGE_SIZE);
+            grid.innerHTML = pageItems.map(p => {
                 const imgUrl = (p.photo && /^https?:/.test(p.photo))
                     ? p.photo
                     : ((p.imageicon && /^https?:/.test(p.imageicon)) ? p.imageicon : null);
@@ -6851,8 +6895,13 @@
             });
             document.getElementById("scanInput").addEventListener("input", function(e) {
                 currentSearch = e.target.value;
+                posProductPage = 1; // search berubah → kembali ke halaman 1
                 renderProducts(currentSearch, posCategory);
             });
+
+            // --- PRODUCT GRID PAGINATION ---
+            document.getElementById("posPrevBtn").addEventListener("click", posGoPrev);
+            document.getElementById("posNextBtn").addEventListener("click", posGoNext);
 
             // --- INPUT BERAT MANUAL ---
             document.getElementById("wmSearch").addEventListener("input", wmRenderSearch);
