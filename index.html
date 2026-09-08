@@ -4048,6 +4048,31 @@
             });
         }
 
+        // Toggle lihat/sembunyikan password login awal karyawan.
+        function resetEmpPassVisibility() {
+            const input = document.getElementById("empPassword");
+            const btn = document.getElementById("empPassToggle");
+            if (input) input.type = "password";
+            if (btn) {
+                btn.title = "Tampilkan password";
+                btn.setAttribute("aria-label", "Tampilkan password");
+                const ic = btn.querySelector("i");
+                if (ic) ic.className = "fas fa-eye";
+            }
+        }
+
+        function toggleEmpPassword() {
+            const input = document.getElementById("empPassword");
+            const btn = document.getElementById("empPassToggle");
+            if (!input || !btn) return;
+            const show = input.type === "password";
+            input.type = show ? "text" : "password";
+            btn.title = show ? "Sembunyikan password" : "Tampilkan password";
+            btn.setAttribute("aria-label", btn.title);
+            const ic = btn.querySelector("i");
+            if (ic) ic.className = show ? "fas fa-eye-slash" : "fas fa-eye";
+        }
+
         function openEmployeeForm(mode, id) {
             if (!canManageUsers()) { showToast("Akses ditolak"); return; }
             const m = document.getElementById("employeeFormModal");
@@ -4075,6 +4100,7 @@
             labelInput.value = "";
             statusSel.value = "ACTIVE";
             passInput.value = "";
+            resetEmpPassVisibility();
             phoneInput.disabled = false;
             roleSel.disabled = false;
             labelInput.disabled = false;
@@ -4137,6 +4163,7 @@
             if (statusSel) statusSel.disabled = false;
             if (labelInput) labelInput.disabled = false;
             if (phoneInput) phoneInput.disabled = false;
+            resetEmpPassVisibility();
             m.classList.remove("active");
         }
 
@@ -7735,7 +7762,12 @@
                 </div>
                 <div id="empPassRow" class="form-group">
                     <label>Password (login awal)</label>
-                    <input type="password" id="empPassword" class="form-control" placeholder="Minimal 6 karakter" autocomplete="new-password" />
+                    <div style="position:relative;">
+                        <input type="password" id="empPassword" class="form-control" placeholder="Minimal 6 karakter" autocomplete="new-password" style="padding-right:42px;" />
+                        <button type="button" id="empPassToggle" onclick="toggleEmpPassword()" title="Tampilkan password" aria-label="Tampilkan password" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);padding:6px;font-size:1rem;line-height:1;">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
                 </div>
                 <div>
                     <label style="font-weight:700;font-size:0.78rem;color:var(--text-primary);">Hak Akses Menu</label>
