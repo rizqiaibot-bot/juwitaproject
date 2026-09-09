@@ -2070,8 +2070,8 @@
                     <select id="channelFilter" class="filter-control">
                         <option value="all">Semua Channel</option>
                         <option value="POS1">POS 1</option>
-                        <option value="Shopee1">Shopee 1 — Juwita Fresh and Frozen</option>
-                        <option value="Shopee2">Shopee 2 — juwita frozen food</option>
+                        <option value="Shopee1" data-shop="724153261">Shopee 1 — Juwita Fresh and Frozen</option>
+                        <option value="Shopee2" data-shop="1214362884">Shopee 2 — juwita frozen food</option>
                         <option value="WhatsApp">WhatsApp (Internal)</option>
                     </select>
                 </div>
@@ -3783,7 +3783,7 @@
             try {
                 const [oRes, oiRes] = await Promise.all([
                     sb.from('orders')
-                        .select('orderid,date,channel,customer,total,paystatus,wmsstatus,courier,resi,shop_id,picked_at,picked_by,packed_at,packed_by,shipped_at,shipped_by,payment_method,bayar,kembalian')
+                        .select('orderid,date,channel,customer,total,paystatus,wmsstatus,courier,resi,shop_id,picked_at,picked_by,packed_at,packed_by,shipped_at,shipped_by,payment_method,bayar,kembalian,kasir')
                         .order('date', { ascending: false }),
                     sb.from('order_items')
                         .select('id,orderid,product_id,product_name,qty,price,subtotal')
@@ -6265,13 +6265,13 @@
             const ids = { posPayCash: agg.cash, posPayQris: agg.qris, posPayEdc: agg.edc, posPayBri: agg.transferBri, posPayBca: agg.transferBca, posPayPiutang: agg.piutang };
             Object.keys(ids).forEach(function (id) {
                 const el = document.getElementById(id);
-                if (el) el.textContent = "Rp" + (ids[id] || 0).toLocaleString('id-ID');
+                if (el) el.textContent = "Rp " + (ids[id] || 0).toLocaleString('id-ID');
             });
             const note = document.getElementById("posPayOtherNote");
             if (note) {
                 if (agg.transferOther > 0) {
                     note.style.display = "block";
-                    note.textContent = "Catatan: ada TRANSFER tanpa keterangan bank (data lama) sebesar Rp" + agg.transferOther.toLocaleString('id-ID') + ".";
+                    note.textContent = "Catatan: ada TRANSFER tanpa keterangan bank (data lama) sebesar Rp " + agg.transferOther.toLocaleString('id-ID') + ".";
                 } else {
                     note.style.display = "none";
                 }
@@ -6377,17 +6377,52 @@
                 if (orderIds.has(i.orderid)) itemQtyByOrder[i.orderid] = (itemQtyByOrder[i.orderid] || 0) + (Number(i.qty) || 0);
             });
 
-            const groups = [
-                { label: "POS", channels: ["POS1", "POS2"] },
-                { label: "Shopee", channels: ["Shopee"] },
-            ];
+            // Identitas toko Shopee dibaca dari opsi filter Channel (label + data-shop),
+            // agar label tidak di-hardcode ganda dan tetap dinamis bila toko bertambah.
+            const shopOpts = [];
+            const channelSel = document.getElementById("channelFilter");
+            if (channelSel) {
+                for (let si = 0; si < channelSel.options.length; si++) {
+                    const so = channelSel.options[si];
+                    const sid = (so.getAttribute && so.getAttribute("data-shop")) || "";
+                    if (sid) shopOpts.push({ shopId: sid, label: so.textContent.trim() });
+                }
+            }
 
-            const rows = groups.map(g => {
-                const o = dayOrders.filter(x => g.channels.includes(x.channel));
-                const omzet = o.reduce((s, x) => s + (Number(x.total) || 0), 0);
-                const transaksi = o.length;
-                const item = o.reduce((s, x) => s + (itemQtyByOrder[x.orderId] || 0), 0);
-                return { label: g.label, omzet, transaksi, item };
+            // Klasifikasi satu order ke grup channel: POS tetap satu baris;
+            // Shopee dipecah per toko (shop_id) dan tidak digabung.
+            // Shopee yang tidak cocok dengan toko terdaftar tidak ditampilkan.
+            const channelKeyOf = function (o) {
+                if (o.channel === "POS1" || o.channel === "POS2") return "POS";
+                if (o.channel === "Shopee") {
+                    const sid = String(o.shop_id || "");
+                    for (let si = 0; si < shopOpts.length; si++) {
+                        if (shopOpts[si].shopId === sid) return shopOpts[si].label;
+                    }
+                    return null;
+                }
+                return null;
+            };
+
+            const groupOrder = [];
+            const ensureGroup = function (label) { if (groupOrder.indexOf(label) === -1) groupOrder.push(label); };
+            ensureGroup("POS");
+            shopOpts.forEach(function (s) { ensureGroup(s.label); });
+
+            const channelAgg = {};
+            dayOrders.forEach(function (o) {
+                const label = channelKeyOf(o);
+                if (!label) return;
+                ensureGroup(label);
+                const r = channelAgg[label] || (channelAgg[label] = { omzet: 0, transaksi: 0, item: 0 });
+                r.omzet += Number(o.total) || 0;
+                r.transaksi += 1;
+                r.item += itemQtyByOrder[o.orderId] || 0;
+            });
+
+            const rows = groupOrder.map(function (label) {
+                const r = channelAgg[label] || { omzet: 0, transaksi: 0, item: 0 };
+                return { label: label, omzet: r.omzet, transaksi: r.transaksi, item: r.item };
             });
 
             const totalOmzet = rows.reduce((s, r) => s + r.omzet, 0);
@@ -6739,6 +6774,7 @@
                 p_diskon: f.diskon,
                 p_bayar: f.bayar,
                 p_kembalian: f.kembalian,
+                p_kasir: f.kasir,
                 p_items: items
             });
             if (res.error) {
@@ -6811,11 +6847,12 @@
             const channel = ["QRIS", "EDC", "Split", "Transfer", "Piutang"].indexOf(method) !== -1 ? "POS2" : "POS1";
 
             const order = { orderId, date: dateStr, channel, customer, total, payStatus: "Lunas",
-                wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-" };
+                wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-", kasir: currentUserName() };
             const storedPayMethod = isSplit ? methodLabel : String(method || "Cash").toLowerCase();
             const orderRow = { orderid: orderId, date: dateStr, channel, customer, total,
                 paystatus: "Lunas", wmsstatus: "Selesai", courier: "Self-Pickup", resi: "-",
-                payment_method: storedPayMethod, subtotal, diskon: disc, bayar: pay, kembalian: change };
+                payment_method: storedPayMethod, subtotal, diskon: disc, bayar: pay, kembalian: change,
+                kasir: currentUserName() };
 
             // Stock backup untuk rollback
             const stockBackup = {};
