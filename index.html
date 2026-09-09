@@ -1538,6 +1538,7 @@
         .receipt-print .info .k { white-space: nowrap; flex-shrink: 0; }
         .receipt-print .info .v { text-align: right; white-space: nowrap; }
         .receipt-print .info.total { font-weight: 800; }
+        .receipt-print .pay-title { font-weight: 700; letter-spacing: 0.5px; margin: 2px 0; }
         .receipt-print .item-name { text-align: left; word-break: break-word; }
         .receipt-print .item-math { display: flex; justify-content: space-between; gap: 10px; text-align: left; }
         .receipt-print .item-math .m { white-space: nowrap; }
@@ -2264,7 +2265,7 @@
                     <div id="cartSummaryBar" style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:6px;font-size:0.74rem;font-weight:700;color:var(--text-secondary);">
                         <span>Item <b style="color:var(--text-primary);">0</b></span>
                         <span>Qty <b style="color:var(--text-primary);">0</b></span>
-                        <span>Total Rp<b style="color:var(--success);">0</b></span>
+                        <span>Total Rp <b style="color:var(--primary);">0</b></span>
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border-color);margin-bottom:6px;">
                         <i class="fas fa-user" style="color:var(--text-muted);font-size:0.8rem;"></i>
@@ -2300,7 +2301,7 @@
                         </div>
                         <div class="summary-row">
                             <span>Kembalian</span>
-                            <span id="change" style="color:var(--success);font-weight:800;">0</span>
+                            <span id="change" style="color:var(--success);font-weight:800;font-size:1.15rem;">0</span>
                         </div>
                         <div class="summary-row total-row">
                             <span>Total Akhir</span>
@@ -3479,7 +3480,14 @@
             const errEl = document.getElementById("phoneLoginError");
             if (errEl) errEl.textContent = "";
             const pass = document.getElementById("phoneLoginPass");
-            if (pass) pass.value = "";
+            if (pass) { pass.value = ""; pass.type = "password"; }
+            const btn = document.getElementById("phoneLoginPassToggle");
+            if (btn) {
+                btn.title = "Tampilkan password";
+                btn.setAttribute("aria-label", "Tampilkan password");
+                const ic = btn.querySelector("i");
+                if (ic) ic.className = "fas fa-eye";
+            }
             m.classList.add("active");
             setTimeout(() => {
                 const hp = document.getElementById("phoneLoginHp");
@@ -3490,6 +3498,19 @@
         function closePhoneLogin() {
             const m = document.getElementById("phoneLoginModal");
             if (m) m.classList.remove("active");
+        }
+
+        // Toggle lihat/sembunyikan password di layar login.
+        function toggleLoginPassword() {
+            const input = document.getElementById("phoneLoginPass");
+            const btn = document.getElementById("phoneLoginPassToggle");
+            if (!input || !btn) return;
+            const show = input.type === "password";
+            input.type = show ? "text" : "password";
+            btn.title = show ? "Sembunyikan password" : "Tampilkan password";
+            btn.setAttribute("aria-label", btn.title);
+            const ic = btn.querySelector("i");
+            if (ic) ic.className = show ? "fas fa-eye-slash" : "fas fa-eye";
         }
 
         async function phoneLoginSubmit() {
@@ -4575,6 +4596,14 @@
             return `<div class="info"><span class="k">${label}</span><span class="v">${value}</span></div>`;
         }
 
+        // Satu baris metode pembayaran pada struk split (label metode + nominal).
+        function receiptSplitRow(n) {
+            const m = splitMethod(n);
+            const b = splitBank(n);
+            const label = (m === "Transfer" && b) ? ("Transfer (" + b + ")") : (m || "Cash");
+            return strukRow(label, splitAmount(n).toLocaleString('id-ID'));
+        }
+
         // Dua baris rincian barang di struk: baris nama, lalu "harga x qty  subtotal".
         // Produk timbang menampilkan harga/kg dan berat (kg); logic barcode/berat tidak diubah.
         function receiptItemHtml(i) {
@@ -4590,7 +4619,7 @@
         function setCartSummary(itemCount, totalQty, total) {
             const el = document.getElementById("cartSummaryBar");
             if (!el) return;
-            el.innerHTML = `<span>Item <b style="color:var(--text-primary);">${itemCount}</b></span><span>Qty <b style="color:var(--text-primary);">${totalQty}</b></span><span>Total Rp<b style="color:var(--success);">${total.toLocaleString('id-ID')}</b></span>`;
+            el.innerHTML = `<span>Item <b style="color:var(--text-primary);">${itemCount}</b></span><span>Qty <b style="color:var(--text-primary);">${totalQty}</b></span><span>Total Rp <b style="color:var(--primary);">${total.toLocaleString('id-ID')}</b></span>`;
         }
 
         function updateCartUI() {
@@ -6902,15 +6931,25 @@
                             ${strukRow('Tanggal', dateStr)}
                             ${strukRow('Kasir', currentUserName())}
                             ${strukRow('Pelanggan', customer || '-')}
-                            ${strukRow('Pembayaran', methodLabel)}
+                            ${isSplit ? '' : strukRow('Pembayaran', methodLabel)}
                             <div class="sep"></div>
                             ${cart.map(receiptItemHtml).join('')}
                             <div class="sep"></div>
                             ${strukRow('Subtotal', subtotal.toLocaleString('id-ID'))}
                             ${strukRow('Diskon', disc > 0 ? '-' + disc.toLocaleString('id-ID') : '0')}
                             <div class="info total"><span class="k">TOTAL</span><span class="v">${total.toLocaleString('id-ID')}</span></div>
+                            ${isSplit ? `
+                            <div class="sep"></div>
+                            <div class="rc rc-bold pay-title">PEMBAYARAN SPLIT</div>
+                            ${receiptSplitRow(1)}
+                            ${receiptSplitRow(2)}
+                            <div class="sep"></div>
+                            ${strukRow('Terbayar', pay.toLocaleString('id-ID'))}
+                            ${strukRow('Kembalian', change.toLocaleString('id-ID'))}
+                            ` : `
                             ${strukRow('Bayar', pay.toLocaleString('id-ID'))}
                             ${strukRow('Kembalian', change.toLocaleString('id-ID'))}
+                            `}
                             <div class="sep"></div>
                             <div class="rc addr">Terima kasih telah<br>berbelanja di toko kami.</div>
                         </div>
@@ -7804,12 +7843,17 @@
                 </div>
                 <div>
                     <label style="font-size:0.7rem;font-weight:700;color:var(--text-muted);">Password</label>
-                    <input type="password" id="phoneLoginPass" class="form-control" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')phoneLoginSubmit()" />
+                    <div style="position:relative;">
+                        <input type="password" id="phoneLoginPass" class="form-control" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')phoneLoginSubmit()" style="padding-right:42px;" />
+                        <button type="button" id="phoneLoginPassToggle" onclick="toggleLoginPassword()" title="Tampilkan password" aria-label="Tampilkan password" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);padding:6px;font-size:1rem;line-height:1;">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
                 </div>
                 <div id="phoneLoginError" style="color:var(--danger);font-size:0.72rem;min-height:14px;"></div>
             </div>
             <button class="checkout-btn" style="width:100%;margin-top:14px;" onclick="phoneLoginSubmit()">Login</button>
-            <p style="font-size:0.66rem;color:var(--text-muted);margin-top:12px;text-align:center;">Prototype · akun dummy testkasir (081234567890)</p>
+            <p style="font-size:0.66rem;color:var(--text-muted);margin-top:12px;text-align:center;">Login dengan nomor HP dan password yang terdaftar.</p>
         </div>
     </div>
 
