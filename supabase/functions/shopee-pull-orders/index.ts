@@ -781,7 +781,20 @@ Deno.serve(async (req) => {
           imported: totalImported,
           failed: totalFailed,
           accounts: accountResults.length,
-          status_distribution: (accountResults.length === 1 ? accountResults[0].status_distribution : undefined) || {}
+          status_distribution: (accountResults.length === 1 ? accountResults[0].status_distribution : undefined) || {},
+          account_results: (accountResults || []).map(function (a) {
+            return {
+              account: a.account,
+              shop_id: a.shop_id,
+              success: !!a.success,
+              pulled: a.pulled || 0,
+              inserted: a.inserted || 0,
+              skipped: a.skipped || 0,
+              imported: a.imported || 0,
+              failed: a.failed || 0,
+              error: a.error ? ((a.error && a.error.message) ? a.error.message : String(a.error)) : null
+            };
+          })
         }
       });
     } catch (logErr: any) {

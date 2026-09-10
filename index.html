@@ -468,6 +468,40 @@
             }
         }
 
+        /* ===== AKUNTANSI V1 (UI) ===== */
+        #accSaldoGrid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            margin-bottom: 4px;
+        }
+        #accSaldoGrid .stat-item {
+            cursor: default;
+            padding: 16px 18px;
+        }
+        #accSaldoGrid .stat-number {
+            font-size: 1.2rem;
+            line-height: 1.15;
+        }
+        #accFormPanel.form-card {
+            max-width: 100%;
+            margin: 8px 0 18px;
+            position: relative;
+            z-index: 30;
+            overflow: visible;
+        }
+        #accFormPanel .form-control {
+            appearance: auto;
+        }
+        @media (max-width: 900px) {
+            #accSaldoGrid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+        @media (max-width: 520px) {
+            #accSaldoGrid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         /* ===== PRINT REKAP PENJUALAN ===== */
         .rekap-print-area {
             display: none;
@@ -1926,9 +1960,9 @@
             </div>
 
             <ul class="nav-menu-horizontal" id="navMenu">
-                <li class="nav-item" data-page="pos"><a href="#"><i class="fas fa-cash-register"></i> POS</a></li>
+                <li class="nav-item" data-page="pos" data-menu-group="pos"><a href="#"><i class="fas fa-cash-register"></i> POS</a></li>
                 <!-- PENJUALAN -->
-                <li class="dropdown">
+                <li class="dropdown" data-menu-group="penjualan">
                     <a href="#"><i class="fas fa-chart-line"></i> Penjualan <i class="fas fa-chevron-down"></i></a>
                     <ul class="dropdown-menu">
                         <li data-page="daftar-penjualan"><a href="#"><i class="fas fa-list"></i> Daftar Penjualan</a></li>
@@ -1938,7 +1972,7 @@
                 </li>
 
                 <!-- KATALOG -->
-                <li class="dropdown">
+                <li class="dropdown" data-menu-group="katalog">
                     <a href="#"><i class="fas fa-book"></i> Katalog <i class="fas fa-chevron-down"></i></a>
                     <ul class="dropdown-menu">
                         <li data-page="daftar-produk"><a href="#"><i class="fas fa-list"></i> Daftar Produk</a></li>
@@ -1947,7 +1981,7 @@
                 </li>
 
                 <!-- PERSEDIAAN -->
-                <li class="dropdown">
+                <li class="dropdown" data-menu-group="persediaan">
                     <a href="#"><i class="fas fa-boxes-stacked"></i> Persediaan <i class="fas fa-chevron-down"></i></a>
                     <ul class="dropdown-menu">
                         <li data-page="monitor-stok"><a href="#"><i class="fas fa-chart-simple"></i> Monitor Stok</a></li>
@@ -1956,7 +1990,7 @@
                 </li>
 
                 <!-- PEMBELIAN -->
-                <li class="dropdown">
+                <li class="dropdown" data-menu-group="pembelian">
                     <a href="#"><i class="fas fa-shopping-cart"></i> Pembelian <i class="fas fa-chevron-down"></i></a>
                     <ul class="dropdown-menu">
                         <li data-page="data-pembelian"><a href="#"><i class="fas fa-database"></i> Data Pembelian</a></li>
@@ -1964,7 +1998,7 @@
                 </li>
 
                 <!-- GUDANG -->
-                <li class="dropdown">
+                <li class="dropdown" data-menu-group="gudang">
                     <a href="#"><i class="fas fa-warehouse"></i> Gudang <i class="fas fa-chevron-down"></i></a>
                     <ul class="dropdown-menu">
                         <li data-page="picking"><a href="#"><i class="fas fa-clipboard-list"></i> Picking</a></li>
@@ -1976,7 +2010,7 @@
                 </li>
 
                 <!-- PRICING -->
-                <li class="dropdown">
+                <li class="dropdown" data-menu-group="pricing">
                     <a href="#"><i class="fas fa-tag"></i> Pricing <i class="fas fa-chevron-down"></i></a>
                     <ul class="dropdown-menu">
                         <li data-page="harga-belanja"><a href="#"><i class="fas fa-shopping-bag"></i> Harga Belanja</a></li>
@@ -1986,8 +2020,16 @@
                     </ul>
                 </li>
 
+                <!-- AKUNTANSI -->
+                <li class="dropdown" data-menu-group="akuntansi">
+                    <a href="#"><i class="fas fa-book-open"></i> Akuntansi <i class="fas fa-chevron-down"></i></a>
+                    <ul class="dropdown-menu">
+                        <li data-page="akuntansi"><a href="#"><i class="fas fa-wallet"></i> Dashboard Akuntansi</a></li>
+                    </ul>
+                </li>
+
                 <!-- HR -->
-                <li class="dropdown">
+                <li class="dropdown" data-menu-group="hr">
                     <a href="#"><i class="fas fa-users"></i> HR <i class="fas fa-chevron-down"></i></a>
                     <ul class="dropdown-menu">
                         <li data-page="karyawan"><a href="#"><i class="fas fa-user-tie"></i> Karyawan</a></li>
@@ -2000,7 +2042,7 @@
 
 
                 <li class="nav-item"><a href="marketplace.html"><i class="fas fa-store"></i> Marketplace</a></li>
-                <li class="nav-item" data-page="pengaturan"><a href="#"><i class="fas fa-cog"></i> Pengaturan</a></li>
+                <li class="nav-item" data-page="pengaturan" data-menu-group="pengaturan"><a href="#"><i class="fas fa-cog"></i> Pengaturan</a></li>
             </ul>
 
             <div class="nav-actions">
@@ -3098,6 +3140,44 @@
             </div>
         </div>
 
+        <!-- ===== AKUNTANSI V1 ===== -->
+        <div id="page-akuntansi" class="page-content">
+            <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                <div>
+                    <h1>Akuntansi</h1>
+                    <div class="page-header-desc">Kas, Bank &amp; Piutang — saldo dihitung otomatis dari transaksi.</div>
+                </div>
+                <button class="checkout-btn" style="width:auto;padding:10px 20px;" onclick="syncAccountingPos()"><i class="fas fa-sync-alt"></i> Sinkron dari POS</button>
+            </div>
+
+            <div id="accSyncStatus" style="display:none;margin:12px 0;padding:10px 14px;border-radius:var(--radius-sm);background:var(--bg-primary);border:1px solid var(--border-color);font-size:0.78rem;color:var(--text-primary);white-space:pre-line;"></div>
+
+            <div style="font-size:0.9rem;font-weight:800;margin-bottom:10px;color:var(--text-primary);"><i class="fas fa-wallet" style="color:var(--primary);margin-right:6px;"></i>Saldo Akun</div>
+            <div class="stats-row" id="accSaldoGrid">
+                <div class="stat-item"><div><div class="stat-number" id="accSaldoCASH">Rp 0</div><div class="stat-label">Laci Kasir</div></div><div class="stat-icon-wrapper"><i class="fas fa-money-bill-wave"></i></div></div>
+                <div class="stat-item"><div><div class="stat-number" id="accSaldoBRI">Rp 0</div><div class="stat-label">BRI</div></div><div class="stat-icon-wrapper"><i class="fas fa-building-columns"></i></div></div>
+                <div class="stat-item"><div><div class="stat-number" id="accSaldoBCA">Rp 0</div><div class="stat-label">BCA</div></div><div class="stat-icon-wrapper"><i class="fas fa-building-columns"></i></div></div>
+                <div class="stat-item"><div><div class="stat-number" id="accSaldoQRIS">Rp 0</div><div class="stat-label">QRIS</div></div><div class="stat-icon-wrapper"><i class="fas fa-qrcode"></i></div></div>
+                <div class="stat-item"><div><div class="stat-number" id="accSaldoRECEIVABLE">Rp 0</div><div class="stat-label">Piutang</div></div><div class="stat-icon-wrapper"><i class="fas fa-hand-holding-dollar"></i></div></div>
+                <div class="stat-item"><div><div class="stat-number" id="accSaldoTotal">Rp 0</div><div class="stat-label">Total Saldo</div></div><div class="stat-icon-wrapper"><i class="fas fa-coins"></i></div></div>
+            </div>
+
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 6px;">
+                <button class="checkout-btn" style="width:auto;padding:9px 16px;font-size:0.78rem;background:var(--success);" onclick="accShowForm('IN')"><i class="fas fa-arrow-down"></i> Uang Masuk</button>
+                <button class="checkout-btn" style="width:auto;padding:9px 16px;font-size:0.78rem;background:var(--danger);" onclick="accShowForm('OUT')"><i class="fas fa-arrow-up"></i> Uang Keluar</button>
+                <button class="checkout-btn" style="width:auto;padding:9px 16px;font-size:0.78rem;background:var(--primary);" onclick="accShowForm('TRANSFER')"><i class="fas fa-arrows-left-right"></i> Transfer Antar Akun</button>
+                <button class="checkout-btn" style="width:auto;padding:9px 16px;font-size:0.78rem;background:#f59e0b;" onclick="accShowForm('PIUTANG')"><i class="fas fa-hand-holding-usd"></i> Pembayaran Piutang</button>
+            </div>
+
+            <div id="accFormPanel" class="form-card" style="display:none;"></div>
+
+            <div style="font-size:0.9rem;font-weight:800;margin:10px 0;color:var(--text-primary);"><i class="fas fa-clock-rotate-left" style="color:var(--primary);margin-right:6px;"></i>Riwayat Transaksi</div>
+            <div class="table-wrapper"><table>
+                <thead><tr><th>TANGGAL</th><th>KETERANGAN</th><th>MASUK</th><th>KELUAR</th><th>AKUN</th></tr></thead>
+                <tbody id="accHistoryBody"><tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">Belum ada transaksi.</td></tr></tbody>
+            </table></div>
+        </div>
+
         <div id="page-pengaturan" class="page-content">
             <div class="page-header"><h1>Pengaturan Sistem</h1></div>
 
@@ -3836,19 +3916,20 @@
 
         function filterMenuByRole() {
             const menuMap = {
-                "pos": "[data-page=\"pos\"]",
-                "penjualan": ".dropdown:nth-of-type(1)",
-                "katalog": ".dropdown:nth-of-type(2)",
-                "persediaan": ".dropdown:nth-of-type(3)",
-                "pembelian": ".dropdown:nth-of-type(4)",
-                "gudang": ".dropdown:nth-of-type(5)",
-                "pricing": ".dropdown:nth-of-type(6)",
-                "hr": ".dropdown:nth-of-type(7)",
-                "pengaturan": "[data-page=\"pengaturan\"]"
+                "pos": "[data-menu-group=\"pos\"]",
+                "penjualan": "[data-menu-group=\"penjualan\"]",
+                "katalog": "[data-menu-group=\"katalog\"]",
+                "persediaan": "[data-menu-group=\"persediaan\"]",
+                "pembelian": "[data-menu-group=\"pembelian\"]",
+                "gudang": "[data-menu-group=\"gudang\"]",
+                "pricing": "[data-menu-group=\"pricing\"]",
+                "akuntansi": "[data-menu-group=\"akuntansi\"]",
+                "hr": "[data-menu-group=\"hr\"]",
+                "pengaturan": "[data-menu-group=\"pengaturan\"]"
             };
 
 
-            const allGroups = ["pos","penjualan","katalog","persediaan","pembelian","gudang","pricing","hr","pengaturan"];
+            const allGroups = ["pos","penjualan","katalog","persediaan","pembelian","gudang","pricing","akuntansi","hr","pengaturan"];
             allGroups.forEach(group => {
                 const selector = menuMap[group];
                 if (!selector) return;
@@ -7236,6 +7317,7 @@
                 "data-pembelian": "pembelian",
                 penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "opname-gudang": "gudang", "riwayat-gudang": "gudang",
                 "harga-belanja": "pricing", "harga-jual": "pricing", "ubah-harga": "pricing", "diskon-promo": "pricing", "margin-keuntungan": "pricing",
+                akuntansi: "akuntansi",
                 karyawan: "hr", absensi: "hr", "rekap-kehadiran": "hr", cuti: "hr", "jadwal-kerja": "hr", penggajian: "hr", "slip-gaji": "hr",
 
                 pengaturan: "pengaturan"
@@ -7270,6 +7352,7 @@
             document.getElementById("navMenu")?.classList.remove("active");
             if (pageId === "pos") setTimeout(() => document.getElementById("scanInput")?.focus(), 100);
             if (pageId === "pengaturan") setTimeout(() => renderAccountCards(), 10);
+            if (pageId === "akuntansi") setTimeout(() => loadAccounting(), 10);
             // Pastikan polling live tetap berjalan saat halaman Penjualan dibuka.
             if (pageId === "daftar-penjualan") ensureOrdersPolling();
         }
@@ -7792,6 +7875,259 @@
         window.closeEmployeeForm = closeEmployeeForm;
         window.saveEmployeeForm = saveEmployeeForm;
         window.resetEmployeePassword = resetEmployeePassword;
+
+        // ============================================================
+        // AKUNTANSI V1
+        // ============================================================
+        let accAccounts = [];
+
+        function accFmtRp(n) {
+            return "Rp " + Number(n || 0).toLocaleString('id-ID');
+        }
+
+        function accAccountName(id) {
+            for (let i = 0; i < accAccounts.length; i++) if (accAccounts[i].id === id) return accAccounts[i].name;
+            return "-";
+        }
+
+        function accAccountCode(id) {
+            for (let i = 0; i < accAccounts.length; i++) if (accAccounts[i].id === id) return accAccounts[i].code;
+            return "";
+        }
+
+        function accOptions(selId, excludeId) {
+            const sel = document.getElementById(selId);
+            if (!sel) return;
+            sel.innerHTML = "";
+            const ph = document.createElement("option");
+            ph.value = "";
+            ph.disabled = true;
+            ph.selected = true;
+            ph.textContent = "Pilih akun";
+            sel.appendChild(ph);
+            accAccounts.forEach(function (a) {
+                if (excludeId && a.id === excludeId) return;
+                const o = document.createElement("option");
+                o.value = a.id;
+                o.textContent = a.name;
+                sel.appendChild(o);
+            });
+        }
+
+        async function accShowForm(kind) {
+            const panel = document.getElementById("accFormPanel");
+            if (!panel) return;
+            if (accAccounts.length === 0) {
+                await loadAccounting();
+            }
+            if (accAccounts.length === 0) {
+                showToast("Data akun belum tersedia, coba lagi");
+                return;
+            }
+
+            let html = "";
+            if (kind === "IN") {
+                html = '<div style="font-weight:800;margin-bottom:12px;"><i class="fas fa-arrow-down" style="color:var(--success);"></i> Uang Masuk</div>' +
+                    '<div class="form-group"><label>Nominal (Rp)</label><input type="number" id="accInAmount" min="0" class="form-control" placeholder="0" /></div>' +
+                    '<div class="form-group"><label>Masuk ke Akun</label><select id="accInAccount" class="form-control"></select></div>' +
+                    '<div class="form-group"><label>Keterangan</label><input type="text" id="accInNote" class="form-control" placeholder="Contoh: Beli galon / Bayar listrik" /></div>' +
+                    '<div style="display:flex;gap:10px;margin-top:8px;"><button class="checkout-btn" style="flex:1;" onclick="accSubmit(\'IN\')">Simpan</button><button class="close-modal-btn" style="flex:0 0 auto;width:100px;background:var(--text-muted);" onclick="accCloseForm()">Batal</button></div>';
+            } else if (kind === "OUT") {
+                html = '<div style="font-weight:800;margin-bottom:12px;"><i class="fas fa-arrow-up" style="color:var(--danger);"></i> Uang Keluar</div>' +
+                    '<div class="form-group"><label>Nominal (Rp)</label><input type="number" id="accOutAmount" min="0" class="form-control" placeholder="0" /></div>' +
+                    '<div class="form-group"><label>Keluar dari Akun</label><select id="accOutAccount" class="form-control"></select></div>' +
+                    '<div class="form-group"><label>Keterangan</label><input type="text" id="accOutNote" class="form-control" placeholder="Contoh: Beli galon / Bayar listrik" /></div>' +
+                    '<div style="display:flex;gap:10px;margin-top:8px;"><button class="checkout-btn" style="flex:1;" onclick="accSubmit(\'OUT\')">Simpan</button><button class="close-modal-btn" style="flex:0 0 auto;width:100px;background:var(--text-muted);" onclick="accCloseForm()">Batal</button></div>';
+            } else if (kind === "TRANSFER") {
+                html = '<div style="font-weight:800;margin-bottom:12px;"><i class="fas fa-arrows-left-right" style="color:var(--primary);"></i> Transfer Antar Akun</div>' +
+                    '<div class="form-group"><label>Dari Akun</label><select id="accTrfFrom" class="form-control"></select></div>' +
+                    '<div class="form-group"><label>Ke Akun</label><select id="accTrfTo" class="form-control"></select></div>' +
+                    '<div class="form-group"><label>Nominal (Rp)</label><input type="number" id="accTrfAmount" min="0" class="form-control" placeholder="0" /></div>' +
+                    '<div class="form-group"><label>Keterangan</label><input type="text" id="accTrfNote" class="form-control" placeholder="Contoh: Beli galon / Bayar listrik" /></div>' +
+                    '<div style="display:flex;gap:10px;margin-top:8px;"><button class="checkout-btn" style="flex:1;" onclick="accSubmit(\'TRANSFER\')">Simpan</button><button class="close-modal-btn" style="flex:0 0 auto;width:100px;background:var(--text-muted);" onclick="accCloseForm()">Batal</button></div>';
+            } else if (kind === "PIUTANG") {
+                html = '<div style="font-weight:800;margin-bottom:12px;"><i class="fas fa-hand-holding-usd" style="color:#f59e0b;"></i> Pembayaran Piutang</div>' +
+                    '<div class="form-group"><label>Dari Akun (otomatis Piutang)</label><input type="text" class="form-control" value="Piutang" disabled /></div>' +
+                    '<div class="form-group"><label>Diterima ke Akun</label><select id="accPayTo" class="form-control"></select></div>' +
+                    '<div class="form-group"><label>Nominal (Rp)</label><input type="number" id="accPayAmount" min="0" class="form-control" placeholder="0" /></div>' +
+                    '<div class="form-group"><label>Keterangan</label><input type="text" id="accPayNote" class="form-control" placeholder="Contoh: Beli galon / Bayar listrik" /></div>' +
+                    '<div style="display:flex;gap:10px;margin-top:8px;"><button class="checkout-btn" style="flex:1;" onclick="accSubmit(\'PIUTANG\')">Simpan</button><button class="close-modal-btn" style="flex:0 0 auto;width:100px;background:var(--text-muted);" onclick="accCloseForm()">Batal</button></div>';
+            }
+            panel.innerHTML = html;
+            // Isi option select SETELAH form benar-benar dirender ke DOM.
+            if (kind === "IN") {
+                accOptions("accInAccount", null);
+            } else if (kind === "OUT") {
+                accOptions("accOutAccount", null);
+            } else if (kind === "TRANSFER") {
+                accOptions("accTrfFrom", null);
+                accOptions("accTrfTo", null);
+            } else if (kind === "PIUTANG") {
+                accOptions("accPayTo", null);
+                const recv = accAccounts.find(function (a) { return a.code === "RECEIVABLE"; });
+                const paySel = document.getElementById("accPayTo");
+                if (recv && paySel) {
+                    for (let i = 0; i < paySel.options.length; i++) {
+                        if (paySel.options[i].value !== "" && Number(paySel.options[i].value) === recv.id) { paySel.remove(i); break; }
+                    }
+                }
+            }
+            panel.style.display = "block";
+            panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+
+        function accCloseForm() {
+            const panel = document.getElementById("accFormPanel");
+            if (panel) { panel.style.display = "none"; panel.innerHTML = ""; }
+        }
+
+        async function accSubmit(kind) {
+            let amount = 0, keterangan = "", payload = null;
+            const g = function (id) { const el = document.getElementById(id); return el ? el.value : ""; };
+            const num = function (id) { return parseInt(String(g(id)).replace(/\D/g, "")) || 0; };
+
+            if (kind === "IN") {
+                amount = num("accInAmount"); keterangan = g("accInNote").trim() || "Uang masuk";
+                const acc = num("accInAccount");
+                if (!amount) { showToast("Nominal wajib diisi"); return; }
+                if (!acc) { showToast("Pilih akun tujuan"); return; }
+                payload = { type: "IN", keterangan: keterangan, amount: amount, akun_ke: acc, akun_dari: null };
+            } else if (kind === "OUT") {
+                amount = num("accOutAmount"); keterangan = g("accOutNote").trim() || "Uang keluar";
+                const acc = num("accOutAccount");
+                if (!amount) { showToast("Nominal wajib diisi"); return; }
+                if (!acc) { showToast("Pilih akun asal"); return; }
+                payload = { type: "OUT", keterangan: keterangan, amount: amount, akun_dari: acc, akun_ke: null };
+            } else if (kind === "TRANSFER") {
+                const fromId = num("accTrfFrom"), toId = num("accTrfTo");
+                amount = num("accTrfAmount"); keterangan = g("accTrfNote").trim() || "Transfer antar akun";
+                if (fromId === toId || !fromId || !toId) { showToast("Dari dan Ke akun harus berbeda"); return; }
+                if (!amount) { showToast("Nominal wajib diisi"); return; }
+                payload = { type: "TRANSFER", keterangan: keterangan, amount: amount, akun_dari: fromId, akun_ke: toId };
+            } else if (kind === "PIUTANG") {
+                const recv = accAccounts.find(function (a) { return a.code === "RECEIVABLE"; });
+                const toId = num("accPayTo");
+                amount = num("accPayAmount"); keterangan = g("accPayNote").trim() || "Pembayaran piutang";
+                if (!recv || !toId || recv.id === toId) { showToast("Pilih akun penerimaan yang valid"); return; }
+                if (!amount) { showToast("Nominal wajib diisi"); return; }
+                payload = { type: "PIUTANG_PAYMENT", keterangan: keterangan, amount: amount, akun_dari: recv.id, akun_ke: toId };
+            }
+            if (!payload) return;
+
+            payload.created_by = (currentUser && currentUser.id) ? currentUser.id : null;
+            try {
+                const { error } = await sb.from("accounting_transactions").insert(payload);
+                if (error) throw new Error(error.message);
+                accCloseForm();
+                showToast("Transaksi akuntansi tersimpan");
+                loadAccounting();
+            } catch (e) {
+                showToast("Gagal simpan: " + e.message);
+            }
+        }
+
+        async function syncAccountingPos() {
+            const st = document.getElementById("accSyncStatus");
+            if (st) { st.style.display = "block"; st.textContent = "Menyinkronkan transaksi POS..."; }
+            try {
+                const { data, error } = await sb.rpc("accounting_sync_pos");
+                if (error) throw new Error(error.message);
+                if (st) {
+                    st.textContent = "Sinkron selesai. Order POS diproses: " + (data && data.processed_orders != null ? data.processed_orders : 0) +
+                        ((data && Array.isArray(data.unmapped) && data.unmapped.length) ? ("\nTidak dapat dipetakan (perlu penyesuaian manual):\n" + data.unmapped.join("\n")) : "");
+                }
+                loadAccounting();
+                showToast("Sinkron POS selesai");
+            } catch (e) {
+                if (st) st.textContent = "Sinkron gagal: " + e.message;
+                showToast("Sinkron gagal: " + e.message);
+            }
+        }
+
+        // Format tanggal/jam riwayat akuntansi ke Asia/Jakarta (WIB).
+        // Nilai DB (timestamptz) TIDAK diubah; hanya konversi saat display.
+        function accFormatWib(iso) {
+            if (!iso) return "-";
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return String(iso);
+            try {
+                const p = new Intl.DateTimeFormat("en-GB", {
+                    timeZone: "Asia/Jakarta",
+                    year: "numeric", month: "2-digit", day: "2-digit",
+                    hour: "2-digit", minute: "2-digit", hour12: false
+                }).formatToParts(d);
+                const map = {};
+                p.forEach(function (x) { if (x.type !== "literal") map[x.type] = x.value; });
+                return map.year + "-" + map.month + "-" + map.day + " " + map.hour + ":" + map.minute;
+            } catch (e) {
+                return String(iso);
+            }
+        }
+
+        function accHistoryRow(t) {
+            const isIn = (t.type === "IN" || t.type === "POS_SALE");
+            const isOut = (t.type === "OUT");
+            const isMove = (t.type === "TRANSFER" || t.type === "PIUTANG_PAYMENT");
+            const dateStr = accFormatWib(t.trx_date);
+            let masuk = "", keluar = "", akun = "";
+            if (isIn) { masuk = accFmtRp(t.amount); akun = accAccountName(t.akun_ke); }
+            else if (isOut) { keluar = accFmtRp(t.amount); akun = accAccountName(t.akun_dari); }
+            else if (isMove) { masuk = accFmtRp(t.amount); keluar = accFmtRp(t.amount); akun = accAccountName(t.akun_dari) + " → " + accAccountName(t.akun_ke); }
+            const label = t.type === "POS_SALE" ? "Penjualan POS" : t.type === "PIUTANG_PAYMENT" ? "Bayar Piutang" : t.type;
+            return '<tr>' +
+                '<td>' + dateStr + '</td>' +
+                '<td>' + (t.keterangan || "") + ' <span style="opacity:.6;font-size:.7rem;">[' + label + ']</span></td>' +
+                '<td style="color:var(--success);font-weight:700;">' + masuk + '</td>' +
+                '<td style="color:var(--danger);font-weight:700;">' + keluar + '</td>' +
+                '<td>' + akun + '</td>' +
+                '</tr>';
+        }
+
+        function renderAccountingUI(balances, txns) {
+            const total = balances.reduce(function (s, b) { return s + (Number(b.saldo) || 0); }, 0);
+            balances.forEach(function (b) {
+                const el = document.getElementById("accSaldo" + b.code);
+                if (el) el.textContent = accFmtRp(b.saldo);
+            });
+            const tEl = document.getElementById("accSaldoTotal");
+            if (tEl) tEl.textContent = accFmtRp(total);
+
+            const body = document.getElementById("accHistoryBody");
+            if (body) {
+                if (!txns.length) {
+                    body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">Belum ada transaksi.</td></tr>';
+                } else {
+                    body.innerHTML = txns.map(accHistoryRow).join("");
+                }
+            }
+        }
+
+        async function loadAccounting() {
+            if (!sb || !sb.auth) return;
+            try {
+                const acRes = await sb.from("accounting_accounts").select("*").eq("is_active", true).order("sort_order");
+                if (acRes.error) throw new Error(acRes.error.message);
+                accAccounts = acRes.data || [];
+            } catch (e) {
+                console.warn("Akuntansi load akun error:", e && e.message);
+            }
+            try {
+                const [balRes, txRes] = await Promise.all([
+                    sb.from("v_account_balance").select("*").order("sort_order"),
+                    sb.from("accounting_transactions").select("*").order("trx_date", { ascending: false }).limit(200)
+                ]);
+                if (balRes.error) throw new Error(balRes.error.message);
+                if (txRes.error) throw new Error(txRes.error.message);
+                renderAccountingUI(balRes.data || [], txRes.data || []);
+            } catch (e) {
+                console.warn("Akuntansi load data error:", e && e.message);
+            }
+        }
+        window.accShowForm = accShowForm;
+        window.accCloseForm = accCloseForm;
+        window.accSubmit = accSubmit;
+        window.syncAccountingPos = syncAccountingPos;
+        window.loadAccounting = loadAccounting;
     </script>
 
     <!-- ===== MODAL TAMBAH/EDIT KARYAWAN (OWNER) ===== -->
