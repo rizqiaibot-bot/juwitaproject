@@ -8022,7 +8022,8 @@
                 showToast("Transaksi akuntansi tersimpan");
                 loadAccounting();
             } catch (e) {
-                showToast("Gagal simpan: " + e.message);
+                const msg = (e && e.message) ? e.message : "gagal";
+                showToast(msg.indexOf("tidak mencukupi") !== -1 ? msg : ("Gagal simpan: " + msg));
             }
         }
 
