@@ -2117,6 +2117,17 @@
                         <option value="WhatsApp">WhatsApp (Internal)</option>
                     </select>
                 </div>
+                <div class="filter-group">
+                    <label>WMS Status</label>
+                    <select id="wmsStatusFilter" class="filter-control">
+                        <option value="all">Semua</option>
+                        <option value="Baru">Perlu Dipick</option>
+                        <option value="Dipick">Sudah Dipick</option>
+                        <option value="Siap Kirim">Sudah Dipacking</option>
+                        <option value="Dikirim">Sudah Dikirim</option>
+                        <option value="Selesai">Selesai</option>
+                    </select>
+                </div>
                 <div class="filter-group search-wrapper">
                     <label>Pencarian</label>
                     <i class="fas fa-search"></i>
@@ -3639,6 +3650,7 @@
         let posLastTotal = 0;
         let filterStatus = "all";
         let filterChannel = "all";
+        let filterWmsStatus = "all";
         let filterSearchText = "";
         // Filter periode tanggal Daftar Penjualan (normalisasi yyyy-mm-dd, tidak menyentuh data).
         let penjDateFrom = "";
@@ -5030,11 +5042,14 @@
             const stEl = document.getElementById("statusFilter");
             const chEl = document.getElementById("channelFilter");
             const seEl = document.getElementById("searchInput");
+            const wEl = document.getElementById("wmsStatusFilter");
             filterStatus = "all";
             filterChannel = "all";
+            filterWmsStatus = "all";
             filterSearchText = "";
             if (stEl) stEl.value = "all";
             if (chEl) chEl.value = "all";
+            if (wEl) wEl.value = "all";
             if (seEl) seEl.value = "";
             document.querySelectorAll("#statsFilter .stat-item").forEach(s => s.classList.remove("active"));
             const firstStat = document.querySelector('#statsFilter .stat-item[data-filter="all"]');
@@ -5047,6 +5062,7 @@
             if (!tbody) return;
             let filtered = ordersData;
             if (filterStatus !== "all") filtered = filtered.filter(o => o.payStatus === filterStatus);
+            if (filterWmsStatus !== "all") filtered = filtered.filter(o => o.wmsStatus === filterWmsStatus);
             if (filterChannel !== "all") {
                 // Filter berdasarkan channel DAN shop_id (untuk Shopee).
                 // Shopee 1 = channel "Shopee" + shop_id "724153261"
@@ -7620,6 +7636,10 @@
             });
             document.getElementById("channelFilter").addEventListener("change", function(e) {
                 filterChannel = e.target.value;
+                renderPenjualanTable();
+            });
+            document.getElementById("wmsStatusFilter").addEventListener("change", function(e) {
+                filterWmsStatus = e.target.value;
                 renderPenjualanTable();
             });
             document.getElementById("searchInput").addEventListener("input", function(e) {
