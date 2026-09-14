@@ -14,6 +14,9 @@
     <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+    <!-- Konfigurasi terpusat (URL + anon key) -->
+    <script src="config.js"></script>
+
     <style>
         /* ===== CSS VARIABLES ===== */
         :root {
@@ -3335,8 +3338,8 @@
         // ============================================================
         // SUPABASE CLIENT
         // ============================================================
-        const SUPABASE_URL = "https://vivgzxitlikpgnppgeqn.supabase.co";
-        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpdmd6eGl0bGlrcGducHBnZXFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3NTI4MjAsImV4cCI6MjA5NzMyODgyMH0.BpLLNrSnuufGLOb21zKp-f6luz7e3olpOkx7SNazCW8";
+        const SUPABASE_URL = (window.JUWITA_CONFIG && window.JUWITA_CONFIG.SUPABASE_URL) || "";
+        const SUPABASE_KEY = (window.JUWITA_CONFIG && window.JUWITA_CONFIG.SUPABASE_ANON_KEY) || "";
         let sb = null;
         try {
             if (typeof supabase !== 'undefined') {
