@@ -3269,10 +3269,12 @@
                 <label>Harga Shopee 2 &mdash; juwita frozen food</label>
                 <input type="number" id="ppShopee2" class="form-control" min="0" step="1" inputmode="numeric" />
             </div>
-            <div style="color:var(--text-muted);font-size:0.72rem;line-height:1.5;margin-bottom:4px;">Harga POS di sini TIDAK mengubah <code>products.price</code>. Hanya owner yang dapat menyimpan.</div>
-            <div style="display:flex;gap:10px;margin-top:16px;">
-                <button id="ppSave" class="close-modal-btn" style="flex:2;background:var(--primary-gradient);" onclick="saveProductPrices()">Simpan</button>
-                <button class="close-modal-btn" style="flex:1;background:var(--text-muted);" onclick="closeProductPriceModal()">Tutup</button>
+            <div style="color:var(--text-muted);font-size:0.72rem;line-height:1.5;margin-bottom:4px;">Harga POS di sini TIDAK mengubah <code>products.price</code>. Push Shopee hanya untuk produk &amp; channel yang dipilih. Hanya owner yang dapat menyimpan.</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;">
+                <button id="ppSave" class="close-modal-btn" style="flex:1 1 100%;background:var(--primary-gradient);" onclick="saveProductPrices('')">Simpan Harga</button>
+                <button id="ppPushShopee1" class="close-modal-btn" style="flex:1;background:#ee4d2d;" onclick="saveProductPrices('shopee:724153261')" title="Simpan lalu kirim harga ke Shopee 1 (produk ini saja)"><i class="fas fa-cloud-arrow-up"></i> Simpan &amp; Push Shopee 1</button>
+                <button id="ppPushShopee2" class="close-modal-btn" style="flex:1;background:#ee4d2d;" onclick="saveProductPrices('shopee:1214362884')" title="Simpan lalu kirim harga ke Shopee 2 (produk ini saja)"><i class="fas fa-cloud-arrow-up"></i> Simpan &amp; Push Shopee 2</button>
+                <button id="ppCancel" class="close-modal-btn" style="flex:1 1 100%;background:var(--text-muted);" onclick="closeProductPriceModal()">Batal</button>
             </div>
         </div>
     </div>
@@ -5598,23 +5600,29 @@
         }
 
         function openProductPriceModal(productId) {
-            const p = products.find(x => ppSameId(x.id, productId));
+            // Normalisasi: tombol memanggil dengan string ('id'), kolom product_id bigint.
+            const pid = Number(productId);
+            if (!Number.isInteger(pid) || pid <= 0) {
+                showToast("Product ID tidak valid");
+                console.warn("openProductPriceModal: productId tidak valid");
+                return;
+            }
+            const p = products.find(x => ppSameId(x.id, pid));
             if (!p) return;
             if (!appUserIsOwner()) { showToast("Hanya owner yang dapat mengubah harga"); return; }
             if (!productPricesLoaded) { showToast("product_prices belum tersedia"); return; }
-            ppEditingProductId = productId;
+            ppEditingProductId = pid;
             const nameEl = document.getElementById("ppProductName");
             if (nameEl) nameEl.textContent = p.name + (p.sku ? " \u00b7 " + p.sku : "");
             PRODUCT_PRICE_CHANNELS.forEach(ch => {
                 const input = document.getElementById(ch.inputId);
                 if (!input) return;
-                const v = productChannelPrice(productId, ch.key);
+                const v = productChannelPrice(pid, ch.key);
                 input.value = (v == null) ? "" : String(v);
             });
             const notice = document.getElementById("ppNotice");
-            if (notice) notice.style.display = "none";
-            const saveBtn = document.getElementById("ppSave");
-            if (saveBtn) saveBtn.disabled = false;
+            if (notice) { notice.style.display = "none"; notice.textContent = ""; }
+            ppSetModalBusy(false, null);
             const modal = document.getElementById("productPriceModal");
             if (modal) modal.classList.add("active");
         }
@@ -5625,10 +5633,40 @@
             ppEditingProductId = null;
         }
 
-        async function saveProductPrices() {
+        function ppShowNotice(html) {
+            const el = document.getElementById("ppNotice");
+            if (!el) return;
+            el.style.display = "block";
+            el.innerHTML = html;
+        }
+
+        // Busy state tombol modal. pushChannelKey = channel yang sedang di-push
+        // (agar label "Mengirim..." hanya pada tombol itu).
+        function ppSetModalBusy(busy, pushChannelKey) {
+            ["ppSave", "ppPushShopee1", "ppPushShopee2", "ppCancel"].forEach(id => {
+                const b = document.getElementById(id);
+                if (b) b.disabled = !!busy;
+            });
+            const saveBtn = document.getElementById("ppSave");
+            if (saveBtn) saveBtn.textContent = busy ? "Menyimpan..." : "Simpan Harga";
+            const b1 = document.getElementById("ppPushShopee1");
+            if (b1) b1.innerHTML = (busy && pushChannelKey === "shopee:724153261")
+                ? '<i class="fas fa-spinner fa-spin"></i> Mengirim...'
+                : '<i class="fas fa-cloud-arrow-up"></i> Simpan &amp; Push Shopee 1';
+            const b2 = document.getElementById("ppPushShopee2");
+            if (b2) b2.innerHTML = (busy && pushChannelKey === "shopee:1214362884")
+                ? '<i class="fas fa-spinner fa-spin"></i> Mengirim...'
+                : '<i class="fas fa-cloud-arrow-up"></i> Simpan &amp; Push Shopee 2';
+        }
+
+        // Simpan 3 harga per channel ke product_prices.
+        // pushChannelKey kosong = "Simpan Harga" (tanpa queue, tanpa Shopee).
+        // pushChannelKey terisi = simpan dulu, lalu push HANYA produk+channel itu.
+        async function saveProductPrices(pushChannelKey) {
             if (!appUserIsOwner()) { showToast("Hanya owner yang dapat mengubah harga"); return; }
             if (!productPricesLoaded) { showToast("product_prices belum tersedia"); return; }
-            const productId = ppEditingProductId;
+            const productId = Number(ppEditingProductId);
+            if (!Number.isInteger(productId) || productId <= 0) { showToast("Produk tidak valid"); return; }
             const p = products.find(x => ppSameId(x.id, productId));
             if (!p) { showToast("Produk tidak ditemukan"); return; }
 
@@ -5648,9 +5686,9 @@
                 newVals[ch.key] = n;
             }
 
-            const saveBtn = document.getElementById("ppSave");
             const notice = document.getElementById("ppNotice");
-            if (saveBtn) saveBtn.disabled = true;
+            if (notice) notice.style.display = "none";
+            ppSetModalBusy(true, pushChannelKey || null);
             try {
                 const { error } = await sb
                     .from("product_prices")
@@ -5661,19 +5699,147 @@
                 if (!productPrices[key]) productPrices[key] = {};
                 PRODUCT_PRICE_CHANNELS.forEach(ch => { productPrices[key][ch.key] = newVals[ch.key]; });
                 renderPricingTables();
-                showToast("Harga " + p.name + " tersimpan (per channel)");
-                closeProductPriceModal();
+
+                if (!pushChannelKey) {
+                    showToast("Harga " + p.name + " tersimpan (POS, Shopee 1, Shopee 2)");
+                    closeProductPriceModal();
+                    return;
+                }
+                // Sudah tersimpan; lanjut push 1 produk + 1 channel.
+                await pushProductPriceToShopee(productId, pushChannelKey);
             } catch (err) {
                 const msg = (err && err.message) ? err.message : "Gagal menyimpan harga";
-                if (notice) {
-                    notice.style.display = "block";
-                    notice.innerHTML = '<i class="fas fa-triangle-exclamation"></i> Gagal menyimpan ke <code>product_prices</code>: ' + ppEscapeHtml(msg) +
-                        '. Tidak ada perubahan yang ditulis ke <code>products.price</code>.';
-                }
+                ppShowNotice('<i class="fas fa-triangle-exclamation"></i> Gagal menyimpan ke <code>product_prices</code>: ' + ppEscapeHtml(msg) +
+                    '. Tidak ada perubahan yang ditulis ke <code>products.price</code>.');
                 showToast("Gagal menyimpan harga");
                 console.warn("saveProductPrices error:", msg);
             } finally {
-                if (saveBtn) saveBtn.disabled = false;
+                ppSetModalBusy(false, null);
+            }
+        }
+
+        // ============================================================
+        // PUSH HARGA SHOPEE (1 produk + 1 channel; TIDAK ada bulk/sync-all)
+        // Browser HANYA memanggil Edge Function shopee-price-sync yang ada.
+        // Frontend tidak menyimpan/menampilkan credential Shopee.
+        // ============================================================
+        const SHOPEE_PRICE_CHANNELS = [
+            { key: "shopee:724153261", label: "Shopee 1", shopId: "724153261" },
+            { key: "shopee:1214362884", label: "Shopee 2", shopId: "1214362884" }
+        ];
+
+        // Push harga satu produk ke satu channel Shopee.
+        // Alur: validasi harga -> cek mapping -> preview (multi-variant?) ->
+        // upsert queue 1 baris -> panggil Edge Function (1 produk, 1 channel).
+        // Tidak ada retry otomatis.
+        async function pushProductPriceToShopee(productId, channelKey) {
+            const chMeta = SHOPEE_PRICE_CHANNELS.find(c => c.key === channelKey);
+            if (!chMeta) { showToast("Channel Shopee tidak dikenal"); return; }
+            const pid = Number(productId);
+            const price = productChannelPrice(pid, channelKey);
+
+            if (price == null || !Number.isInteger(price) || price < 0) {
+                ppShowNotice('<i class="fas fa-triangle-exclamation"></i> Harga ' + chMeta.label + ' belum berisi angka valid. Push dibatalkan.');
+                showToast("Harga " + chMeta.label + " tidak valid");
+                return;
+            }
+
+            // 1) Mapping harus ada
+            let mapping = null;
+            try {
+                const { data, error } = await sb
+                    .from("product_shopee_mapping")
+                    .select("shopee_item_id")
+                    .eq("product_id", pid)
+                    .eq("shop_id", chMeta.shopId)
+                    .maybeSingle();
+                if (error) throw error;
+                mapping = data;
+            } catch (e) {
+                ppShowNotice('<i class="fas fa-triangle-exclamation"></i> Gagal memeriksa mapping Shopee: ' + ppEscapeHtml(e && e.message ? e.message : e));
+                showToast("Gagal memeriksa mapping Shopee");
+                return;
+            }
+            if (!mapping || mapping.shopee_item_id == null) {
+                ppShowNotice('<i class="fas fa-triangle-exclamation"></i> Produk ini belum memiliki mapping ' + chMeta.label + '. Push dibatalkan (tidak ada request dikirim).');
+                showToast("Belum ada mapping " + chMeta.label);
+                return;
+            }
+
+            // 2) Preview read-only: pastikan single-variant & harga terbaca
+            try {
+                const { data, error } = await sb.functions.invoke("shopee-price-sync", {
+                    body: { action: "preview", product_ids: [pid], channels: [channelKey] }
+                });
+                if (error) throw error;
+                const item = (data && Array.isArray(data.items)) ? data.items[0] : null;
+                if (!item) {
+                    ppShowNotice('<i class="fas fa-triangle-exclamation"></i> Tidak dapat membaca info item Shopee. Push dibatalkan.');
+                    showToast("Preview item gagal");
+                    return;
+                }
+                if (item.has_model !== false) {
+                    ppShowNotice('<i class="fas fa-triangle-exclamation"></i> Produk ini multi-varian (<code>has_model=true</code>). Push harga via alur single-variant belum didukung. Tidak ada request dikirim.');
+                    showToast("Produk multi-varian belum didukung");
+                    return;
+                }
+                if (item.current_price == null) {
+                    ppShowNotice('<i class="fas fa-triangle-exclamation"></i> Harga Shopee saat ini tidak terbaca. Push dibatalkan.');
+                    showToast("Harga Shopee tidak terbaca");
+                    return;
+                }
+            } catch (e) {
+                ppShowNotice('<i class="fas fa-triangle-exclamation"></i> Preview item gagal: ' + ppEscapeHtml(e && e.message ? e.message : e) + '. Push dibatalkan.');
+                showToast("Preview item gagal");
+                return;
+            }
+
+            // 3) Queue HANYA untuk produk+channel ini
+            try {
+                const { error } = await sb
+                    .from("product_price_sync_queue")
+                    .upsert(
+                        [{ product_id: pid, channel: channelKey, target_price: price, status: "pending", last_error: null }],
+                        { onConflict: "product_id,channel" }
+                    );
+                if (error) throw error;
+            } catch (e) {
+                ppShowNotice('<i class="fas fa-triangle-exclamation"></i> Gagal membuat antrean: ' + ppEscapeHtml(e && e.message ? e.message : e));
+                showToast("Gagal membuat antrean");
+                return;
+            }
+
+            // 4) Push via Edge Function (1 produk, 1 channel). Tidak retry.
+            ppSetModalBusy(true, channelKey);
+            try {
+                const { data, error } = await sb.functions.invoke("shopee-price-sync", {
+                    body: { product_ids: [pid], channels: [channelKey], dry_run: false }
+                });
+                if (error) throw error;
+                const s = data || {};
+                if ((s.synced || 0) >= 1 && (s.failed || 0) === 0) {
+                    showToast("Berhasil push " + chMeta.label + " ke Shopee: Rp " + price.toLocaleString("id-ID"));
+                    closeProductPriceModal();
+                    renderPricingTables();
+                    return;
+                }
+                let detail = "";
+                try {
+                    const { data: qrow } = await sb
+                        .from("product_price_sync_queue")
+                        .select("last_error")
+                        .eq("product_id", pid)
+                        .eq("channel", channelKey)
+                        .maybeSingle();
+                    if (qrow && qrow.last_error) detail = qrow.last_error;
+                } catch (e) { /* abaikan */ }
+                ppShowNotice('<i class="fas fa-triangle-exclamation"></i> Push ' + chMeta.label + ' gagal' + (detail ? ': ' + ppEscapeHtml(detail) : '.'));
+                showToast("Push " + chMeta.label + " gagal");
+            } catch (e) {
+                ppShowNotice('<i class="fas fa-triangle-exclamation"></i> Push gagal: ' + ppEscapeHtml(e && e.message ? e.message : e));
+                showToast("Push gagal");
+            } finally {
+                ppSetModalBusy(false, null);
             }
         }
 
