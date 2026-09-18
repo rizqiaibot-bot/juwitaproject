@@ -3424,6 +3424,78 @@
         }
 
         // ============================================================
+        // DATA LOKAL — pengganti Supabase JS (sb). Semua akses tabel/RPC
+        // diterjemahkan ke API lokal (PostgreSQL lokal). realSb disimpan
+        // hanya untuk functions.invoke (Shopee) yang belum dipindahkan.
+        // ============================================================
+        const realSb = sb;
+        function makeLocalDb(realClient) {
+            function qsOf(state) {
+                const q = [];
+                for (const k in state.filters) q.push(encodeURIComponent(k) + "=" + encodeURIComponent(state.filters[k]));
+                if (state.order) { q.push("order=" + encodeURIComponent(state.order.col)); q.push("dir=" + state.order.dir); }
+                if (state.range) { q.push("limit=" + (state.range.to - state.range.from + 1)); q.push("offset=" + state.range.from); }
+                else if (state.limit != null) q.push("limit=" + state.limit);
+                return q.length ? ("?" + q.join("&")) : "";
+            }
+            function from(table) {
+                const state = { mode: "select", filters: {}, order: null, range: null, limit: null, data: null, single: null };
+                const b = {};
+                b.select = function () { return b; };
+                b.insert = function (rows) { state.mode = "insert"; state.data = rows; return b; };
+                b.update = function (data) { state.mode = "update"; state.data = data; return b; };
+                b.delete = function () { state.mode = "delete"; return b; };
+                b.eq = function (col, val) { state.filters[col] = val; return b; };
+                b.order = function (col, opts) { state.order = { col: col, dir: (opts && opts.ascending === false) ? "desc" : "asc" }; return b; };
+                b.range = function (from, to) { state.range = { from: from, to: to }; return b; };
+                b.limit = function (n) { state.limit = n; return b; };
+                b.maybeSingle = function () { state.single = "maybe"; return b; };
+                b.single = function () { state.single = "single"; return b; };
+                b.then = function (resolve, reject) { return execute(table, state).then(resolve, reject); };
+                b.catch = function (reject) { return execute(table, state).catch(reject); };
+                return b;
+            }
+            async function execute(table, state) {
+                let res;
+                if (state.mode === "insert") res = await apiFetch("/api/data/" + table, { method: "POST", body: state.data });
+                else if (state.mode === "update") res = await apiFetch("/api/data/" + table + qsOf(state), { method: "PATCH", body: state.data });
+                else if (state.mode === "delete") res = await apiFetch("/api/data/" + table + qsOf(state), { method: "DELETE" });
+                else res = await apiFetch("/api/data/" + table + qsOf(state));
+                if (!res.ok) return { data: null, error: { message: (res.data && res.data.error) ? res.data.error : ("HTTP " + res.status) } };
+                let data = (res.data && res.data.data) ? res.data.data : null;
+                if (state.single === "maybe") data = (Array.isArray(data) && data.length) ? data[0] : null;
+                else if (state.single === "single") data = (Array.isArray(data) && data.length) ? data[0] : (data || null);
+                return { data: data, error: null };
+            }
+            async function rpc(name, args) {
+                args = args || {};
+                if (name === "sync_offline_order") {
+                    const res = await apiFetch("/api/orders", { method: "POST", body: args });
+                    return res.ok ? { data: res.data && res.data.data, error: null } : { data: null, error: { message: (res.data && res.data.error) || ("HTTP " + res.status) } };
+                }
+                if (name === "record_warehouse_action") {
+                    const res = await apiFetch("/api/orders/" + encodeURIComponent(args.p_order_id), { method: "PATCH", body: { p_action: args.p_action, p_petugas: args.p_petugas, p_courier: args.p_courier, p_resi: args.p_resi } });
+                    return res.ok ? { data: res.data && res.data.data, error: null } : { data: null, error: { message: (res.data && res.data.error) || ("HTTP " + res.status) } };
+                }
+                if (name === "close_opname" || name === "accounting_sync_pos") {
+                    const res = await apiFetch("/api/rpc/" + name, { method: "POST", body: args });
+                    return res.ok ? { data: res.data && res.data.data, error: null } : { data: null, error: { message: (res.data && res.data.error) || ("HTTP " + res.status) } };
+                }
+                return { data: null, error: { message: "rpc tidak didukung: " + name } };
+            }
+            return {
+                from: from,
+                rpc: rpc,
+                auth: {
+                    getSession: async function () { return { data: { session: null } }; },
+                    updateUser: async function () { return { data: null, error: { message: "reset password via API lokal" } }; },
+                },
+                functions: (realClient && realClient.functions) ? realClient.functions : { invoke: async function () { return { data: null, error: { message: "unavailable" } }; } },
+            };
+        }
+        sb = makeLocalDb(realSb);
+
+        // ============================================================
         // DATA
         // ============================================================
         const suppliers = ["PT Sinar Roti", "CV Snack Nusantara", "PT Segar Abadi", "UD Makmur Sentosa", "CV Boga Raya",
@@ -3909,17 +3981,7 @@
         // Polling hanya boleh jalan setelah sesi authenticated. Auth memakai
         // session Supabase aktif (client sb) — tanpa service-role key/secret.
         async function isOrdersPollAllowed() {
-            if (!currentUser) return false;
-            if (!sb || !sb.auth) return false;
-            if (JUWITA_AUTH_MODE === "auth") {
-                try {
-                    const { data } = await sb.auth.getSession();
-                    return !!(data && data.session);
-                } catch (e) {
-                    return false;
-                }
-            }
-            return true;
+            return !!currentUser;
         }
 
         async function refreshOrdersLight() {

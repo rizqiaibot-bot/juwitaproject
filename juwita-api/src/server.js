@@ -246,6 +246,202 @@ async function handleProductPricesPut(req, res) {
   }
 }
 
+// --- Data API generik (whitelist tabel) ---
+const DATA_TABLES = new Set([
+  "products", "orders", "order_items", "karyawan",
+  "warehouse_receiving", "warehouse_racks", "warehouse_opname",
+  "stock_mutations", "attendance_records",
+  "app_users", "accounting_accounts", "accounting_transactions",
+  "v_account_balance",
+]);
+
+// Kolom sensitif yang tidak boleh dibaca/ditulis via data API.
+const FORBIDDEN_COLUMNS = new Set(["password_hash"]);
+
+const TABLE_READ_COLUMNS = {
+  app_users: "id, auth_user_id, phone, email, full_name, role, role_label, menus, status, created_at, updated_at",
+};
+
+function tableName(pathname) {
+  return pathname.replace(/^\/api\/data\//, "");
+}
+
+async function handleDataGet(req, res, table) {
+  if (!DATA_TABLES.has(table)) return sendJson(res, 404, { error: "not_found" });
+  const u = new URL(req.url, "http://localhost");
+  const filters = [];
+  const params = [];
+  let idx = 1;
+  for (const [k, v] of u.searchParams) {
+    if (["order", "dir", "limit", "offset"].includes(k)) continue;
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k)) continue;
+    filters.push(`${k} = $${idx++}`);
+    params.push(v);
+  }
+  const orderCol = u.searchParams.get("order");
+  const orderDir = (u.searchParams.get("dir") || "asc").toLowerCase() === "desc" ? "DESC" : "ASC";
+  const { limit, offset } = parsePagination(req.url);
+  const where = filters.length ? ` WHERE ${filters.join(" AND ")}` : "";
+  const order = orderCol && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(orderCol)
+    ? ` ORDER BY ${orderCol} ${orderDir}`
+    : "";
+  const readCols = TABLE_READ_COLUMNS[table] || "*";
+  try {
+    const { rows } = await pool.query(
+      `SELECT ${readCols} FROM ${table}${where}${order} LIMIT $${idx++} OFFSET $${idx++}`,
+      [...params, limit, offset]
+    );
+    sendJson(res, 200, { data: rows });
+  } catch (err) {
+    console.error(`data GET ${table} failed:`, err.message);
+    sendJson(res, 500, { error: "internal_error" });
+  }
+}
+
+async function handleDataWrite(req, res, table, method) {
+  if (!DATA_TABLES.has(table)) return sendJson(res, 404, { error: "not_found" });
+  const { error, data } = await readJsonBody(req, 2 * 1024 * 1024);
+  if (error || data == null) return sendJson(res, 400, { error: "invalid_request" });
+
+  if (method === "POST") {
+    const rows = Array.isArray(data) ? data : [data];
+    if (rows.length === 0) return sendJson(res, 400, { error: "invalid_request" });
+    const cols = Object.keys(rows[0]);
+    if (cols.length === 0) return sendJson(res, 400, { error: "invalid_request" });
+    for (const c of cols) {
+      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(c)) return sendJson(res, 400, { error: "invalid_column" });
+      if (FORBIDDEN_COLUMNS.has(c)) return sendJson(res, 400, { error: "forbidden_column" });
+    }
+    const colList = cols.join(", ");
+    const valueList = rows.map((r) => `(${cols.map((c, i) => `$${i + 1}`).join(", ")})`).join(", ");
+    const flat = rows.flatMap((r) => cols.map((c) => {
+      const v = r[c];
+      return (typeof v === "object" && v !== null) ? JSON.stringify(v) : v;
+    }));
+    try {
+      const { rows: inserted } = await pool.query(
+        `INSERT INTO ${table} (${colList}) VALUES ${valueList} RETURNING *`,
+        flat
+      );
+      sendJson(res, 200, { data: inserted });
+    } catch (err) {
+      console.error(`data POST ${table} failed:`, err.message);
+      sendJson(res, 500, { error: "internal_error" });
+    }
+    return;
+  }
+
+  // PATCH / DELETE
+  const u = new URL(req.url, "http://localhost");
+  const filters = [];
+  const params = [];
+  let idx = 1;
+  for (const [k, v] of u.searchParams) {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k)) continue;
+    filters.push(`${k} = $${idx++}`);
+    params.push(v);
+  }
+  if (filters.length === 0) return sendJson(res, 400, { error: "missing_filter" });
+  const where = ` WHERE ${filters.join(" AND ")}`;
+
+  if (method === "DELETE") {
+    try {
+      const { rows: deleted } = await pool.query(
+        `DELETE FROM ${table}${where} RETURNING *`,
+        params
+      );
+      sendJson(res, 200, { data: deleted });
+    } catch (err) {
+      console.error(`data DELETE ${table} failed:`, err.message);
+      sendJson(res, 500, { error: "internal_error" });
+    }
+    return;
+  }
+
+  // PATCH
+  const updates = data;
+  const cols = Object.keys(updates);
+  if (cols.length === 0) return sendJson(res, 400, { error: "invalid_request" });
+  for (const c of cols) {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(c)) return sendJson(res, 400, { error: "invalid_column" });
+    if (FORBIDDEN_COLUMNS.has(c)) return sendJson(res, 400, { error: "forbidden_column" });
+  }
+  const setList = cols.map((c, i) => `${c} = $${idx + i}`).join(", ");
+  try {
+    const { rows: updated } = await pool.query(
+      `UPDATE ${table} SET ${setList}${where} RETURNING *`,
+      [...params, ...cols.map((c) => {
+        const v = updates[c];
+        return (typeof v === "object" && v !== null) ? JSON.stringify(v) : v;
+      })]
+    );
+    sendJson(res, 200, { data: updated });
+  } catch (err) {
+    console.error(`data PATCH ${table} failed:`, err.message);
+    sendJson(res, 500, { error: "internal_error" });
+  }
+}
+
+// --- Checkout POS: panggil RPC lokal sync_offline_order ---
+async function handleOrdersPost(req, res) {
+  const { error, data } = await readJsonBody(req, 2 * 1024 * 1024);
+  if (error || !data || typeof data !== "object") {
+    return sendJson(res, 400, { error: "invalid_request" });
+  }
+  try {
+    const { rows } = await pool.query(
+      `SELECT sync_offline_order($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) AS result`,
+      [
+        data.p_orderid, data.p_idempotency_key, data.p_date, data.p_channel,
+        data.p_customer, data.p_total, data.p_paystatus, data.p_wmsstatus,
+        data.p_courier, data.p_resi, data.p_payment_method, data.p_subtotal,
+        data.p_diskon, data.p_bayar, data.p_kembalian, JSON.stringify(data.p_items),
+      ]
+    );
+    sendJson(res, 200, { data: rows[0].result });
+  } catch (err) {
+    console.error("orders POST failed:", err.message);
+    sendJson(res, 500, { error: "internal_error" });
+  }
+}
+
+// --- Aksi gudang: panggil RPC lokal record_warehouse_action ---
+async function handleOrdersPatch(req, res, orderId) {
+  const { error, data } = await readJsonBody(req, 64 * 1024);
+  if (error || !data || typeof data !== "object") {
+    return sendJson(res, 400, { error: "invalid_request" });
+  }
+  try {
+    const { rows } = await pool.query(
+      `SELECT record_warehouse_action($1,$2,$3,$4,$5) AS result`,
+      [orderId, data.p_action, data.p_petugas || null, data.p_courier || null, data.p_resi || null]
+    );
+    sendJson(res, 200, { data: rows[0].result });
+  } catch (err) {
+    console.error("orders PATCH failed:", err.message);
+    sendJson(res, 500, { error: "internal_error" });
+  }
+}
+
+async function handleRpc(req, res, name) {
+  try {
+    if (name === "close_opname") {
+      const { data } = await readJsonBody(req, 64 * 1024);
+      const opnameId = data && data.p_opname_id ? String(data.p_opname_id) : "";
+      const { rows } = await pool.query("SELECT close_opname($1) AS result", [opnameId]);
+      return sendJson(res, 200, { data: rows[0].result });
+    }
+    if (name === "accounting_sync_pos") {
+      const { rows } = await pool.query("SELECT accounting_sync_pos() AS result");
+      return sendJson(res, 200, { data: rows[0].result });
+    }
+    return sendJson(res, 404, { error: "rpc_not_found" });
+  } catch (err) {
+    console.error(`rpc ${name} failed:`, err.message);
+    return sendJson(res, 500, { error: "internal_error" });
+  }
+}
+
 async function handleLogin(req, res) {
   const contentType = String(req.headers["content-type"] || "").toLowerCase();
   if (!contentType.startsWith("application/json")) {
@@ -355,6 +551,31 @@ const server = http.createServer(async (req, res) => {
     if (!user) return;
     if (!requireOwner(req, res)) return;
     return handleProductPricesPut(req, res);
+  }
+  if (req.method === "POST" && pathname === "/api/orders") {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    return handleOrdersPost(req, res);
+  }
+  if (req.method === "PATCH" && pathname.startsWith("/api/orders/")) {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    return handleOrdersPatch(req, res, decodeURIComponent(pathname.slice("/api/orders/".length)));
+  }
+  if (req.method === "POST" && pathname.startsWith("/api/rpc/")) {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    return handleRpc(req, res, pathname.slice("/api/rpc/".length));
+  }
+  if (pathname.startsWith("/api/data/")) {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    const table = tableName(pathname);
+    if (req.method === "GET") return handleDataGet(req, res, table);
+    if (req.method === "POST") return handleDataWrite(req, res, table, "POST");
+    if (req.method === "PATCH") return handleDataWrite(req, res, table, "PATCH");
+    if (req.method === "DELETE") return handleDataWrite(req, res, table, "DELETE");
+    return sendJson(res, 405, { error: "method_not_allowed" });
   }
   sendJson(res, 404, { status: "error", message: "Not Found" });
 });
