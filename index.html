@@ -4507,7 +4507,7 @@
                     <div class="product-info">
                         ${skuLabel}
                         <div class="product-title">${p.name}</div>
-                        <div class="product-price">${p.price.toLocaleString('id-ID')}</div>
+                        <div class="product-price">${posPriceOf(p).toLocaleString('id-ID')}</div>
                         ${sizeInfo}
                     </div>
                     <div class="product-footer">
@@ -4552,7 +4552,7 @@
             if (!p) return;
             const item = cart.find(i => i.id === id);
             if (item) item.quantity++;
-            else cart.push({ ...p, quantity: 1 });
+            else cart.push({ ...p, quantity: 1, price: posPriceOf(p) });
             updateCartUI();
             playAddSound();
         }
@@ -4586,7 +4586,7 @@
                 existing.quantity += 1;
                 existing.weightKg = Math.round((existing.weightKg + weightKg) * 1000) / 1000;
             } else {
-                cart.push({ ...prod, quantity: 1, weightKg, price: prod.price, subtotal: Math.round(weightKg * prod.price), isWeighed: true });
+                cart.push({ ...prod, quantity: 1, weightKg, price: posPriceOf(prod), subtotal: Math.round(weightKg * posPriceOf(prod)), isWeighed: true });
             }
             updateCartUI();
             playAddSound();
@@ -4680,7 +4680,7 @@
             box.innerHTML = merged.map(function (p, idx) {
                 return '<button type="button" onclick="wmPickResult(' + idx + ')" style="display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;text-align:left;background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius-md);padding:8px 10px;cursor:pointer;font-size:0.8rem;">'
                     + '<span>' + p.name + ' <small style="color:var(--text-muted);">PLU ' + wmPluOf(p) + '</small></span>'
-                    + '<span style="white-space:nowrap;font-weight:700;color:var(--primary);">Rp ' + (p.price || 0).toLocaleString('id-ID') + '/kg</span>'
+                    + '<span style="white-space:nowrap;font-weight:700;color:var(--primary);">Rp ' + posPriceOf(p).toLocaleString('id-ID') + '/kg</span>'
                     + '</button>';
             }).join('');
         }
@@ -4698,7 +4698,7 @@
             const infoEl = document.getElementById("wmSelInfo");
             if (sel) sel.style.display = "block";
             if (nameEl) nameEl.textContent = p.name || "-";
-            if (infoEl) infoEl.textContent = 'PLU ' + wmPluOf(p) + ' • Harga Rp ' + (p.price || 0).toLocaleString('id-ID') + '/kg';
+            if (infoEl) infoEl.textContent = 'PLU ' + wmPluOf(p) + ' • Harga Rp ' + posPriceOf(p).toLocaleString('id-ID') + '/kg';
             const w = document.getElementById("wmWeight");
             if (w) { w.focus(); w.select(); }
             wmPreview();
@@ -4713,7 +4713,7 @@
             if (prev) prev.style.display = ok ? "block" : "none";
             if (prev && ok) {
                 // Subtotal memakai cartLineTotal agar sama persis dengan logic weighted.
-                const line = cartLineTotal(Object.assign({}, wmProduct, { quantity: 1, weightKg: kg, isWeighed: true }));
+                const line = cartLineTotal(Object.assign({}, wmProduct, { price: posPriceOf(wmProduct), quantity: 1, weightKg: kg, isWeighed: true }));
                 prev.innerHTML = '<div style="display:flex;justify-content:space-between;font-weight:700;"><span>Subtotal (' + fmtKg(kg) + ' kg)</span><span>Rp ' + line.toLocaleString('id-ID') + '</span></div>';
             }
             if (addBtn) addBtn.disabled = !ok;
@@ -4726,7 +4726,7 @@
             if (!(kg > 0)) { showToast("Berat harus lebih dari 0", "error"); return; }
             const p = wmProduct;
             addWeighedItem(p, kg);
-            showToast(p.name + ": " + kg.toFixed(3) + " kg x Rp " + (p.price || 0).toLocaleString('id-ID') + " = Rp " + Math.round((p.price || 0) * kg).toLocaleString('id-ID'));
+            showToast(p.name + ": " + kg.toFixed(3) + " kg x Rp " + posPriceOf(p).toLocaleString('id-ID') + " = Rp " + Math.round(posPriceOf(p) * kg).toLocaleString('id-ID'));
             wmClose();
             const scan = document.getElementById("scanInput");
             if (scan) scan.focus();
@@ -5522,6 +5522,15 @@
             return (typeof v === "number" && isFinite(v)) ? v : null;
         }
 
+        // Harga jual POS = product_prices channel "pos". products.price TIDAK
+        // dipakai lagi sebagai harga jual POS. Fallback ke p.price hanya saat
+        // product_prices belum termuat (jendela loading awal).
+        function posPriceOf(p) {
+            if (!p) return 0;
+            const ch = productChannelPrice(p.id, "pos");
+            return (ch != null) ? ch : (p.price || 0);
+        }
+
         // ============================================================
         // UI TAB HARGA PER CHANNEL (edit inline, simpan per channel)
         // Simpan hanya {product_id, channel, price} untuk channel aktif.
@@ -5617,7 +5626,7 @@
             try {
                 const all = [];
                 let offset = 0;
-                const limit = 200;
+                const limit = 5000;
                 while (true) {
                     const res = await apiFetch("/api/product-prices?limit=" + limit + "&offset=" + offset);
                     if (!res.ok) throw new Error("Gagal membaca product_prices (HTTP " + res.status + ")");
@@ -8031,7 +8040,7 @@
                         this.value = "";
                         currentSearch = "";
                         renderProducts("", posCategory);
-                        showToast(`${wp.name}: ${precio.weightKg.toFixed(3)} kg x ${wp.price.toLocaleString('id-ID')} = ${Math.round(precio.weightKg * wp.price).toLocaleString('id-ID')}`);
+                        showToast(`${wp.name}: ${precio.weightKg.toFixed(3)} kg x ${posPriceOf(wp).toLocaleString('id-ID')} = ${Math.round(precio.weightKg * posPriceOf(wp)).toLocaleString('id-ID')}`);
                         return;
                     }
 

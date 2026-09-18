@@ -25,7 +25,7 @@ function parsePagination(url) {
   const rawLimit = Number(u.searchParams.get("limit"));
   const rawOffset = Number(u.searchParams.get("offset"));
   const limit =
-    Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+    Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 5000) : 50;
   const offset =
     Number.isInteger(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
   return { limit, offset };
