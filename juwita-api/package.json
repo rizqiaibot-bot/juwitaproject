@@ -1,0 +1,17 @@
+{
+  "name": "juwita-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend API Juwita One (mandiri, tanpa Supabase)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.13.0"
+  }
+}

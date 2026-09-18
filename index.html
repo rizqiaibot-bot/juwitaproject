@@ -14,6 +14,9 @@
     <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+    <!-- Konfigurasi terpusat (URL + anon key) -->
+    <script src="config.js"></script>
+
     <style>
         /* ===== CSS VARIABLES ===== */
         :root {
@@ -2727,8 +2730,20 @@
         </div>
 
         <div id="page-harga-jual" class="page-content">
-            <div class="page-header"><h1>Harga Jual Produk</h1><div class="page-header-desc">Daftar harga jual seluruh produk</div></div>
-            <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>HARGA BELI</th><th>MARKUP</th><th>HARGA JUAL</th><th>LABA</th><th>EDIT</th></tr></thead><tbody id="jualTableBody"></tbody></table></div>
+            <div class="page-header"><h1>Harga Jual Produk</h1><div class="page-header-desc">Harga jual per channel: POS, Shopee 1, Shopee 2</div></div>
+            <div id="jualChannelNotice" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:var(--radius-md);background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.4);color:#fca5a5;font-size:0.78rem;line-height:1.5;"></div>
+            <style>
+                .pp-tab { padding:8px 16px; border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-secondary); border-radius:var(--radius-md); cursor:pointer; font-weight:600; font-size:0.8rem; }
+                .pp-tab.active { background:var(--primary-gradient); color:#fff; border-color:transparent; }
+                .pp-price-input { width:130px; padding:6px 8px; border:1px solid var(--border-color); border-radius:var(--radius-sm); background:var(--bg-card); color:var(--text-primary); font-size:0.8rem; text-align:right; }
+            </style>
+            <div id="ppTabs" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+                <button type="button" class="pp-tab active" data-channel="pos" onclick="setPpChannel('pos')">Harga POS</button>
+                <button type="button" class="pp-tab" data-channel="shopee:724153261" onclick="setPpChannel('shopee:724153261')">Harga Shopee 1</button>
+                <button type="button" class="pp-tab" data-channel="shopee:1214362884" onclick="setPpChannel('shopee:1214362884')">Harga Shopee 2</button>
+            </div>
+            <input id="ppSearch" class="filter-control" style="margin-bottom:12px;max-width:360px;width:100%;" placeholder="Cari produk…" oninput="ppSearchChange(this)" />
+            <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>HARGA BELI</th><th id="ppChannelColHeader">HARGA POS</th><th>AKSI</th></tr></thead><tbody id="jualTableBody"></tbody></table></div>
         </div>
 
         <div id="page-ubah-harga" class="page-content">
@@ -3244,6 +3259,35 @@
         </div>
     </div>
 
+    <!-- ===== MODAL HARGA PER CHANNEL ===== -->
+    <div class="modal-overlay" id="productPriceModal" onclick="if(event.target===this)closeProductPriceModal()">
+        <div class="modal-card" style="max-width:480px;width:min(92vw,480px);text-align:left;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+                <h3 style="margin:0;font-size:1.1rem;display:flex;align-items:center;gap:8px;"><i class="fas fa-tags" style="color:var(--primary);"></i> Harga Jual per Channel</h3>
+            </div>
+            <div id="ppProductName" style="font-weight:600;margin-bottom:4px;"></div>
+            <div style="color:var(--text-muted);font-size:0.78rem;margin-bottom:14px;">Satu produk, satu SKU, satu stok. Harga boleh berbeda per channel.</div>
+            <div id="ppNotice" style="display:none;margin-bottom:12px;padding:8px 12px;border-radius:var(--radius-md);background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);color:#fbbf24;font-size:0.75rem;line-height:1.5;"></div>
+            <div class="form-group" style="margin-bottom:10px;">
+                <label>Harga POS (offline)</label>
+                <input type="number" id="ppPos" class="form-control" min="0" step="1" inputmode="numeric" />
+            </div>
+            <div class="form-group" style="margin-bottom:10px;">
+                <label>Harga Shopee 1 &mdash; Juwita Fresh and Frozen</label>
+                <input type="number" id="ppShopee1" class="form-control" min="0" step="1" inputmode="numeric" />
+            </div>
+            <div class="form-group" style="margin-bottom:10px;">
+                <label>Harga Shopee 2 &mdash; juwita frozen food</label>
+                <input type="number" id="ppShopee2" class="form-control" min="0" step="1" inputmode="numeric" />
+            </div>
+            <div style="color:var(--text-muted);font-size:0.72rem;line-height:1.5;margin-bottom:4px;">Harga POS di sini TIDAK mengubah <code>products.price</code>. Hanya owner yang dapat menyimpan.</div>
+            <div style="display:flex;gap:10px;margin-top:16px;">
+                <button id="ppSave" class="close-modal-btn" style="flex:2;background:var(--primary-gradient);" onclick="saveProductPrices()">Simpan</button>
+                <button class="close-modal-btn" style="flex:1;background:var(--text-muted);" onclick="closeProductPriceModal()">Tutup</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ===== MODAL SUKSES ===== -->
     <div class="modal-overlay" id="checkoutModal">
         <div class="modal-card">
@@ -3335,8 +3379,31 @@
         // ============================================================
         // SUPABASE CLIENT
         // ============================================================
-        const SUPABASE_URL = "https://vivgzxitlikpgnppgeqn.supabase.co";
-        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpdmd6eGl0bGlrcGducHBnZXFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3NTI4MjAsImV4cCI6MjA5NzMyODgyMH0.BpLLNrSnuufGLOb21zKp-f6luz7e3olpOkx7SNazCW8";
+        const SUPABASE_URL = (window.JUWITA_CONFIG && window.JUWITA_CONFIG.SUPABASE_URL) || "";
+        const SUPABASE_KEY = (window.JUWITA_CONFIG && window.JUWITA_CONFIG.SUPABASE_ANON_KEY) || "";
+        const API_BASE_URL = (window.JUWITA_CONFIG && window.JUWITA_CONFIG.API_BASE_URL) || "";
+        const JUWITA_TOKEN_KEY = "juwita_token";
+
+        // Akses API lokal dengan JWT. Tidak menyimpan/men-log password/token.
+        async function apiFetch(path, options) {
+            const opts = options || {};
+            const headers = Object.assign({}, opts.headers || {});
+            const token = localStorage.getItem(JUWITA_TOKEN_KEY);
+            if (token) headers["Authorization"] = "Bearer " + token;
+            if (opts.body != null && typeof opts.body === "object") {
+                headers["Content-Type"] = "application/json";
+                opts.body = JSON.stringify(opts.body);
+            }
+            let res;
+            try {
+                res = await fetch(API_BASE_URL + path, Object.assign({}, opts, { headers: headers }));
+            } catch (e) {
+                return { ok: false, status: 0, data: null };
+            }
+            let data = null;
+            try { data = await res.json(); } catch (e) { data = null; }
+            return { ok: res.ok, status: res.status, data: data };
+        }
         let sb = null;
         try {
             if (typeof supabase !== 'undefined') {
@@ -3482,17 +3549,20 @@
         function applyRealUser(row) {
             const menus = (Array.isArray(row.menus) && row.menus.length) ? row.menus : [];
             const isOwner = String(row.role || "").toLowerCase() === "owner";
+            const privileges = (Array.isArray(row.privileges) && row.privileges.length)
+                ? row.privileges
+                : (isOwner ? ["manage_users", "manage_permissions", "manage_settings"] : []);
             currentUser = {
                 id: row.auth_user_id,
                 username: row.phone,
                 phone: row.phone,
                 email: row.email || null,
-                name: row.full_name,
+                name: row.name,
                 role: row.role,
-                roleLabel: row.role_label || row.role,
+                roleLabel: row.roleLabel || row.role,
                 menus: [...menus],
                 status: row.status,
-                privileges: isOwner ? ["manage_users", "manage_permissions", "manage_settings"] : []
+                privileges: privileges
             };
             localStorage.removeItem(PROTO_SESSION_KEY);
             renderUserUI();
@@ -3511,18 +3581,17 @@
 
         async function realRestoreSession() {
             try {
-                if (!sb || !sb.auth) return false;
-                const { data: { session } } = await sb.auth.getSession();
-                if (!session || !session.user) return false;
-                const { data: row, error } = await sb.from("app_users").select("*").eq("auth_user_id", session.user.id).maybeSingle();
-                if (error || !row || row.status !== "ACTIVE") {
-                    try { await sb.auth.signOut(); } catch (e) { /* abaikan */ }
+                const token = localStorage.getItem(JUWITA_TOKEN_KEY);
+                if (!token) return false;
+                const res = await apiFetch("/api/auth/me");
+                if (!res.ok || !res.data || !res.data.user) {
+                    localStorage.removeItem(JUWITA_TOKEN_KEY);
                     return false;
                 }
-                applyRealUser(row);
+                applyRealUser(res.data.user);
                 return true;
             } catch (e) {
-                console.warn("restore real session error:", e && e.message);
+                console.warn("restore session error:", e && e.message);
                 return false;
             }
         }
@@ -3535,32 +3604,24 @@
             const pass = passInput ? passInput.value : "";
             if (!hp) { if (errEl) errEl.textContent = "Nomor HP wajib diisi"; return; }
             if (!pass) { if (errEl) errEl.textContent = "Password wajib diisi"; return; }
-            if (!sb || !sb.auth) { if (errEl) errEl.textContent = "Supabase Auth belum tersedia"; return; }
-            const email = realPhoneToEmail(hp);
             let res;
             try {
-                res = await sb.auth.signInWithPassword({ email: email, password: pass });
+                res = await apiFetch("/api/auth/login", {
+                    method: "POST",
+                    body: { phone: hp, password: pass }
+                });
             } catch (e) {
-                if (errEl) errEl.textContent = "Gagal terhubung ke server auth";
+                if (errEl) errEl.textContent = "Gagal terhubung ke server";
                 return;
             }
-            if (res.error || !res.data || !res.data.user) {
-                if (errEl) errEl.textContent = "Nomor HP atau password salah";
+            if (!res.ok || !res.data || !res.data.token || !res.data.user) {
+                if (errEl) errEl.textContent = (res.status === 0)
+                    ? "Gagal terhubung ke server"
+                    : (res.status === 429 ? "Terlalu banyak percobaan, coba lagi nanti" : "Nomor HP atau password salah");
                 return;
             }
-            const uid = res.data.user.id;
-            const { data: row, error: rowErr } = await sb.from("app_users").select("*").eq("auth_user_id", uid).maybeSingle();
-            if (rowErr || !row) {
-                try { await sb.auth.signOut(); } catch (e) { /* abaikan */ }
-                if (errEl) errEl.textContent = "Nomor HP tidak terdaftar di aplikasi";
-                return;
-            }
-            if (row.status !== "ACTIVE") {
-                try { await sb.auth.signOut(); } catch (e) { /* abaikan */ }
-                if (errEl) errEl.textContent = "Akun nonaktif, hubungi pemilik";
-                return;
-            }
-            applyRealUser(row);
+            localStorage.setItem(JUWITA_TOKEN_KEY, res.data.token);
+            applyRealUser(res.data.user);
             closePhoneLogin();
             showToast("Login berhasil sebagai " + currentUser.name);
         }
@@ -3742,6 +3803,8 @@
                 console.warn("Supabase: using local data fallback", err.message);
                 seedWarehouseData();
             }
+            // Harga per channel (product_prices) — gagal baca tidak menghentikan UI.
+            await ensureProductPricesLoaded(true);
             refreshAllUI();
         }
 
@@ -3973,10 +4036,7 @@
             currentUser = null;
             localStorage.removeItem("juwita_user");
             localStorage.removeItem(PROTO_SESSION_KEY);
-            if (JUWITA_AUTH_MODE === "auth" && sb && sb.auth) {
-                sb.auth.signOut().then(function () { location.reload(); }).catch(function () { location.reload(); });
-                return;
-            }
+            localStorage.removeItem(JUWITA_TOKEN_KEY);
             location.reload();
         }
 
@@ -5372,20 +5432,7 @@
                 }).join('');
             }
             const jual = document.getElementById("jualTableBody");
-            if (jual) {
-                jual.innerHTML = products.map((p, i) => {
-                    const markup = Math.round((p.price - p.modal) / p.modal * 100);
-                    const laba = p.price - p.modal;
-                    return `<tr>
-                                <td><strong>${p.name}</strong></td>
-                                <td>Rp ${p.modal.toLocaleString('id-ID')}</td>
-                                <td>${markup}%</td>
-                                <td><strong>Rp ${p.price.toLocaleString('id-ID')}</strong></td>
-                                <td>Rp ${laba.toLocaleString('id-ID')}</td>
-                                <td><button class="aksi-btn" onclick="editSellPrice(${i})"><i class="fas fa-edit"></i></button></td>
-                            </tr>`;
-                }).join('');
-            }
+            if (jual) renderPriceChannelTable();
             const margin = document.getElementById("marginTableBody");
             if (margin) {
                 margin.innerHTML = products.map(p => {
@@ -5423,6 +5470,301 @@
                                 <td><button class="aksi-btn" onclick="showToast('Edit ${pm.name}')"><i class="fas fa-edit"></i></button></td>
                             </tr>`
                 ).join('');
+            }
+        }
+
+        // ============================================================
+        // HARGA PER CHANNEL (product_prices)
+        // Satu produk tetap satu SKU & satu stok fisik; hanya harga yang
+        // berbeda per channel. TIDAK menulis ke products.price.
+        // ============================================================
+        const PRODUCT_PRICE_CHANNELS = [
+            { key: "pos", label: "Harga POS", inputId: "ppPos" },
+            { key: "shopee:724153261", label: "Harga Shopee 1", inputId: "ppShopee1" },
+            { key: "shopee:1214362884", label: "Harga Shopee 2", inputId: "ppShopee2" }
+        ];
+        let productPrices = {};           // product_id (string key) -> { channel: price }
+        let productPricesLoaded = false;  // true hanya bila tabel product_prices terbaca
+        let productPricesError = "";      // pesan jelas bila tabel belum tersedia
+        let productPricesPromise = null;  // fetch yang sedang berjalan (agar request force tidak terlewat)
+        let ppEditingProductId = null;
+        let ppActiveChannel = PRODUCT_PRICE_CHANNELS[0].key;  // channel tab aktif (pos default)
+        let ppSearchTerm = "";                                 // filter pencarian tab harga
+
+        // Padanan frontend app_user_is_owner(): role='owner' + status ACTIVE.
+        function appUserIsOwner() {
+            return !!(currentUser &&
+                String(currentUser.role || "").toLowerCase() === "owner" &&
+                String(currentUser.status || "").toUpperCase() === "ACTIVE");
+        }
+
+        // Harga hanya bisa diedit owner DAN saat product_prices tersedia.
+        function priceEditEnabled() {
+            return appUserIsOwner() && productPricesLoaded;
+        }
+
+        // Escape teks sebelum dimasukkan ke innerHTML (pesan error DB tidak dipercaya).
+        function ppEscapeHtml(v) {
+            return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
+                return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+            });
+        }
+
+        // Cocokkan product id tanpa bergantung tipe number/string.
+        function ppSameId(a, b) {
+            return String(a) === String(b);
+        }
+
+        function productChannelPrice(productId, channel) {
+            const entry = productPrices[String(productId)];
+            if (!entry) return null;
+            const v = entry[channel];
+            return (typeof v === "number" && isFinite(v)) ? v : null;
+        }
+
+        // ============================================================
+        // UI TAB HARGA PER CHANNEL (edit inline, simpan per channel)
+        // Simpan hanya {product_id, channel, price} untuk channel aktif.
+        // TIDAK menyentuh products.price, stok, checkout, maupun order.
+        // ============================================================
+        function ppActiveChannelDef() {
+            return PRODUCT_PRICE_CHANNELS.find(c => c.key === ppActiveChannel) || PRODUCT_PRICE_CHANNELS[0];
+        }
+
+        function ppSearchChange(el) {
+            ppSearchTerm = el ? el.value : "";
+            renderPriceChannelTable();
+        }
+
+        function setPpChannel(channel) {
+            ppActiveChannel = channel;
+            document.querySelectorAll("#ppTabs .pp-tab").forEach(t => {
+                t.classList.toggle("active", t.getAttribute("data-channel") === channel);
+            });
+            const header = document.getElementById("ppChannelColHeader");
+            if (header) header.textContent = ppActiveChannelDef().label.toUpperCase();
+            renderPriceChannelTable();
+        }
+
+        function renderPriceChannelTable() {
+            const body = document.getElementById("jualTableBody");
+            if (!body) return;
+            const ch = ppActiveChannelDef();
+            const q = ppSearchTerm.trim().toLowerCase();
+            const list = products.filter(p => !q || String(p.name || "").toLowerCase().includes(q));
+            if (!list.length) {
+                body.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Produk tidak ditemukan</td></tr>';
+                return;
+            }
+            const canEdit = priceEditEnabled();
+            body.innerHTML = list.map(p => {
+                const cur = productChannelPrice(p.id, ch.key);
+                const valAttr = (cur == null) ? "" : String(cur);
+                const inputHtml = canEdit
+                    ? `<input type="number" class="pp-price-input" id="ppInput-${p.id}" min="0" step="1" inputmode="numeric" value="${valAttr}" placeholder="0" />`
+                    : (cur == null
+                        ? '<span style="color:var(--text-muted);">Belum diatur</span>'
+                        : `<strong>Rp ${cur.toLocaleString('id-ID')}</strong>`);
+                const btnHtml = canEdit
+                    ? `<button class="aksi-btn" onclick="savePriceChannelRow('${p.id}', this)" title="Simpan ${ch.label}"><i class="fas fa-save"></i></button>`
+                    : '<span style="color:var(--text-muted);font-size:0.72rem;" title="Hanya owner">&#8212;</span>';
+                return `<tr>
+                            <td><strong>${ppEscapeHtml(p.name)}</strong>${p.sku ? ` <span style="color:var(--text-muted);font-size:0.7rem;">· ${ppEscapeHtml(p.sku)}</span>` : ""}</td>
+                            <td>Rp ${(p.modal || 0).toLocaleString('id-ID')}</td>
+                            <td>${inputHtml}</td>
+                            <td>${btnHtml}</td>
+                        </tr>`;
+            }).join('');
+        }
+
+        async function savePriceChannelRow(productId, btn) {
+            if (!appUserIsOwner()) { showToast("Hanya owner yang dapat mengubah harga"); return; }
+            if (!productPricesLoaded) { showToast("product_prices belum tersedia"); return; }
+            const p = products.find(x => ppSameId(x.id, productId));
+            if (!p) { showToast("Produk tidak ditemukan"); return; }
+            const ch = ppActiveChannelDef();
+            const input = document.getElementById("ppInput-" + productId);
+            const raw = input ? String(input.value).trim() : "";
+            if (raw === "") { showToast(ch.label + " wajib diisi"); return; }
+            const n = Number(raw);
+            if (!isFinite(n) || n < 0 || Math.floor(n) !== n) {
+                showToast(ch.label + " harus angka bulat >= 0");
+                return;
+            }
+            if (btn) btn.disabled = true;
+            try {
+                const res = await apiFetch("/api/product-prices", {
+                    method: "PUT",
+                    body: { product_id: productId, channel: ch.key, price: n }
+                });
+                if (!res.ok) throw new Error((res.data && res.data.error) ? res.data.error : ("HTTP " + res.status));
+                const key = String(productId);
+                if (!productPrices[key]) productPrices[key] = {};
+                productPrices[key][ch.key] = n;
+                renderPriceChannelTable();
+                showToast(ch.label + " " + p.name + " tersimpan");
+            } catch (err) {
+                const msg = (err && err.message) ? err.message : "Gagal menyimpan harga";
+                showToast("Gagal menyimpan: " + msg);
+                console.warn("savePriceChannelRow error:", msg);
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        // Ambil baris product_prices (paginated, urut id). TIDAK menulis apa pun.
+        async function fetchProductPricesRows() {
+            try {
+                const all = [];
+                let offset = 0;
+                const limit = 200;
+                while (true) {
+                    const res = await apiFetch("/api/product-prices?limit=" + limit + "&offset=" + offset);
+                    if (!res.ok) throw new Error("Gagal membaca product_prices (HTTP " + res.status + ")");
+                    const rows = (res.data && res.data.data) || [];
+                    all.push(...rows);
+                    if (rows.length < limit) break;
+                    offset += limit;
+                }
+                const map = {};
+                all.forEach(r => {
+                    const key = String(r.product_id);
+                    if (!map[key]) map[key] = {};
+                    const n = Number(r.price);
+                    if (isFinite(n)) map[key][r.channel] = n;
+                });
+                productPrices = map;
+                productPricesLoaded = true;
+                productPricesError = "";
+            } catch (err) {
+                productPrices = {};
+                productPricesLoaded = false;
+                productPricesError = (err && err.message) ? err.message : "Tidak dapat membaca product_prices.";
+                console.warn("product_prices tidak tersedia:", productPricesError);
+            }
+        }
+
+        // Baca product_prices. Jika tabel belum ada / RLS menolak, tampilkan
+        // pesan jelas dan JANGAN fallback menulis ke products.price.
+        // Bila fetch sedang berjalan: tunggu promise yang sama; request force
+        // tetap dijalankan setelahnya supaya tidak terlewat.
+        async function ensureProductPricesLoaded(force) {
+            if (productPricesPromise) {
+                await productPricesPromise;
+                if (!force) return; // hasil fetch yang sedang jalan sudah dipakai
+            }
+            if (productPricesLoaded && !force) return;
+            if (!localStorage.getItem(JUWITA_TOKEN_KEY)) {
+                productPricesError = "Belum login.";
+                productPricesLoaded = false;
+                renderJualChannelNotice();
+                renderPricingTables();
+                return;
+            }
+            const p = fetchProductPricesRows();
+            productPricesPromise = p;
+            try {
+                await p;
+            } finally {
+                if (productPricesPromise === p) productPricesPromise = null;
+                renderJualChannelNotice();
+                renderPricingTables();
+            }
+        }
+
+        function renderJualChannelNotice() {
+            const el = document.getElementById("jualChannelNotice");
+            if (!el) return;
+            if (productPricesLoaded) {
+                el.style.display = "none";
+                el.textContent = "";
+                return;
+            }
+            el.style.display = "block";
+            el.innerHTML = '<i class="fas fa-triangle-exclamation"></i> Tabel <code>product_prices</code> belum tersedia atau tidak dapat diakses. ' +
+                'Harga per channel tidak dapat ditampilkan maupun disimpan. Jalankan migration <code>002_product_prices.sql</code>. ' +
+                'Sistem TIDAK akan menulis ke <code>products.price</code>.' +
+                (productPricesError ? ' <span style="opacity:0.7;">(' + ppEscapeHtml(productPricesError) + ')</span>' : '');
+        }
+
+        function openProductPriceModal(productId) {
+            const p = products.find(x => ppSameId(x.id, productId));
+            if (!p) return;
+            if (!appUserIsOwner()) { showToast("Hanya owner yang dapat mengubah harga"); return; }
+            if (!productPricesLoaded) { showToast("product_prices belum tersedia"); return; }
+            ppEditingProductId = productId;
+            const nameEl = document.getElementById("ppProductName");
+            if (nameEl) nameEl.textContent = p.name + (p.sku ? " \u00b7 " + p.sku : "");
+            PRODUCT_PRICE_CHANNELS.forEach(ch => {
+                const input = document.getElementById(ch.inputId);
+                if (!input) return;
+                const v = productChannelPrice(productId, ch.key);
+                input.value = (v == null) ? "" : String(v);
+            });
+            const notice = document.getElementById("ppNotice");
+            if (notice) notice.style.display = "none";
+            const saveBtn = document.getElementById("ppSave");
+            if (saveBtn) saveBtn.disabled = false;
+            const modal = document.getElementById("productPriceModal");
+            if (modal) modal.classList.add("active");
+        }
+
+        function closeProductPriceModal() {
+            const modal = document.getElementById("productPriceModal");
+            if (modal) modal.classList.remove("active");
+            ppEditingProductId = null;
+        }
+
+        async function saveProductPrices() {
+            if (!appUserIsOwner()) { showToast("Hanya owner yang dapat mengubah harga"); return; }
+            if (!productPricesLoaded) { showToast("product_prices belum tersedia"); return; }
+            const productId = ppEditingProductId;
+            const p = products.find(x => ppSameId(x.id, productId));
+            if (!p) { showToast("Produk tidak ditemukan"); return; }
+
+            const rows = [];
+            const newVals = {};
+            for (const ch of PRODUCT_PRICE_CHANNELS) {
+                const input = document.getElementById(ch.inputId);
+                const raw = input ? String(input.value).trim() : "";
+                if (raw === "") { showToast(ch.label + " wajib diisi"); return; }
+                const n = Number(raw);
+                if (!isFinite(n) || n < 0 || Math.floor(n) !== n) {
+                    showToast(ch.label + " harus angka bulat >= 0");
+                    return;
+                }
+                // updated_at TIDAK dikirim; biarkan DEFAULT NOW() di database.
+                rows.push({ product_id: productId, channel: ch.key, price: n });
+                newVals[ch.key] = n;
+            }
+
+            const saveBtn = document.getElementById("ppSave");
+            const notice = document.getElementById("ppNotice");
+            if (saveBtn) saveBtn.disabled = true;
+            try {
+                const res = await apiFetch("/api/product-prices", {
+                    method: "PUT",
+                    body: rows
+                });
+                if (!res.ok) throw new Error((res.data && res.data.error) ? res.data.error : ("HTTP " + res.status));
+
+                const key = String(productId);
+                if (!productPrices[key]) productPrices[key] = {};
+                PRODUCT_PRICE_CHANNELS.forEach(ch => { productPrices[key][ch.key] = newVals[ch.key]; });
+                renderPricingTables();
+                showToast("Harga " + p.name + " tersimpan (per channel)");
+                closeProductPriceModal();
+            } catch (err) {
+                const msg = (err && err.message) ? err.message : "Gagal menyimpan harga";
+                if (notice) {
+                    notice.style.display = "block";
+                    notice.innerHTML = '<i class="fas fa-triangle-exclamation"></i> Gagal menyimpan ke <code>product_prices</code>: ' + ppEscapeHtml(msg) +
+                        '. Tidak ada perubahan yang ditulis ke <code>products.price</code>.';
+                }
+                showToast("Gagal menyimpan harga");
+                console.warn("saveProductPrices error:", msg);
+            } finally {
+                if (saveBtn) saveBtn.disabled = false;
             }
         }
 
@@ -7369,6 +7711,9 @@
             if (pageId === "pos") setTimeout(() => document.getElementById("scanInput")?.focus(), 100);
             if (pageId === "pengaturan") setTimeout(() => renderAccountCards(), 10);
             if (pageId === "akuntansi") setTimeout(() => loadAccounting(), 10);
+            // Harga per channel: muat ulang product_prices (RLS authenticated)
+            // saat halaman Harga Jual dibuka, lalu render ulang tabel.
+            if (pageId === "harga-jual") setTimeout(() => ensureProductPricesLoaded(true), 10);
             // Pastikan polling live tetap berjalan saat halaman Penjualan dibuka.
             if (pageId === "daftar-penjualan") ensureOrdersPolling();
         }
@@ -7887,6 +8232,13 @@
         window.renderRekapPenjualan = renderRekapPenjualan;
         window.applyMarkup = applyMarkup;
         window.editSellPrice = editSellPrice;
+        window.openProductPriceModal = openProductPriceModal;
+        window.closeProductPriceModal = closeProductPriceModal;
+        window.saveProductPrices = saveProductPrices;
+        window.setPpChannel = setPpChannel;
+        window.savePriceChannelRow = savePriceChannelRow;
+        window.renderPriceChannelTable = renderPriceChannelTable;
+        window.ppSearchChange = ppSearchChange;
         window.doLogout = doLogout;
         window.filterMenuByRole = filterMenuByRole;
         window.renderAccountCards = renderAccountCards;
