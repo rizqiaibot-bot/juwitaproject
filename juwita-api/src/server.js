@@ -1,6 +1,6 @@
 import http from "node:http";
 import { pool } from "./db.js";
-import { verifyPassword } from "./auth.js";
+import { verifyPassword, hashPassword } from "./auth.js";
 import { signAccessToken, verifyAccessToken } from "./jwt.js";
 import { requireAuth, requireOwner } from "./middleware.js";
 
@@ -423,6 +423,52 @@ async function handleOrdersPatch(req, res, orderId) {
   }
 }
 
+// --- Employee admin (owner): buat user + reset password (password_hash lokal) ---
+async function handleEmployeesPost(req, res) {
+  const { error, data } = await readJsonBody(req, 64 * 1024);
+  if (error || !data || typeof data !== "object") {
+    return sendJson(res, 400, { error: "invalid_request" });
+  }
+  const action = data.action;
+  try {
+    if (action === "create") {
+      const phone = nonEmptyString(data.phone) ? data.phone : "";
+      const fullName = nonEmptyString(data.full_name) ? data.full_name : "";
+      const role = nonEmptyString(data.role) ? data.role : "";
+      const password = nonEmptyString(data.password) ? data.password : "";
+      if (!phone || !fullName || !role || password.length < 6) {
+        return sendJson(res, 400, { error: "invalid_request" });
+      }
+      const exists = await pool.query("SELECT id FROM app_users WHERE phone = $1", [phone]);
+      if (exists.rows.length) return sendJson(res, 409, { error: "phone_exists" });
+      const hash = await hashPassword(password);
+      const menus = Array.isArray(data.menus) ? JSON.stringify(data.menus) : "[]";
+      const { rows } = await pool.query(
+        `INSERT INTO app_users (phone, full_name, role, role_label, menus, status, password_hash)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, phone, full_name, role, role_label, menus, status`,
+        [phone, fullName, role, data.role_label || role, menus, data.status || "ACTIVE", hash]
+      );
+      return sendJson(res, 200, { data: rows[0] });
+    }
+    if (action === "reset_password") {
+      const id = data.id || data.auth_user_id;
+      const password = nonEmptyString(data.password) ? data.password : "";
+      if (!id || password.length < 6) return sendJson(res, 400, { error: "invalid_request" });
+      const hash = await hashPassword(password);
+      const { rows } = await pool.query(
+        "UPDATE app_users SET password_hash = $1 WHERE id = $2 OR (auth_user_id IS NOT NULL AND auth_user_id = $2) RETURNING id",
+        [hash, id]
+      );
+      if (!rows.length) return sendJson(res, 404, { error: "user_not_found" });
+      return sendJson(res, 200, { data: { status: "ok" } });
+    }
+    return sendJson(res, 400, { error: "unknown_action" });
+  } catch (err) {
+    console.error("employees POST failed:", err.message);
+    return sendJson(res, 500, { error: "internal_error" });
+  }
+}
+
 async function handleRpc(req, res, name) {
   try {
     if (name === "close_opname") {
@@ -556,6 +602,12 @@ const server = http.createServer(async (req, res) => {
     const user = await requireAuth(req, res);
     if (!user) return;
     return handleOrdersPost(req, res);
+  }
+  if (req.method === "POST" && pathname === "/api/employees") {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    if (!requireOwner(req, res)) return;
+    return handleEmployeesPost(req, res);
   }
   if (req.method === "PATCH" && pathname.startsWith("/api/orders/")) {
     const user = await requireAuth(req, res);

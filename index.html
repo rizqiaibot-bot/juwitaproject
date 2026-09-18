@@ -4402,26 +4402,11 @@
             m.classList.remove("active");
         }
 
-        // Panggil Edge Function employee-admin (owner-only; JWT session Rizkin).
+        // Panggil API lokal untuk kelola karyawan (create/reset password) — owner-only.
         async function employeeAdminCall(payload) {
-            if (!sb || !sb.auth) throw new Error("Auth tidak tersedia");
-            const { data: sessionData } = await sb.auth.getSession();
-            const session = sessionData && sessionData.session;
-            if (!session || !session.access_token) throw new Error("Sesi tidak ditemukan, silakan login ulang");
-            const res = await fetch(SUPABASE_URL + "/functions/v1/employee-admin", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": "Bearer " + session.access_token
-                },
-                body: JSON.stringify(payload)
-            });
-            let data = null;
-            try { data = await res.json(); } catch (e) { data = null; }
-            if (!res.ok) {
-                throw new Error((data && data.error) ? String(data.error) : ("HTTP " + res.status));
-            }
-            return data;
+            const res = await apiFetch("/api/employees", { method: "POST", body: payload });
+            if (!res.ok) throw new Error((res.data && res.data.error) ? res.data.error : ("HTTP " + res.status));
+            return res.data && res.data.data;
         }
 
         async function saveEmployeeForm() {
@@ -4490,9 +4475,12 @@
             if (emp.auth_user_id === currentUser.id) {
                 const np = prompt("Password baru untuk akun Anda (min 6 karakter):");
                 if (!np || np.length < 6) { showToast("Password minimal 6 karakter"); return; }
-                const { error } = await sb.auth.updateUser({ password: np });
-                if (error) showToast("Gagal reset: " + error.message);
-                else showToast("Password akun Anda berhasil diubah");
+                try {
+                    await employeeAdminCall({ action: "reset_password", id: currentUser.id, password: np });
+                    showToast("Password akun Anda berhasil diubah");
+                } catch (err) {
+                    showToast("Gagal reset: " + err.message);
+                }
                 return;
             }
             const np = prompt("Password baru untuk " + emp.full_name + " (min 6 karakter):");
