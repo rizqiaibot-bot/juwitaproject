@@ -6013,17 +6013,15 @@
         async function markPicked(orderId) {
             const o = ordersData.find(x => x.orderId === orderId);
             if (!o) return;
-            const { data, error } = await sb.rpc('record_warehouse_action', {
-                p_order_id: orderId, p_action: 'pick', p_petugas: currentUserName()
-            });
+            const pickedAt = new Date().toISOString();
+            const pickedBy = currentUserName();
+            const { error } = await sb.from('orders')
+                .update({ wmsstatus: 'Dipick', picked_at: pickedAt, picked_by: pickedBy })
+                .eq('orderid', orderId);
             if (error) { showToast("Gagal menandai dipick: " + error.message); return; }
-            if (data && data.status !== 'ok') { showToast(data.message || "Gagal menandai dipick"); return; }
-            if (data) {
-                o.wmsStatus = data.wmsstatus || 'Dipick';
-                o.picked_at = data.picked_at; o.picked_by = data.picked_by;
-            } else {
-                o.wmsStatus = 'Dipick'; o.picked_at = new Date().toISOString(); o.picked_by = currentUserName();
-            }
+            o.wmsStatus = 'Dipick';
+            o.picked_at = pickedAt;
+            o.picked_by = pickedBy;
             renderWarehousePicking();
             renderWarehousePacking();
             showToast(`${orderId} ditandai sudah dipick`);
