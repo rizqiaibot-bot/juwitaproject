@@ -3404,32 +3404,13 @@
             return { ok: res.ok, status: res.status, data: data };
         }
         let sb = null;
-        try {
-            if (typeof supabase !== 'undefined') {
-                sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-            }
-        } catch (e) {
-            console.warn("Supabase client init failed:", e.message);
-        }
-        if (!sb) {
-            console.warn("Supabase SDK not available - running in offline mode");
-            const noopPromise = Promise.resolve({ data: null, error: { message: "offline" } });
-            const noopThenable = { then: (cb) => { cb({ data: null, error: { message: "offline" } }); return noopThenable; }, catch: () => noopThenable };
-            const builder = new Proxy(function(){}, {
-                get: () => () => builder,
-                apply: () => noopThenable
-            });
-            builder.then = (cb) => { cb({ data: null, error: { message: "offline" } }); return noopPromise; };
-            sb = { from: () => builder };
-        }
 
         // ============================================================
         // DATA LOKAL — pengganti Supabase JS (sb). Semua akses tabel/RPC
-        // diterjemahkan ke API lokal (PostgreSQL lokal). realSb disimpan
-        // hanya untuk functions.invoke (Shopee) yang belum dipindahkan.
+        // diterjemahkan ke API lokal (PostgreSQL lokal). Tidak ada
+        // dependency Supabase Cloud.
         // ============================================================
-        const realSb = sb;
-        function makeLocalDb(realClient) {
+        function makeLocalDb() {
             function qsOf(state) {
                 const q = [];
                 for (const k in state.filters) q.push(encodeURIComponent(k) + "=" + encodeURIComponent(state.filters[k]));
@@ -3490,10 +3471,10 @@
                     getSession: async function () { return { data: { session: null } }; },
                     updateUser: async function () { return { data: null, error: { message: "reset password via API lokal" } }; },
                 },
-                functions: (realClient && realClient.functions) ? realClient.functions : { invoke: async function () { return { data: null, error: { message: "unavailable" } }; } },
+                functions: { invoke: async function () { return { data: null, error: { message: "shopee publish via /api/shopee/publish" } }; } },
             };
         }
-        sb = makeLocalDb(realSb);
+        sb = makeLocalDb();
 
         // ============================================================
         // DATA
@@ -5404,18 +5385,17 @@
             publishingProduct = true;
             showToast("Memproses publish ke Shopee...");
             try {
-                const { data, error } = await sb.functions.invoke('shopee-create-product', { body: { product_id: productId } });
-                if (error) {
-                    showToast("Publish gagal: " + error.message);
+                const res = await apiFetch("/api/shopee/publish", { method: "POST", body: { product_id: productId } });
+                const data = res.data && res.data.data;
+                if (!res.ok) {
+                    showToast("Publish gagal: " + ((data && data.error) || ("HTTP " + res.status)));
                     return;
                 }
-                if (data && data.success) {
-                    showToast(data.status === "already_published"
-                        ? "Produk sudah di Shopee (Item ID: " + data.item_id + ")"
-                        : "Publish berhasil. Item ID Shopee: " + data.item_id);
+                if (data && data.ok && data.item_id) {
+                    showToast("Publish berhasil. Item ID Shopee: " + data.item_id);
                     await initSupabaseData();
                 } else {
-                    showToast("Publish gagal: " + (data && data.error ? data.error : "Unknown error"));
+                    showToast("Publish gagal: " + ((data && data.error) ? data.error : "Unknown error"));
                 }
             } catch (err) {
                 showToast("Publish gagal: " + err.message);

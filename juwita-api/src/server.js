@@ -3,6 +3,7 @@ import { pool } from "./db.js";
 import { verifyPassword, hashPassword } from "./auth.js";
 import { signAccessToken, verifyAccessToken } from "./jwt.js";
 import { requireAuth, requireOwner } from "./middleware.js";
+import { connectShop, pullOrders, syncStock, syncPrice } from "./shopee.js";
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -252,7 +253,7 @@ const DATA_TABLES = new Set([
   "warehouse_receiving", "warehouse_racks", "warehouse_opname",
   "stock_mutations", "attendance_records",
   "app_users", "accounting_accounts", "accounting_transactions",
-  "v_account_balance",
+  "v_account_balance", "marketplace_config", "activity_log",
 ]);
 
 // Kolom sensitif yang tidak boleh dibaca/ditulis via data API.
@@ -469,6 +470,37 @@ async function handleEmployeesPost(req, res) {
   }
 }
 
+// --- Shopee (pengganti Edge Function) ---
+async function handleShopeeAction(req, res, action) {
+  const { data } = await readJsonBody(req, 64 * 1024);
+  const shopId = data && data.shop_id ? String(data.shop_id) : "";
+  try {
+    if (action === "connect") {
+      const r = await connectShop(shopId);
+      return sendJson(res, r.ok ? 200 : 400, { data: r });
+    }
+    if (action === "pull-orders") {
+      const r = await pullOrders(shopId);
+      return sendJson(res, 200, { data: r });
+    }
+    if (action === "stock-sync") {
+      const r = await syncStock(shopId);
+      return sendJson(res, 200, { data: r });
+    }
+    if (action === "price-sync") {
+      const r = await syncPrice(shopId);
+      return sendJson(res, 200, { data: r });
+    }
+    if (action === "publish") {
+      return sendJson(res, 200, { data: { ok: false, error: "publish produk Shopee belum tersedia via API lokal (perlu kredensial + atribut produk)" } });
+    }
+    return sendJson(res, 404, { error: "unknown_action" });
+  } catch (err) {
+    console.error(`shopee ${action} failed:`, err.message);
+    return sendJson(res, 500, { error: "internal_error" });
+  }
+}
+
 async function handleRpc(req, res, name) {
   try {
     if (name === "close_opname") {
@@ -618,6 +650,12 @@ const server = http.createServer(async (req, res) => {
     const user = await requireAuth(req, res);
     if (!user) return;
     return handleRpc(req, res, pathname.slice("/api/rpc/".length));
+  }
+  if (req.method === "POST" && pathname.startsWith("/api/shopee/")) {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    if (!requireOwner(req, res)) return;
+    return handleShopeeAction(req, res, pathname.slice("/api/shopee/".length));
   }
   if (pathname.startsWith("/api/data/")) {
     const user = await requireAuth(req, res);

@@ -615,15 +615,56 @@
 
 <div class="toast-container" id="toastContainer"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="config.js"></script>
 <script>
 // ============================================================
-// SUPABASE CLIENT
+// DATA LOKAL — API VPS (bukan Supabase Cloud)
 // ============================================================
-const SUPABASE_URL = (window.JUWITA_CONFIG && window.JUWITA_CONFIG.SUPABASE_URL) || "";
-const SUPABASE_KEY = (window.JUWITA_CONFIG && window.JUWITA_CONFIG.SUPABASE_ANON_KEY) || "";
-const SB = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const TOKEN_KEY = "juwita_token";
+async function apiFetch(path, options) {
+  const opts = options || {};
+  const headers = Object.assign({}, opts.headers || {});
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token) headers["Authorization"] = "Bearer " + token;
+  if (opts.body != null && typeof opts.body === "object") { headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(opts.body); }
+  const res = await fetch(path, Object.assign({}, opts, { headers: headers }));
+  let data = null; try { data = await res.json(); } catch (e) {}
+  return { ok: res.ok, status: res.status, data: data };
+}
+function makeLocalSb() {
+  function qsOf(st) {
+    var q = [];
+    for (var k in st.filters) q.push(encodeURIComponent(k) + "=" + encodeURIComponent(st.filters[k]));
+    if (st.order) { q.push("order=" + encodeURIComponent(st.order.col)); q.push("dir=" + st.order.dir); }
+    if (st.limit != null) q.push("limit=" + st.limit);
+    return q.length ? ("?" + q.join("&")) : "";
+  }
+  function from(table) {
+    var st = { filters: {}, order: null, limit: null, mode: "select", data: null, countMode: false };
+    var b = {};
+    b.select = function (cols, opts) {
+      if (opts && opts.count === "exact" && opts.head) st.countMode = true;
+      return b;
+    };
+    b.eq = function (col, val) { st.filters[col] = val; return b; };
+    b.order = function (col, o) { st.order = { col: col, dir: (o && o.ascending === false) ? "desc" : "asc" }; return b; };
+    b.limit = function (n) { st.limit = n; return b; };
+    b.update = function (d) { st.mode = "update"; st.data = d; return b; };
+    b.then = function (resolve, reject) { return run(table, st).then(resolve, reject); };
+    b.catch = function (reject) { return run(table, st).catch(reject); };
+    return b;
+  }
+  async function run(table, st) {
+    var res;
+    if (st.mode === "update") res = await apiFetch("/api/data/" + table + qsOf(st), { method: "PATCH", body: st.data });
+    else res = await apiFetch("/api/data/" + table + qsOf(st));
+    if (!res.ok) return { data: null, count: null, error: { message: (res.data && res.data.error) || ("HTTP " + res.status) } };
+    var rows = (res.data && res.data.data) || [];
+    if (st.countMode) return { count: rows.length, error: null };
+    return { data: rows, error: null };
+  }
+  return { from: from };
+}
+const SB = makeLocalSb();
 
 // ============================================================
 // TOAST
@@ -665,17 +706,20 @@ function statusBadge(status) {
 }
 
 // ============================================================
-// EDGE FUNCTION CALL
+// EDGE FUNCTION CALL → API lokal
 // ============================================================
 async function callEdgeFunction(name, body) {
-  var url = SUPABASE_URL + "/functions/v1/" + name;
-  var opts = {
-    method: body ? "POST" : "GET",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + SUPABASE_KEY }
+  var map = {
+    "shopee-connect": "connect",
+    "shopee-pull-orders": "pull-orders",
+    "shopee-stock-sync": "stock-sync",
+    "shopee-price-sync": "price-sync",
   };
-  if (body) opts.body = JSON.stringify(body);
-  var res = await fetch(url, opts);
-  return res.json();
+  var action = map[name];
+  if (!action) return { success: false, error: "edge function belum tersedia lokal: " + name };
+  var res = await apiFetch("/api/shopee/" + action, { method: "POST", body: body || {} });
+  if (!res.ok) return { success: false, error: (res.data && res.data.error) || ("HTTP " + res.status) };
+  return res.data && res.data.data;
 }
 
 // ============================================================
