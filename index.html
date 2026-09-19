@@ -2775,8 +2775,13 @@
         </div>
 
         <div id="page-margin-keuntungan" class="page-content">
-            <div class="page-header"><h1>Margin Keuntungan</h1><div class="page-header-desc">Analisis margin laba per produk</div></div>
-            <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>KATEGORI</th><th>HARGA BELI</th><th>HARGA JUAL</th><th>LABA KOTOR</th><th>MARGIN</th></tr></thead><tbody id="marginTableBody"></tbody></table></div>
+            <div class="page-header"><h1>Margin Keuntungan</h1><div class="page-header-desc">Analisis margin laba per produk per channel</div></div>
+            <div id="marginTabs" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+                <button type="button" class="pp-tab active" data-channel="pos" onclick="setMarginChannel('pos')">Margin POS</button>
+                <button type="button" class="pp-tab" data-channel="shopee:724153261" onclick="setMarginChannel('shopee:724153261')">Margin Shopee 1</button>
+                <button type="button" class="pp-tab" data-channel="shopee:1214362884" onclick="setMarginChannel('shopee:1214362884')">Margin Shopee 2</button>
+            </div>
+            <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>KATEGORI</th><th>HARGA BELI</th><th id="marginChannelColHeader">HARGA JUAL (POS)</th><th>LABA KOTOR</th><th>MARGIN</th></tr></thead><tbody id="marginTableBody"></tbody></table></div>
         </div>
 
         <div id="page-absensi" class="page-content">
@@ -5479,21 +5484,7 @@
             const jual = document.getElementById("jualTableBody");
             if (jual) renderPriceChannelTable();
             const margin = document.getElementById("marginTableBody");
-            if (margin) {
-                margin.innerHTML = products.map(p => {
-                    const laba = p.price - p.modal;
-                    const marginPct = p.price > 0 ? (laba / p.price * 100) : 0;
-                    const badge = marginPct >= 25 ? "badge-lunas" : marginPct >= 15 ? "badge-belum" : "badge-batal";
-                    return `<tr>
-                                <td><strong>${p.name}</strong></td>
-                                <td>${p.category}</td>
-                                <td>Rp ${p.modal.toLocaleString('id-ID')}</td>
-                                <td>Rp ${p.price.toLocaleString('id-ID')}</td>
-                                <td>Rp ${laba.toLocaleString('id-ID')}</td>
-                                <td><span class="badge-status ${badge}">${marginPct.toFixed(1)}%</span></td>
-                            </tr>`;
-                }).join('');
-            }
+            if (margin) renderMarginTable();
             const promo = document.getElementById("promoTableBody");
             if (promo) {
                 const promos = [
@@ -5535,6 +5526,51 @@
         let ppEditingProductId = null;
         let ppActiveChannel = PRODUCT_PRICE_CHANNELS[0].key;  // channel tab aktif (pos default)
         let ppSearchTerm = "";                                 // filter pencarian tab harga
+        let marginActiveChannel = "pos";                        // tab margin aktif (default POS)
+
+        // ============================================================
+        // MARGIN PER CHANNEL
+        // Harga beli = products.modal; harga jual = product_prices[channel].
+        // TIDAK memakai products.price. Hanya tampilan/perhitungan.
+        // ============================================================
+        const MARGIN_CHANNELS = [
+            { key: "pos", label: "POS" },
+            { key: "shopee:724153261", label: "Shopee 1" },
+            { key: "shopee:1214362884", label: "Shopee 2" }
+        ];
+
+        function setMarginChannel(channel) {
+            marginActiveChannel = channel;
+            document.querySelectorAll("#marginTabs .pp-tab").forEach(t => {
+                t.classList.toggle("active", t.getAttribute("data-channel") === channel);
+            });
+            const def = MARGIN_CHANNELS.find(c => c.key === channel) || MARGIN_CHANNELS[0];
+            const header = document.getElementById("marginChannelColHeader");
+            if (header) header.textContent = "HARGA JUAL (" + def.label.toUpperCase() + ")";
+            renderMarginTable();
+        }
+
+        function renderMarginTable() {
+            const body = document.getElementById("marginTableBody");
+            if (!body) return;
+            const channel = marginActiveChannel;
+            body.innerHTML = products.map(p => {
+                const beli = Number(p.modal) || 0;
+                const jual = productChannelPrice(p.id, channel);
+                const hargaJual = (jual != null) ? jual : 0;
+                const laba = hargaJual - beli;
+                const marginPct = hargaJual > 0 ? (laba / hargaJual * 100) : 0;
+                const badge = marginPct >= 25 ? "badge-lunas" : marginPct >= 15 ? "badge-belum" : "badge-batal";
+                return `<tr>
+                            <td><strong>${p.name}</strong></td>
+                            <td>${p.category}</td>
+                            <td>Rp ${beli.toLocaleString('id-ID')}</td>
+                            <td>Rp ${hargaJual.toLocaleString('id-ID')}</td>
+                            <td>Rp ${laba.toLocaleString('id-ID')}</td>
+                            <td><span class="badge-status ${badge}">${marginPct.toFixed(1)}%</span></td>
+                        </tr>`;
+            }).join('');
+        }
 
         // Padanan frontend app_user_is_owner(): role='owner' + status ACTIVE.
         function appUserIsOwner() {
@@ -7791,6 +7827,7 @@
             // Harga per channel: muat ulang product_prices (RLS authenticated)
             // saat halaman Harga Jual dibuka, lalu render ulang tabel.
             if (pageId === "harga-jual") setTimeout(() => ensureProductPricesLoaded(true), 10);
+            if (pageId === "margin-keuntungan") setTimeout(() => ensureProductPricesLoaded(true), 10);
             // Pastikan polling live tetap berjalan saat halaman Penjualan dibuka.
             if (pageId === "daftar-penjualan") ensureOrdersPolling();
         }
