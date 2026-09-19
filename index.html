@@ -3255,8 +3255,8 @@
 
             <div style="font-size:0.9rem;font-weight:800;margin:10px 0;color:var(--text-primary);"><i class="fas fa-clock-rotate-left" style="color:var(--primary);margin-right:6px;"></i>Riwayat Transaksi</div>
             <div class="table-wrapper"><table>
-                <thead><tr><th>TANGGAL</th><th>KETERANGAN</th><th>MASUK</th><th>KELUAR</th><th>AKUN</th></tr></thead>
-                <tbody id="accHistoryBody"><tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">Belum ada transaksi.</td></tr></tbody>
+                <thead><tr><th>TANGGAL</th><th>KETERANGAN</th><th>MASUK</th><th>KELUAR</th><th>AKUN</th><th>AKSI</th></tr></thead>
+                <tbody id="accHistoryBody"><tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">Belum ada transaksi.</td></tr></tbody>
             </table></div>
         </div>
 
@@ -3495,7 +3495,7 @@
                 let res;
                 if (state.mode === "insert") res = await apiFetch("/api/data/" + table, { method: "POST", body: state.data });
                 else if (state.mode === "update") res = await apiFetch("/api/data/" + table + qsOf(state), { method: "PATCH", body: state.data });
-                else if (state.mode === "delete") res = await apiFetch("/api/data/" + table + qsOf(state), { method: "DELETE" });
+                else if (state.mode === "delete") res = await apiFetch("/api/data/" + table + qsOf(state), { method: "DELETE", body: {} });
                 else res = await apiFetch("/api/data/" + table + qsOf(state));
                 if (!res.ok) return { data: null, error: { message: (res.data && res.data.error) ? res.data.error : ("HTTP " + res.status) } };
                 let data = (res.data && res.data.data) ? res.data.data : null;
@@ -8424,6 +8424,7 @@
         // AKUNTANSI V1
         // ============================================================
         let accAccounts = [];
+        let accTxns = [];
 
         function accFmtRp(n) {
             return "Rp " + Number(n || 0).toLocaleString('id-ID');
@@ -8437,6 +8438,15 @@
         function accAccountCode(id) {
             for (let i = 0; i < accAccounts.length; i++) if (accAccounts[i].id === id) return accAccounts[i].code;
             return "";
+        }
+
+        function accTypeLabel(type) {
+            if (type === "POS_SALE") return "Penjualan POS";
+            if (type === "PIUTANG_PAYMENT") return "Pembayaran Piutang";
+            if (type === "TRANSFER") return "Transfer Antar Akun";
+            if (type === "IN") return "Uang Masuk";
+            if (type === "OUT") return "Uang Keluar";
+            return type;
         }
 
         function accOptions(selId, excludeId) {
@@ -8571,6 +8581,148 @@
             }
         }
 
+        function accEscAttr(s) {
+            return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        function accSetSelect(selId, val) {
+            const sel = document.getElementById(selId);
+            if (!sel) return;
+            for (let i = 0; i < sel.options.length; i++) {
+                if (sel.options[i].value !== "" && Number(sel.options[i].value) === Number(val)) {
+                    sel.selectedIndex = i;
+                    return;
+                }
+            }
+        }
+
+        function accShowEditForm(id) {
+            const t = accTxns.find(function (x) { return Number(x.id) === Number(id); });
+            const panel = document.getElementById("accFormPanel");
+            if (!panel) return;
+            if (!t) { showToast("Transaksi tidak ditemukan"); return; }
+            if (t.type === "POS_SALE") { showToast("Transaksi POS bersifat read-only"); return; }
+            if (accAccounts.length === 0) { showToast("Data akun belum tersedia, coba lagi"); return; }
+
+            const kind = t.type;
+            let html = '<div style="font-weight:800;margin-bottom:12px;"><i class="fas fa-pen" style="color:var(--primary);"></i> Edit Transaksi — ' + accTypeLabel(kind) + '</div>';
+
+            if (kind === "IN") {
+                html += '<div class="form-group"><label>Nominal (Rp)</label><input type="number" id="accEditAmount" min="1" class="form-control" value="' + t.amount + '" /></div>' +
+                    '<div class="form-group"><label>Masuk ke Akun</label><select id="accEditAccount" class="form-control"></select></div>' +
+                    '<div class="form-group"><label>Keterangan</label><input type="text" id="accEditNote" class="form-control" value="' + accEscAttr(t.keterangan) + '" /></div>';
+            } else if (kind === "OUT") {
+                html += '<div class="form-group"><label>Nominal (Rp)</label><input type="number" id="accEditAmount" min="1" class="form-control" value="' + t.amount + '" /></div>' +
+                    '<div class="form-group"><label>Keluar dari Akun</label><select id="accEditAccount" class="form-control"></select></div>' +
+                    '<div class="form-group"><label>Keterangan</label><input type="text" id="accEditNote" class="form-control" value="' + accEscAttr(t.keterangan) + '" /></div>';
+            } else if (kind === "TRANSFER") {
+                html += '<div class="form-group"><label>Dari Akun</label><select id="accEditFrom" class="form-control"></select></div>' +
+                    '<div class="form-group"><label>Ke Akun</label><select id="accEditTo" class="form-control"></select></div>' +
+                    '<div class="form-group"><label>Nominal (Rp)</label><input type="number" id="accEditAmount" min="1" class="form-control" value="' + t.amount + '" /></div>' +
+                    '<div class="form-group"><label>Keterangan</label><input type="text" id="accEditNote" class="form-control" value="' + accEscAttr(t.keterangan) + '" /></div>';
+            } else if (kind === "PIUTANG_PAYMENT") {
+                html += '<div class="form-group"><label>Dari Akun (otomatis Piutang)</label><input type="text" class="form-control" value="Piutang" disabled /></div>' +
+                    '<div class="form-group"><label>Diterima ke Akun</label><select id="accEditTo" class="form-control"></select></div>' +
+                    '<div class="form-group"><label>Nominal (Rp)</label><input type="number" id="accEditAmount" min="1" class="form-control" value="' + t.amount + '" /></div>' +
+                    '<div class="form-group"><label>Keterangan</label><input type="text" id="accEditNote" class="form-control" value="' + accEscAttr(t.keterangan) + '" /></div>';
+            }
+
+            html += '<div style="display:flex;gap:10px;margin-top:8px;"><button class="checkout-btn" style="flex:1;" onclick="accSubmitEdit(' + t.id + ')">Simpan</button><button class="close-modal-btn" style="flex:0 0 auto;width:100px;background:var(--text-muted);" onclick="accCloseForm()">Batal</button></div>';
+
+            panel.innerHTML = html;
+            if (kind === "IN") {
+                accOptions("accEditAccount", null);
+                accSetSelect("accEditAccount", t.akun_ke);
+            } else if (kind === "OUT") {
+                accOptions("accEditAccount", null);
+                accSetSelect("accEditAccount", t.akun_dari);
+            } else if (kind === "TRANSFER") {
+                accOptions("accEditFrom", null);
+                accOptions("accEditTo", null);
+                accSetSelect("accEditFrom", t.akun_dari);
+                accSetSelect("accEditTo", t.akun_ke);
+            } else if (kind === "PIUTANG_PAYMENT") {
+                accOptions("accEditTo", null);
+                const recv = accAccounts.find(function (a) { return a.code === "RECEIVABLE"; });
+                const sel = document.getElementById("accEditTo");
+                if (recv && sel) {
+                    for (let i = 0; i < sel.options.length; i++) {
+                        if (sel.options[i].value !== "" && Number(sel.options[i].value) === recv.id) { sel.remove(i); break; }
+                    }
+                }
+                accSetSelect("accEditTo", t.akun_ke);
+            }
+            panel.style.display = "block";
+            panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+
+        async function accSubmitEdit(id) {
+            const t = accTxns.find(function (x) { return Number(x.id) === Number(id); });
+            if (!t) return;
+            const kind = t.type;
+            const g = function (sid) { const el = document.getElementById(sid); return el ? el.value : ""; };
+            const num = function (sid) { return parseInt(String(g(sid)).replace(/\D/g, "")) || 0; };
+            let payload = null;
+
+            if (kind === "IN") {
+                const amount = num("accEditAmount"); const note = g("accEditNote").trim() || "Uang masuk"; const acc = num("accEditAccount");
+                if (!amount) { showToast("Nominal wajib diisi"); return; }
+                if (!acc) { showToast("Pilih akun tujuan"); return; }
+                payload = { keterangan: note, amount: amount, akun_ke: acc, akun_dari: null };
+            } else if (kind === "OUT") {
+                const amount = num("accEditAmount"); const note = g("accEditNote").trim() || "Uang keluar"; const acc = num("accEditAccount");
+                if (!amount) { showToast("Nominal wajib diisi"); return; }
+                if (!acc) { showToast("Pilih akun asal"); return; }
+                payload = { keterangan: note, amount: amount, akun_dari: acc, akun_ke: null };
+            } else if (kind === "TRANSFER") {
+                const fromId = num("accEditFrom"), toId = num("accEditTo");
+                const amount = num("accEditAmount"); const note = g("accEditNote").trim() || "Transfer antar akun";
+                if (!fromId || !toId || fromId === toId) { showToast("Dari dan Ke akun harus berbeda"); return; }
+                if (!amount) { showToast("Nominal wajib diisi"); return; }
+                payload = { keterangan: note, amount: amount, akun_dari: fromId, akun_ke: toId };
+            } else if (kind === "PIUTANG_PAYMENT") {
+                const recv = accAccounts.find(function (a) { return a.code === "RECEIVABLE"; });
+                const toId = num("accEditTo");
+                const amount = num("accEditAmount"); const note = g("accEditNote").trim() || "Pembayaran piutang";
+                if (!recv || !toId || recv.id === toId) { showToast("Pilih akun penerimaan yang valid"); return; }
+                if (!amount) { showToast("Nominal wajib diisi"); return; }
+                payload = { keterangan: note, amount: amount, akun_dari: recv.id, akun_ke: toId };
+            }
+            if (!payload) return;
+
+            try {
+                const { error } = await sb.from("accounting_transactions").update(payload).eq("id", id);
+                if (error) throw new Error(error.message);
+                accCloseForm();
+                showToast("Transaksi akuntansi diperbarui");
+                loadAccounting();
+            } catch (e) {
+                const msg = (e && e.message) ? e.message : "gagal";
+                showToast(msg.indexOf("tidak mencukupi") !== -1 ? msg : ("Gagal simpan: " + msg));
+            }
+        }
+
+        async function accEditTransaction(id) {
+            if (accAccounts.length === 0) { await loadAccounting(); }
+            accShowEditForm(id);
+        }
+
+        async function accDeleteTransaction(id) {
+            const t = accTxns.find(function (x) { return Number(x.id) === Number(id); });
+            if (!t) return;
+            if (t.type === "POS_SALE") { showToast("Transaksi POS tidak dapat dihapus"); return; }
+            const desc = (t.keterangan || accTypeLabel(t.type)) + " (" + accFmtRp(t.amount) + ")";
+            if (!confirm("Hapus transaksi " + desc + "?\nTindakan ini tidak dapat dibatalkan.")) return;
+            try {
+                const { error } = await sb.from("accounting_transactions").delete().eq("id", id);
+                if (error) throw new Error(error.message);
+                showToast("Transaksi dihapus");
+                loadAccounting();
+            } catch (e) {
+                showToast("Gagal hapus: " + ((e && e.message) ? e.message : "gagal"));
+            }
+        }
+
         async function syncAccountingPos() {
             const st = document.getElementById("accSyncStatus");
             if (st) { st.style.display = "block"; st.textContent = "Menyinkronkan transaksi POS..."; }
@@ -8618,13 +8770,23 @@
             if (isIn) { masuk = accFmtRp(t.amount); akun = accAccountName(t.akun_ke); }
             else if (isOut) { keluar = accFmtRp(t.amount); akun = accAccountName(t.akun_dari); }
             else if (isMove) { masuk = accFmtRp(t.amount); keluar = accFmtRp(t.amount); akun = accAccountName(t.akun_dari) + " → " + accAccountName(t.akun_ke); }
-            const label = t.type === "POS_SALE" ? "Penjualan POS" : t.type === "PIUTANG_PAYMENT" ? "Bayar Piutang" : t.type;
+            const label = accTypeLabel(t.type);
+            let aksi = "";
+            if (t.type === "POS_SALE") {
+                aksi = '<span style="color:var(--text-muted);font-size:0.72rem;white-space:nowrap;" title="Transaksi otomatis dari POS (read-only)"><i class="fas fa-lock"></i> Otomatis</span>';
+            } else {
+                aksi = '<div class="aksi-group" style="justify-content:flex-end;">' +
+                    '<button class="aksi-btn" onclick="accEditTransaction(' + t.id + ')" title="Edit"><i class="fas fa-pen"></i></button>' +
+                    '<button class="aksi-btn" onclick="accDeleteTransaction(' + t.id + ')" style="color:var(--danger);" title="Hapus"><i class="fas fa-trash"></i></button>' +
+                    '</div>';
+            }
             return '<tr>' +
                 '<td>' + dateStr + '</td>' +
                 '<td>' + (t.keterangan || "") + ' <span style="opacity:.6;font-size:.7rem;">[' + label + ']</span></td>' +
                 '<td style="color:var(--success);font-weight:700;">' + masuk + '</td>' +
                 '<td style="color:var(--danger);font-weight:700;">' + keluar + '</td>' +
                 '<td>' + akun + '</td>' +
+                '<td>' + aksi + '</td>' +
                 '</tr>';
         }
 
@@ -8640,7 +8802,7 @@
             const body = document.getElementById("accHistoryBody");
             if (body) {
                 if (!txns.length) {
-                    body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">Belum ada transaksi.</td></tr>';
+                    body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">Belum ada transaksi.</td></tr>';
                 } else {
                     body.innerHTML = txns.map(accHistoryRow).join("");
                 }
@@ -8663,6 +8825,7 @@
                 ]);
                 if (balRes.error) throw new Error(balRes.error.message);
                 if (txRes.error) throw new Error(txRes.error.message);
+                accTxns = txRes.data || [];
                 renderAccountingUI(balRes.data || [], txRes.data || []);
             } catch (e) {
                 console.warn("Akuntansi load data error:", e && e.message);
@@ -8671,6 +8834,9 @@
         window.accShowForm = accShowForm;
         window.accCloseForm = accCloseForm;
         window.accSubmit = accSubmit;
+        window.accEditTransaction = accEditTransaction;
+        window.accDeleteTransaction = accDeleteTransaction;
+        window.accSubmitEdit = accSubmitEdit;
         window.syncAccountingPos = syncAccountingPos;
         window.loadAccounting = loadAccounting;
     </script>
