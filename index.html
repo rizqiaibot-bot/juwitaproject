@@ -1438,6 +1438,39 @@
             background: var(--border-hover);
         }
 
+        /* ===== STOCK OPNAME ===== */
+        .opname-card {
+            max-width: none;
+            margin: 0 0 24px 0;
+            padding: 24px 28px;
+        }
+        .opname-card h3 {
+            margin-bottom: 16px;
+            font-size: 1.05rem;
+        }
+        .opname-card .opname-start-btn {
+            width: auto;
+            padding: 11px 32px;
+            margin-top: 2px;
+        }
+        .opname-section-header {
+            margin-bottom: 16px;
+        }
+        .opname-section-header h3 {
+            font-size: 1rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin: 0;
+        }
+        .opname-empty {
+            text-align: center;
+            padding: 18px 20px;
+            color: var(--text-muted);
+            background: var(--bg-card);
+            border: 1px dashed var(--border-color);
+            border-radius: var(--radius-md);
+        }
+
         /* ===== EMPLOYEE GRID ===== */
         .emp-grid {
             display: grid;
@@ -2709,15 +2742,15 @@
                     <div class="page-header-desc">Rekonsiliasi stok fisik per zona gudang</div>
                 </div>
             </div>
-            <div class="form-card" style="margin-bottom:20px;">
-                <h3 style="margin-bottom:16px;">Buat Sesi Opname</h3>
+            <div class="form-card opname-card">
+                <h3>Buat Sesi Opname</h3>
                 <div class="form-grid">
                     <div class="form-group"><label>Zona Gudang</label><select id="opnameZone" class="form-control"></select></div>
                     <div class="form-group"><label>Petugas</label><input type="text" id="opnameOfficer" class="form-control" placeholder="Nama petugas" /></div>
                 </div>
-                <button class="checkout-btn" onclick="startOpname()" style="width:auto;padding:10px 28px;"><i class="fas fa-play"></i> Mulai Opname</button>
+                <button class="checkout-btn opname-start-btn" onclick="startOpname()"><i class="fas fa-play"></i> Mulai Opname</button>
             </div>
-            <div class="page-header" style="margin-top:8px;"><h3 style="font-size:1rem;">Sesi Opname Aktif</h3></div>
+            <div class="opname-section-header"><h3>Sesi Opname Aktif</h3></div>
             <div id="opnameActiveList"></div>
         </div>
 
@@ -6385,7 +6418,7 @@
             }
             const openSessions = warehouseOpname.filter(o => o.status === 'open');
             if (!openSessions.length) {
-                container.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text-muted);">Tidak ada sesi opname aktif</div>';
+                container.innerHTML = '<div class="opname-empty">Tidak ada sesi opname aktif</div>';
                 return;
             }
             container.innerHTML = openSessions.map(s => `<div class="account-card">
