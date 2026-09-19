@@ -2630,7 +2630,7 @@
         <!-- ===== PLACEHOLDER HALAMAN LAINNYA ===== -->
         <div id="page-monitor-stok" class="page-content">
             <div class="page-header"><h1>Monitor Stok</h1><div class="page-header-desc">Pantau ketersediaan stok semua produk secara real-time</div></div>
-            <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>KATEGORI</th><th>STOK</th><th>SYNC</th><th>STATUS</th></tr></thead><tbody id="stokTableBody"></tbody></table></div>
+            <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>KATEGORI</th><th>STOK</th><th>STATUS</th></tr></thead><tbody id="stokTableBody"></tbody></table></div>
         </div>
 
         <div id="page-mutasi-stok" class="page-content">
@@ -5453,13 +5453,13 @@
             const tbody = document.getElementById("stokTableBody");
             if (!tbody) return;
             tbody.innerHTML = products.map(p => {
-                const status = p.stock >= (p.minStock ?? 5) ? "Aman" : "Menipis";
+                const min = (p.minstock != null) ? Number(p.minstock) : 5;
+                const status = p.stock >= min ? "Aman" : "Menipis";
                 const badge = status === "Aman" ? "badge-lunas" : "badge-belum";
                 return `<tr>
                             <td><strong>${p.name}</strong></td>
                             <td>${p.category}</td>
                             <td><strong style="font-size:1.1rem;">${p.stock.toLocaleString('id-ID')}</strong></td>
-                            <td><span class="badge-status badge-belum" style="font-size:0.62rem;" title="Menunggu sync ke Shopee"><i class="fas fa-sync-alt fa-spin"></i> Pending</span></td>
                             <td><span class="badge-status ${badge}">${status}</span></td>
                         </tr>`;
             }).join('');
