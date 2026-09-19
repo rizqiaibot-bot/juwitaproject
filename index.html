@@ -11,10 +11,7 @@
     <!-- Font Awesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 
-    <!-- Supabase SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-    <!-- Konfigurasi terpusat (URL + anon key) -->
+    <!-- Konfigurasi terpusat (API base URL) -->
     <script src="config.js"></script>
 
     <style>
@@ -3376,10 +3373,8 @@
     <!-- ===== JAVASCRIPT ===== -->
     <script>
         // ============================================================
-        // SUPABASE CLIENT
+        // CLIENT LOKAL (VPS) — tanpa Supabase Cloud
         // ============================================================
-        const SUPABASE_URL = (window.JUWITA_CONFIG && window.JUWITA_CONFIG.SUPABASE_URL) || "";
-        const SUPABASE_KEY = (window.JUWITA_CONFIG && window.JUWITA_CONFIG.SUPABASE_ANON_KEY) || "";
         const API_BASE_URL = (window.JUWITA_CONFIG && window.JUWITA_CONFIG.API_BASE_URL) || "";
         const JUWITA_TOKEN_KEY = "juwita_token";
 
