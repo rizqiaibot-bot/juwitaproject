@@ -265,15 +265,15 @@ export async function syncPrice(shopId) {
       [channel]
     );
     for (const r of rows) {
-      let ok = await updatePriceOne(acc, token, r.shopee_item_id, r.price);
-      if (!ok && refresh_token) {
+      let res = await updatePriceOne(acc, token, r.shopee_item_id, r.price);
+      if (!res.ok && refresh_token) {
         const rr = await refreshToken(acc, acc.shop_id, refresh_token);
         if (rr.access_token) {
           token = rr.access_token;
-          ok = await updatePriceOne(acc, token, r.shopee_item_id, r.price);
+          res = await updatePriceOne(acc, token, r.shopee_item_id, r.price);
         }
       }
-      if (ok) synced++; else failed++;
+      if (res.ok) synced++; else failed++;
     }
   }
   return { synced, failed };
@@ -289,5 +289,46 @@ async function updatePriceOne(acc, accessToken, itemId, price) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ item_id: Number(itemId), price_list: [{ original_price: Number(price) }] }),
   });
-  return res.ok && !body.error && !(body.response && Array.isArray(body.response.failure_list) && body.response.failure_list.length > 0);
+  if (!res.ok) return { ok: false, error: "HTTP " + res.status };
+  if (body.error) return { ok: false, error: String(body.error || "shopee_error") };
+  if (body.response && Array.isArray(body.response.failure_list) && body.response.failure_list.length > 0) {
+    const reason = (body.response.failure_list[0] && body.response.failure_list[0].failed_reason) || "failed";
+    return { ok: false, error: "failure_list: " + reason };
+  }
+  return { ok: true, error: null };
+}
+
+// Price sync SATU produk + SATU channel Shopee (dipanggil setelah Simpan harga).
+// Tidak menyentuh produk lain dan tidak sync seluruh product_prices.
+export async function syncPriceOne(productId, channel) {
+  const channelByShop = { "shopee:724153261": "724153261", "shopee:1214362884": "1214362884" };
+  const shopId = channelByShop[channel];
+  if (!shopId) return { ok: false, skipped: true, error: "channel bukan Shopee" };
+
+  const accounts = await loadAccounts();
+  const acc = accounts.find((a) => a.shop_id === shopId);
+  if (!acc || !acc.partner_id) return { ok: false, error: "akun Shopee tidak tersedia" };
+
+  const { rows: maps } = await pool.query(
+    "SELECT shopee_item_id FROM product_shopee_mapping WHERE product_id = $1 AND shop_id = $2 LIMIT 1",
+    [productId, shopId]
+  );
+  if (!maps.length || maps[0].shopee_item_id == null) return { ok: false, error: "belum ada mapping Shopee" };
+
+  const { rows: prices } = await pool.query(
+    "SELECT price FROM product_prices WHERE product_id = $1 AND channel = $2 LIMIT 1",
+    [productId, channel]
+  );
+  if (!prices.length || prices[0].price == null) return { ok: false, error: "harga tidak ditemukan" };
+  const price = Number(prices[0].price);
+
+  const { access_token, refresh_token } = await ensureToken(acc);
+  if (!access_token) return { ok: false, error: "access_token Shopee tidak tersedia" };
+
+  let r = await updatePriceOne(acc, access_token, maps[0].shopee_item_id, price);
+  if (!r.ok && refresh_token) {
+    const rr = await refreshToken(acc, acc.shop_id, refresh_token);
+    if (rr.access_token) r = await updatePriceOne(acc, rr.access_token, maps[0].shopee_item_id, price);
+  }
+  return { ok: r.ok, error: r.ok ? null : r.error };
 }

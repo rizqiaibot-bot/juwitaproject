@@ -3,7 +3,7 @@ import { pool } from "./db.js";
 import { verifyPassword, hashPassword } from "./auth.js";
 import { signAccessToken, verifyAccessToken } from "./jwt.js";
 import { requireAuth, requireOwner } from "./middleware.js";
-import { connectShop, pullOrders, syncStock, syncPrice } from "./shopee.js";
+import { connectShop, pullOrders, syncStock, syncPrice, syncPriceOne } from "./shopee.js";
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -240,7 +240,20 @@ async function handleProductPricesPut(req, res) {
       ]
     );
 
-    return sendJson(res, 200, { ok: true, count: entries.length });
+    // Setelah tersimpan di VPS, langsung sinkronkan harga channel Shopee
+    // (POS tidak dikirim ke Shopee). Gagal sync TIDAK membatalkan save.
+    const syncResults = [];
+    for (const e of entries) {
+      if (e.channel === "pos") continue;
+      try {
+        const sr = await syncPriceOne(e.productId, e.channel);
+        syncResults.push({ channel: e.channel, product_id: e.productId, ok: sr.ok, skipped: !!sr.skipped, error: sr.error || null });
+      } catch (err) {
+        syncResults.push({ channel: e.channel, product_id: e.productId, ok: false, error: (err && err.message) ? String(err.message).slice(0, 200) : "sync error" });
+      }
+    }
+
+    return sendJson(res, 200, { ok: true, count: entries.length, sync: syncResults });
   } catch (err) {
     console.error("product-prices upsert failed:", err.message);
     return sendJson(res, 500, { error: "internal_error" });

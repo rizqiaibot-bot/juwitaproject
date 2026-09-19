@@ -5635,7 +5635,19 @@
                 if (!productPrices[key]) productPrices[key] = {};
                 productPrices[key][ch.key] = n;
                 renderPriceChannelTable();
-                showToast(ch.label + " " + p.name + " tersimpan");
+                const syncList = (res.data && res.data.sync) || [];
+                const syncItem = syncList.find(x => x.channel === ch.key);
+                let msg;
+                if (ch.key === "pos") {
+                    msg = ch.label + " " + p.name + " tersimpan";
+                } else if (syncItem && syncItem.ok) {
+                    msg = "Tersimpan & tersinkron ke Shopee";
+                } else if (syncItem && !syncItem.ok) {
+                    msg = "Tersimpan di VPS, gagal sinkron Shopee" + (syncItem.error ? (": " + syncItem.error) : "");
+                } else {
+                    msg = "Tersimpan di VPS, menunggu sinkron Shopee";
+                }
+                showToast(msg);
             } catch (err) {
                 const msg = (err && err.message) ? err.message : "Gagal menyimpan harga";
                 showToast("Gagal menyimpan: " + msg);
@@ -5785,7 +5797,17 @@
                 if (!productPrices[key]) productPrices[key] = {};
                 PRODUCT_PRICE_CHANNELS.forEach(ch => { productPrices[key][ch.key] = newVals[ch.key]; });
                 renderPricingTables();
-                showToast("Harga " + p.name + " tersimpan (per channel)");
+                const syncList = (res.data && res.data.sync) || [];
+                const failed = syncList.filter(x => !x.ok);
+                let msg;
+                if (failed.length > 0) {
+                    msg = "Tersimpan di VPS, gagal sinkron Shopee" + (failed[0].error ? (": " + failed[0].error) : "");
+                } else if (syncList.length > 0) {
+                    msg = "Tersimpan & tersinkron ke Shopee";
+                } else {
+                    msg = "Harga " + p.name + " tersimpan (per channel)";
+                }
+                showToast(msg);
                 closeProductPriceModal();
             } catch (err) {
                 const msg = (err && err.message) ? err.message : "Gagal menyimpan harga";
