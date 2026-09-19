@@ -2518,6 +2518,12 @@
                             <input type="number" id="newProdModal" class="form-control" placeholder="Contoh: 11000" required />
                         </div>
                         <div class="form-group">
+                            <label>Supplier</label>
+                            <select id="newProdSupplier" class="form-control">
+                                <option value="">-- Pilih Supplier --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
                             <label>Harga Jual</label>
                             <input type="number" id="newProdPrice" class="form-control" placeholder="Contoh: 15000" required />
                         </div>
@@ -2733,8 +2739,11 @@
         </div>
 
         <div id="page-harga-belanja" class="page-content">
-            <div class="page-header"><h1>Harga Belanja Modal</h1><div class="page-header-desc">Daftar harga beli/modal dari supplier</div></div>
-            <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>KATEGORI</th><th>HARGA BELI</th><th>SUPPLIER</th><th>UPDATE</th></tr></thead><tbody id="belanjaTableBody"></tbody></table></div>
+            <div class="page-header">
+                <div><h1>Harga Belanja Modal</h1><div class="page-header-desc">Daftar harga beli/modal dari supplier</div></div>
+                <button class="checkout-btn" onclick="resetProductForm(); showPage('tambah-produk')" style="width:auto;padding:10px 24px;"><i class="fas fa-plus-circle"></i> Tambah Produk</button>
+            </div>
+            <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>KATEGORI</th><th>HARGA BELI</th><th>SUPPLIER</th><th>AKSI</th></tr></thead><tbody id="belanjaTableBody"></tbody></table></div>
         </div>
 
         <div id="page-harga-jual" class="page-content">
@@ -5369,6 +5378,8 @@
             document.getElementById("newProdSKU").value = p.sku || "";
             document.getElementById("newProdCat").value = p.category || "Frozen Food";
             document.getElementById("newProdModal").value = p.modal || 0;
+            const supEl = document.getElementById("newProdSupplier");
+            if (supEl) supEl.value = p.supplier || "";
             document.getElementById("newProdPrice").value = p.price || 0;
             document.getElementById("newProdStock").value = p.stock || 0;
             document.getElementById("newProdBarcode").value = p.barcode || "";
@@ -5456,14 +5467,12 @@
             const belanja = document.getElementById("belanjaTableBody");
             if (belanja) {
                 belanja.innerHTML = products.map(p => {
-                    const d = new Date();
-                    d.setDate(d.getDate() - Math.floor(Math.random() * 30));
                     return `<tr>
                                 <td><strong>${p.name}</strong></td>
                                 <td>${p.category}</td>
-                                <td>Rp ${p.modal.toLocaleString('id-ID')}</td>
-                                <td>${p.supplier}</td>
-                                <td>${d.toISOString().split('T')[0]}</td>
+                                <td>Rp ${(p.modal || 0).toLocaleString('id-ID')}</td>
+                                <td>${p.supplier || '-'}</td>
+                                <td><button class="aksi-btn" onclick="editProduct(${p.id})"><i class="fas fa-pen"></i> Edit</button></td>
                             </tr>`;
                 }).join('');
             }
