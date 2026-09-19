@@ -2630,6 +2630,7 @@
         <!-- ===== PLACEHOLDER HALAMAN LAINNYA ===== -->
         <div id="page-monitor-stok" class="page-content">
             <div class="page-header"><h1>Monitor Stok</h1><div class="page-header-desc">Pantau ketersediaan stok semua produk secara real-time</div></div>
+            <input id="stokSearch" class="filter-control" style="margin-bottom:12px;max-width:360px;width:100%;" placeholder="Cari produk (nama, SKU)..." oninput="stokSearchChange(this)" />
             <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>KATEGORI</th><th>STOK</th><th>STATUS</th></tr></thead><tbody id="stokTableBody"></tbody></table></div>
         </div>
 
@@ -5449,10 +5450,20 @@
         // ============================================================
         // MONITOR STOK
         // ============================================================
+        let stokSearchTerm = "";
+        function stokSearchChange(el) {
+            stokSearchTerm = el ? el.value : "";
+            renderMonitorStok();
+        }
+
         function renderMonitorStok() {
             const tbody = document.getElementById("stokTableBody");
             if (!tbody) return;
-            tbody.innerHTML = products.map(p => {
+            const q = stokSearchTerm.trim().toLowerCase();
+            const list = products.filter(p => !q ||
+                String(p.name || "").toLowerCase().includes(q) ||
+                String(p.sku || "").toLowerCase().includes(q));
+            tbody.innerHTML = list.map(p => {
                 const min = (p.minstock != null) ? Number(p.minstock) : 5;
                 const status = p.stock >= min ? "Aman" : "Menipis";
                 const badge = status === "Aman" ? "badge-lunas" : "badge-belum";
