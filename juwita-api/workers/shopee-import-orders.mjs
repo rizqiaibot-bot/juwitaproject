@@ -9,8 +9,10 @@
 // Idempoten: 1 mp_order_id hanya menghasilkan 1 orders.
 //   - Guard: marketplace_orders.internal_order_id.
 //   - orders.orderid PK.
+// Harga jual Shopee: product_prices (channel 'shopee:<shop_id>'), BUKAN products.price.
 // wmsstatus awal = "Baru" (masuk Picking, BUKAN langsung Siap Kirim).
 // Stok: products.stock -= qty + stock_mutations (OUT, pending) — sekali.
+// Order status dibatalkan/cancelled → TIDAK diimport.
 // ============================================================
 import pg from "pg";
 
@@ -18,7 +20,7 @@ const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) throw new Error("DATABASE_URL wajib di-set");
 
 const DRY_RUN = process.env.DRY_RUN === "1" || process.argv.includes("--dry-run");
-const SAMPLE_LIMIT = DRY_RUN ? (Number(process.env.DRY_RUN_LIMIT) || 10) : 0;
+const DRY_RUN_PER_SHOP = Number(process.env.DRY_RUN_LIMIT) || 5;
 
 const pool = new pg.Pool({ connectionString: DATABASE_URL, max: 2 });
 
@@ -26,6 +28,8 @@ const SHOPEE_API_URL = "https://partner.shopeemobile.com";
 const REQUEST_TIMEOUT_MS = 10000;
 const MAX_RETRIES = 2;
 const RETRYABLE_STATUSES = [500, 502, 503, 504];
+
+const CANCELLED_STATUSES = new Set(["CANCELLED", "IN_CANCEL", "FAILED", "TO_RETURN"]);
 
 const ACCOUNTS = [
   { label: "toko_1", partner_id: process.env.SHOPEE_PARTNER_ID || "", partner_key: process.env.SHOPEE_PARTNER_KEY || "", shop_id: process.env.SHOPEE_SHOP_ID || "" },
@@ -37,6 +41,10 @@ function accountForShop(shopId) {
     if (a.shop_id && String(a.shop_id) === String(shopId) && a.partner_id) return a;
   }
   return null;
+}
+
+function channelForShop(shopId) {
+  return "shopee:" + String(shopId);
 }
 
 async function signShopee(partnerId, partnerKey, path, timestamp, accessToken = "", shopId = "") {
@@ -118,7 +126,6 @@ async function getOrderDetail(account, accessToken, orderSns) {
 }
 
 // Pre-fetch detail (batch 50) untuk order yang raw_payload-nya belum punya item_list.
-// LIVE: update raw_payload di DB. DRY_RUN: hanya update in-memory.
 async function prefetchMissingDetails(rows, allowRefresh) {
   const byShop = {};
   for (const row of rows) {
@@ -151,10 +158,11 @@ async function prefetchMissingDetails(rows, allowRefresh) {
         const d = bySn[r.mp_order_id];
         if (!d) continue;
         r.raw_payload = d;
+        r.order_status = d.order_status || r.order_status;
         if (!DRY_RUN) {
           await pool.query(
-            "UPDATE marketplace_orders SET raw_payload=$1, customer_name=$2, total=$3 WHERE id=$4",
-            [JSON.stringify(d), d.buyer_user_name || d.recipient_address?.name || null, Math.round(parseFloat(d.total_amount) || 0), r.id]
+            "UPDATE marketplace_orders SET raw_payload=$1, customer_name=$2, total=$3, order_status=$4 WHERE id=$5",
+            [JSON.stringify(d), d.buyer_user_name || d.recipient_address?.name || null, Math.round(parseFloat(d.total_amount) || 0), d.order_status || r.order_status, r.id]
           );
         }
       }
@@ -163,7 +171,7 @@ async function prefetchMissingDetails(rows, allowRefresh) {
   return rows;
 }
 
-function buildMapping(payload, mappings, prodById) {
+function buildMapping(payload, mappings, prodById, priceById) {
   const items = Array.isArray(payload.item_list) ? payload.item_list : [];
   const mapByItemId = {};
   mappings.forEach((m) => { mapByItemId[String(m.shopee_item_id)] = m.product_id; });
@@ -177,7 +185,12 @@ function buildMapping(payload, mappings, prodById) {
       unmapped.push({ shopee_item_id: item.item_id, name: item.item_name || item.model_sku || String(item.item_id) });
       continue;
     }
-    const price = Number(prod.price) || 0;
+    const rawPrice = priceById[pid];
+    if (rawPrice == null) {
+      unmapped.push({ shopee_item_id: item.item_id, name: prod.name, reason: "harga channel belum diset" });
+      continue;
+    }
+    const price = Math.round(Number(rawPrice) || 0);
     mapped.push({ product_id: prod.id, product_name: prod.name, qty, price, subtotal: price * qty, stock: Number(prod.stock) || 0 });
   }
   return { items, mapped, unmapped };
@@ -195,9 +208,21 @@ async function loadMappings(shopId, itemIds) {
 async function loadProducts(productIds) {
   const uniq = [...new Set(productIds)];
   if (!uniq.length) return {};
-  const { rows } = await pool.query("SELECT id, name, price, stock FROM products WHERE id = ANY($1)", [uniq]);
+  const { rows } = await pool.query("SELECT id, name, stock FROM products WHERE id = ANY($1)", [uniq]);
   const map = {};
   rows.forEach((p) => { map[p.id] = p; });
+  return map;
+}
+
+async function loadChannelPrices(channel, productIds) {
+  const uniq = [...new Set(productIds)];
+  if (!uniq.length) return {};
+  const { rows } = await pool.query(
+    "SELECT product_id, price FROM product_prices WHERE channel = $1 AND product_id = ANY($2)",
+    [channel, uniq]
+  );
+  const map = {};
+  rows.forEach((p) => { map[p.product_id] = p.price; });
   return map;
 }
 
@@ -206,16 +231,30 @@ async function importOrder(row) {
   if (!payload || !Array.isArray(payload.item_list)) {
     return { status: "failed", order_sn: row.mp_order_id, error: "item_list tidak tersedia (prefetch detail gagal)" };
   }
+
+  // Guard status: order dibatalkan/tidak layak → tidak import.
+  const st = String(payload.order_status || row.order_status || "").toUpperCase();
+  if (CANCELLED_STATUSES.has(st)) {
+    if (!DRY_RUN) {
+      await pool.query(
+        "UPDATE marketplace_orders SET sync_status='ignored', error_message=$1, updated_at=now() WHERE id=$2",
+        ["cancelled: " + st, row.id]
+      );
+    }
+    return { status: "ignored", order_sn: row.mp_order_id, reason: st };
+  }
+
   const items = payload.item_list;
   if (!items.length) return { status: "failed", order_sn: row.mp_order_id, error: "item_list kosong" };
 
   const itemIds = items.map((i) => i.item_id).filter((v) => v != null);
   const mappings = await loadMappings(row.shop_id, itemIds);
   const prodById = await loadProducts(mappings.map((m) => m.product_id));
-  const { mapped, unmapped } = buildMapping(payload, mappings, prodById);
+  const priceById = await loadChannelPrices(channelForShop(row.shop_id), mappings.map((m) => m.product_id));
+  const { mapped, unmapped } = buildMapping(payload, mappings, prodById, priceById);
 
   if (unmapped.length) {
-    return { status: "failed", order_sn: row.mp_order_id, error: "produk belum dimapping: " + JSON.stringify(unmapped) };
+    return { status: "failed", order_sn: row.mp_order_id, error: "produk belum dimapping/harga belum diset: " + JSON.stringify(unmapped) };
   }
   if (!mapped.length) return { status: "failed", order_sn: row.mp_order_id, error: "tidak ada item yang terpetakan" };
 
@@ -227,7 +266,7 @@ async function importOrder(row) {
 
   if (DRY_RUN) {
     return {
-      status: "would_import", order_sn: row.mp_order_id, shop_id: row.shop_id,
+      status: "would_import", order_sn: row.mp_order_id, shop_id: row.shop_id, status_shopee: st,
       customer, total, date: dateStr, mapped: mapped.map((m) => ({ product_id: m.product_id, product_name: m.product_name, qty: m.qty, price: m.price, subtotal: m.subtotal })),
     };
   }
@@ -292,7 +331,7 @@ async function importOrder(row) {
 
 async function main() {
   const { rows } = await pool.query(
-    "SELECT id, shop_id, mp_order_id, raw_payload, internal_order_id FROM marketplace_orders WHERE platform='shopee' AND sync_status='pending' ORDER BY created_at ASC"
+    "SELECT id, shop_id, mp_order_id, raw_payload, order_status, internal_order_id FROM marketplace_orders WHERE platform='shopee' AND sync_status='pending' ORDER BY created_at ASC"
   );
 
   const pendingRows = rows.filter((r) => !r.internal_order_id);
@@ -300,24 +339,34 @@ async function main() {
 
   console.log(`shopee-import: mode=${DRY_RUN ? "DRY_RUN" : "LIVE"} pending=${pendingRows.length} (dengan item_list=${withItems}, tanpa item_list=${pendingRows.length - withItems})`);
 
-  const target = DRY_RUN && SAMPLE_LIMIT > 0 ? pendingRows.slice(0, SAMPLE_LIMIT) : pendingRows;
-  if (DRY_RUN && SAMPLE_LIMIT > 0 && pendingRows.length > SAMPLE_LIMIT) {
-    console.log(`shopee-import: dry-run hanya memproses ${target.length} dari ${pendingRows.length} pending.`);
+  // Dry-run: ambil maksimal N order per shop.
+  let target = pendingRows;
+  if (DRY_RUN) {
+    const perShop = {};
+    for (const r of pendingRows) {
+      (perShop[r.shop_id] = perShop[r.shop_id] || []);
+      if (perShop[r.shop_id].length < DRY_RUN_PER_SHOP) perShop[r.shop_id].push(r);
+    }
+    target = Object.values(perShop).flat();
+    console.log(`shopee-import: dry-run menampilkan hingga ${DRY_RUN_PER_SHOP} order per shop → ${target.length} order.`);
   }
 
   await prefetchMissingDetails(target, !DRY_RUN);
 
-  let imported = 0, failed = 0, wouldImport = 0;
+  let imported = 0, failed = 0, wouldImport = 0, ignored = 0;
   for (const row of target) {
     try {
       const r = await importOrder(row);
       if (r.status === "imported") imported++;
       else if (r.status === "would_import") {
         wouldImport++;
-        console.log(`  [DRY] ${r.order_sn} (shop ${r.shop_id}) → ${r.customer} | total=${r.total} | date=${r.date}`);
+        console.log(`  [DRY] order_id=${r.order_sn} shop_id=${r.shop_id} status=${r.status_shopee} total=${r.total} (${r.customer})`);
         for (const m of r.mapped) {
-          console.log(`        - ${m.product_name} (product_id=${m.product_id}) qty=${m.qty} price=${m.price} subtotal=${m.subtotal}`);
+          console.log(`        product_id=${m.product_id} qty=${m.qty} shopee_price=${m.price} subtotal=${m.subtotal} (${m.product_name})`);
         }
+      } else if (r.status === "ignored") {
+        ignored++;
+        console.log(`  [SKIP] ${r.order_sn}: status ${r.reason}`);
       } else { failed++; console.log(`  [FAIL] ${r.order_sn}: ${r.error}`); }
     } catch (e) {
       failed++;
@@ -330,12 +379,12 @@ async function main() {
       await pool.query(
         `INSERT INTO activity_log (event_type, direction, platform, status, triggered_by, action_source, metadata)
          VALUES ('ORDER_IMPORT','IN','shopee',$1,'system','cron',$2)`,
-        [failed === 0 ? "success" : "failed", JSON.stringify({ pending: pendingRows.length, imported, failed })]
+        [failed === 0 ? "success" : "failed", JSON.stringify({ pending: pendingRows.length, imported, failed, ignored })]
       );
     } catch (e) { console.error("activity_log failed:", e.message); }
   }
 
-  console.log(`shopee-import: ${DRY_RUN ? "dry-run" : "done"} imported=${imported} would_import=${wouldImport} failed=${failed} (dari ${target.length} diproses)`);
+  console.log(`shopee-import: ${DRY_RUN ? "dry-run" : "done"} imported=${imported} would_import=${wouldImport} ignored=${ignored} failed=${failed} (dari ${target.length} diproses)`);
 }
 
 main().then(() => pool.end()).catch((e) => { console.error("worker error:", e.message); process.exit(1); });
