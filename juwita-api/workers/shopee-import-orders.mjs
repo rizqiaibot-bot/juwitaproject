@@ -226,10 +226,20 @@ async function loadChannelPrices(channel, productIds) {
   return map;
 }
 
+async function markFailedOrder(row, msg) {
+  if (!DRY_RUN) {
+    await pool.query(
+      "UPDATE marketplace_orders SET sync_status='failed', error_message=$1, updated_at=now() WHERE id=$2",
+      [msg, row.id]
+    );
+  }
+  return { status: "failed", order_sn: row.mp_order_id, error: msg };
+}
+
 async function importOrder(row) {
   const payload = row.raw_payload;
   if (!payload || !Array.isArray(payload.item_list)) {
-    return { status: "failed", order_sn: row.mp_order_id, error: "item_list tidak tersedia (prefetch detail gagal)" };
+    return markFailedOrder(row, "item_list tidak tersedia (prefetch detail gagal)");
   }
 
   // Guard status: order dibatalkan/tidak layak → tidak import.
@@ -245,7 +255,7 @@ async function importOrder(row) {
   }
 
   const items = payload.item_list;
-  if (!items.length) return { status: "failed", order_sn: row.mp_order_id, error: "item_list kosong" };
+  if (!items.length) return markFailedOrder(row, "item_list kosong");
 
   const itemIds = items.map((i) => i.item_id).filter((v) => v != null);
   const mappings = await loadMappings(row.shop_id, itemIds);
@@ -254,9 +264,9 @@ async function importOrder(row) {
   const { mapped, unmapped } = buildMapping(payload, mappings, prodById, priceById);
 
   if (unmapped.length) {
-    return { status: "failed", order_sn: row.mp_order_id, error: "produk belum dimapping/harga belum diset: " + JSON.stringify(unmapped) };
+    return markFailedOrder(row, "produk belum dimapping/harga belum diset: " + JSON.stringify(unmapped));
   }
-  if (!mapped.length) return { status: "failed", order_sn: row.mp_order_id, error: "tidak ada item yang terpetakan" };
+  if (!mapped.length) return markFailedOrder(row, "tidak ada item yang terpetakan");
 
   const total = mapped.reduce((s, i) => s + i.subtotal, 0);
   const customer = payload.buyer_user_name || payload.recipient_address?.name || "Marketplace Customer";
