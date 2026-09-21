@@ -2278,6 +2278,14 @@
                     <tbody id="rekapDetailBody"><tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">-</td></tr></tbody>
                 </table>
             </div>
+            <div id="rekapDetailPager" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px;">
+                <div id="rekapDetailInfo" style="font-size:0.74rem;color:var(--text-muted);">Menampilkan 0–0 dari 0 transaksi</div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <button class="aksi-btn" onclick="rekapDetailPrev()" style="padding:6px 14px;"><i class="fas fa-chevron-left"></i> Sebelumnya</button>
+                    <span id="rekapDetailPageLabel" style="font-size:0.74rem;font-weight:700;color:var(--text-primary);">Halaman 1 dari 1</span>
+                    <button class="aksi-btn" onclick="rekapDetailNext()" style="padding:6px 14px;">Berikutnya <i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
             <div id="rekapPrintArea" class="rekap-print-area"></div>
         </div>
 
@@ -7025,6 +7033,60 @@
             window.print();
         }
 
+        // ============================================================
+        // Pagination detail transaksi Rekap Penjualan (20/halaman).
+        // Hanya mengubah tabel detail; ringkasan & range tidak terpengaruh.
+        // ============================================================
+        let rekapDetailSorted = [];
+        let rekapDetailPage = 1;
+        const REKAP_PAGE_SIZE = 20;
+
+        function renderRekapDetailPage() {
+            const body = document.getElementById("rekapDetailBody");
+            const info = document.getElementById("rekapDetailInfo");
+            const pageLabel = document.getElementById("rekapDetailPageLabel");
+            const total = rekapDetailSorted.length;
+            const totalPages = Math.max(1, Math.ceil(total / REKAP_PAGE_SIZE));
+            if (rekapDetailPage > totalPages) rekapDetailPage = totalPages;
+            if (rekapDetailPage < 1) rekapDetailPage = 1;
+
+            const start = (rekapDetailPage - 1) * REKAP_PAGE_SIZE;
+            const end = Math.min(start + REKAP_PAGE_SIZE, total);
+            const page = rekapDetailSorted.slice(start, end);
+            const fmt = n => Number(n || 0).toLocaleString('id-ID');
+
+            if (body) {
+                if (!total) {
+                    body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">Tidak ada transaksi</td></tr>';
+                } else {
+                    body.innerHTML = page.map(o => {
+                        const badge = o.payStatus === "Lunas" ? "badge-lunas" : o.payStatus === "Batal" ? "badge-batal" : "badge-belum";
+                        return `<tr>
+                            <td><strong>${o.orderId}</strong></td>
+                            <td>${rekapChannelBadge(o)}</td>
+                            <td>${fmtRekapWib(o)}</td>
+                            <td>${fmt(o.total)}</td>
+                            <td><span class="badge-status ${badge}">${o.payStatus || '-'}</span></td>
+                        </tr>`;
+                    }).join('');
+                }
+            }
+            if (info) {
+                info.textContent = total ? ("Menampilkan " + (start + 1) + "–" + end + " dari " + total + " transaksi") : "Menampilkan 0–0 dari 0 transaksi";
+            }
+            if (pageLabel) {
+                pageLabel.textContent = "Halaman " + rekapDetailPage + " dari " + totalPages;
+            }
+        }
+
+        function rekapDetailPrev() {
+            if (rekapDetailPage > 1) { rekapDetailPage--; renderRekapDetailPage(); }
+        }
+        function rekapDetailNext() {
+            const totalPages = Math.max(1, Math.ceil(rekapDetailSorted.length / REKAP_PAGE_SIZE));
+            if (rekapDetailPage < totalPages) { rekapDetailPage++; renderRekapDetailPage(); }
+        }
+
         function renderRekapPenjualan() {
             const dateEl = document.getElementById("rekapTanggal");
             const date = (dateEl && dateEl.value) ? dateEl.value : new Date().toISOString().slice(0, 10);
@@ -7126,25 +7188,12 @@
             renderRekapPosBreakdown(posOrders);
             renderRekapPosKasir(posOrders);
 
-            // Rincian detail transaksi (Order ID | Channel | Tanggal & Jam | Total | Status).
-            const detailBody = document.getElementById("rekapDetailBody");
-            if (detailBody) {
-                if (!dayOrders.length) {
-                    detailBody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">Tidak ada transaksi</td></tr>';
-                } else {
-                    const sorted = dayOrders.slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-                    detailBody.innerHTML = sorted.map(o => {
-                        const badge = o.payStatus === "Lunas" ? "badge-lunas" : o.payStatus === "Batal" ? "badge-batal" : "badge-belum";
-                        return `<tr>
-                            <td><strong>${o.orderId}</strong></td>
-                            <td>${rekapChannelBadge(o)}</td>
-                            <td>${fmtRekapWib(o)}</td>
-                            <td>${fmt(o.total)}</td>
-                            <td><span class="badge-status ${badge}">${o.payStatus || '-'}</span></td>
-                        </tr>`;
-                    }).join('');
-                }
-            }
+            // Rincian detail transaksi — paginasi (20/halaman), urut waktu transaksi asli terbaru→terlama.
+            rekapDetailSorted = dayOrders.slice().sort(function (a, b) {
+                return (fmtOrderDate(b) || "").localeCompare(fmtOrderDate(a) || "");
+            });
+            rekapDetailPage = 1;
+            renderRekapDetailPage();
         }
 
         function renderPosHistory() {
@@ -8459,6 +8508,8 @@
         window.resetProductForm = resetProductForm;
         window.publishProductToShopee = publishProductToShopee;
         window.renderRekapPenjualan = renderRekapPenjualan;
+        window.rekapDetailPrev = rekapDetailPrev;
+        window.rekapDetailNext = rekapDetailNext;
         window.applyMarkup = applyMarkup;
         window.editSellPrice = editSellPrice;
         window.openProductPriceModal = openProductPriceModal;
