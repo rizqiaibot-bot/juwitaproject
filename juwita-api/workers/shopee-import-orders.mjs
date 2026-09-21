@@ -273,6 +273,9 @@ async function importOrder(row) {
   const nowIso = new Date().toISOString();
   const todayStamp = nowIso.slice(0, 10).replace(/-/g, "");
   const dateStr = nowIso.slice(0, 16).replace("T", " ");
+  // Waktu transaksi ASLI dari Shopee (create_time, unix detik). Bukan waktu import.
+  const createTime = payload.create_time ? Number(payload.create_time) : 0;
+  const orderTime = createTime > 0 ? new Date(createTime * 1000) : null;
 
   if (DRY_RUN) {
     return {
@@ -292,8 +295,8 @@ async function importOrder(row) {
       orderId = "ORD-" + todayStamp + "-" + String(n).padStart(2, "0");
       try {
         await client.query(
-          "INSERT INTO orders (orderid, date, channel, shop_id, customer, total, paystatus, wmsstatus, courier, resi) VALUES ($1,$2,'Shopee',$3,$4,$5,'Lunas','Baru','Shopee','-')",
-          [orderId, dateStr, String(row.shop_id), customer, total]
+          "INSERT INTO orders (orderid, date, channel, shop_id, customer, total, paystatus, wmsstatus, courier, resi, order_time) VALUES ($1,$2,'Shopee',$3,$4,$5,'Lunas','Baru','Shopee','-',$6)",
+          [orderId, dateStr, String(row.shop_id), customer, total, orderTime]
         );
         break;
       } catch (e) {

@@ -2248,7 +2248,8 @@
                 <div class="stat-item"><div><div class="stat-number" id="rekapTransaksi">-</div><div class="stat-label">Total Transaksi</div></div><div class="stat-icon-wrapper"><i class="fas fa-receipt"></i></div></div>
                 <div class="stat-item"><div><div class="stat-number" id="rekapItem">-</div><div class="stat-label">Item Terjual</div></div><div class="stat-icon-wrapper"><i class="fas fa-box"></i></div></div>
             </div>
-            <div id="rekapSyncInfo" style="font-size:0.72rem;color:var(--text-muted);margin:-6px 0 12px;">Sinkron terakhir: -</div>
+            <div id="rekapSyncInfo" style="font-size:0.72rem;color:var(--text-muted);margin:-6px 0 4px;">Sinkron terakhir: -</div>
+            <div id="rekapRangeInfo" style="font-size:0.72rem;color:var(--text-muted);margin:0 0 12px;">Transaksi pertama: - &middot; Terakhir: -</div>
             <div class="table-wrapper"><table><thead><tr><th>CHANNEL</th><th>OMZET</th><th>TRANSAKSI</th><th>ITEM</th></tr></thead><tbody id="rekapTableBody"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Pilih tanggal lalu klik Tampilkan</td></tr></tbody></table></div>
             <!-- ===== BREAKDOWN PEMBAYARAN POS ===== -->
             <div id="posBreakdownSection" style="margin-top:20px;">
@@ -3988,6 +3989,7 @@
                 orderId: o.orderid, date: o.date, channel: o.channel, customer: o.customer,
                 total: o.total, payStatus: o.paystatus, wmsStatus: o.wmsstatus, courier: o.courier, resi: o.resi,
                 shop_id: o.shop_id || null,
+                order_time: o.order_time || null,
                 picked_at: o.picked_at || null, picked_by: o.picked_by || null,
                 packed_at: o.packed_at || null, packed_by: o.packed_by || null,
                 shipped_at: o.shipped_at || null, shipped_by: o.shipped_by || null,
@@ -6106,13 +6108,18 @@
         // (Shopee/pull-orders) memakai jam UTC → tampilkan sebagai Asia/Jakarta.
         // Order POS/local sudah memakai jam lokal (WIB) → jangan dikonversi lagi.
         function fmtOrderDate(o) {
-            if (o && o.channel === "Shopee" && o.date) {
-                const d = new Date(String(o.date).replace(" ", "T") + "Z");
-                if (!isNaN(d.getTime())) {
-                    return new Intl.DateTimeFormat('sv-SE', {
-                        timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
-                        hour: '2-digit', minute: '2-digit', hour12: false
-                    }).format(d).replace('T', ' ').slice(0, 16);
+            if (o && o.channel === "Shopee") {
+                // order_time = waktu transaksi asli dari Shopee (timestamptz).
+                // Fallback ke date (UTC import) hanya bila order_time belum ada.
+                const src = o.order_time || (o.date ? String(o.date).replace(" ", "T") + "Z" : null);
+                if (src) {
+                    const d = new Date(src);
+                    if (!isNaN(d.getTime())) {
+                        return new Intl.DateTimeFormat('sv-SE', {
+                            timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+                            hour: '2-digit', minute: '2-digit', hour12: false
+                        }).format(d).replace('T', ' ').slice(0, 16);
+                    }
                 }
             }
             return o ? o.date : '';
@@ -7038,7 +7045,10 @@
             // Filter berdasarkan TANGGAL TAMPIL (WIB), bukan kolom date mentah (UTC Shopee).
             const dayOrders = ordersData.filter(function (o) {
                 const shown = fmtOrderDate(o) || o.date || "";
-                return shown.slice(0, 10) === date;
+                if (shown.slice(0, 10) !== date) return false;
+                // Tutup buku harian 23:00 WIB: transaksi 23:00+ tidak masuk rekap tanggal ini.
+                const hh = parseInt(shown.slice(11, 13), 10);
+                return !isNaN(hh) && hh < 23;
             });
 
             // Item Terjual = SUM qty dari order_items (bukan jumlah order).
@@ -7076,6 +7086,20 @@
             const syncEl = document.getElementById("rekapSyncInfo");
             if (syncEl) {
                 syncEl.textContent = "Sinkron terakhir: " + (ordersLastSyncLabel && ordersLastSyncLabel !== "-" ? ordersLastSyncLabel + " WIB" : "-");
+            }
+
+            // Transaksi pertama & terakhir (berdasarkan waktu transaksi asli, WIB).
+            const rangeEl = document.getElementById("rekapRangeInfo");
+            if (rangeEl) {
+                if (dayOrders.length) {
+                    const byTime = dayOrders.slice().sort(function (a, b) {
+                        return (fmtOrderDate(a) || "").localeCompare(fmtOrderDate(b) || "");
+                    });
+                    rangeEl.innerHTML = "Transaksi pertama: " + fmtRekapWib(byTime[0]) +
+                        " &middot; Terakhir: " + fmtRekapWib(byTime[byTime.length - 1]);
+                } else {
+                    rangeEl.innerHTML = "Transaksi pertama: - &middot; Terakhir: -";
+                }
             }
 
             const tbody = document.getElementById("rekapTableBody");
