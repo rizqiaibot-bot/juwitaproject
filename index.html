@@ -2683,6 +2683,14 @@
             <div class="page-header"><h1>Monitor Stok</h1><div class="page-header-desc">Pantau ketersediaan stok semua produk secara real-time</div></div>
             <input id="stokSearch" class="filter-control" style="margin-bottom:12px;max-width:360px;width:100%;" placeholder="Cari produk (nama, SKU)..." oninput="stokSearchChange(this)" />
             <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>KATEGORI</th><th>STOK</th><th>STATUS</th></tr></thead><tbody id="stokTableBody"></tbody></table></div>
+            <div id="stokPager" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px;">
+                <div id="stokInfo" style="font-size:0.74rem;color:var(--text-muted);">Menampilkan 0–0 dari 0 produk</div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <button class="aksi-btn" onclick="stokPrev()" style="padding:6px 14px;"><i class="fas fa-chevron-left"></i> Sebelumnya</button>
+                    <span id="stokPageLabel" style="font-size:0.74rem;font-weight:700;color:var(--text-primary);">Halaman 1 dari 1</span>
+                    <button class="aksi-btn" onclick="stokNext()" style="padding:6px 14px;">Berikutnya <i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
         </div>
 
         <div id="page-mutasi-stok" class="page-content">
@@ -5590,29 +5598,71 @@
         // MONITOR STOK
         // ============================================================
         let stokSearchTerm = "";
+        // Pagination Monitor Stok: 50/halaman. Search berlaku ke seluruh data dulu.
+        const STOK_PAGE_SIZE = 50;
+        let stokFiltered = [];
+        let stokPage = 1;
+
         function stokSearchChange(el) {
             stokSearchTerm = el ? el.value : "";
+            stokPage = 1;
             renderMonitorStok();
+        }
+
+        function renderStokPage() {
+            const tbody = document.getElementById("stokTableBody");
+            if (!tbody) return;
+            const total = stokFiltered.length;
+            const totalPages = Math.max(1, Math.ceil(total / STOK_PAGE_SIZE));
+            if (stokPage > totalPages) stokPage = totalPages;
+            if (stokPage < 1) stokPage = 1;
+
+            const start = (stokPage - 1) * STOK_PAGE_SIZE;
+            const end = Math.min(start + STOK_PAGE_SIZE, total);
+            const page = stokFiltered.slice(start, end);
+
+            if (!total) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);">Tidak ada produk</td></tr>';
+            } else {
+                tbody.innerHTML = page.map(p => {
+                    const min = (p.minstock != null) ? Number(p.minstock) : 5;
+                    const status = p.stock >= min ? "Aman" : "Menipis";
+                    const badge = status === "Aman" ? "badge-lunas" : "badge-belum";
+                    return `<tr>
+                                <td><strong>${p.name}</strong></td>
+                                <td>${p.category}</td>
+                                <td><strong style="font-size:1.1rem;">${p.stock.toLocaleString('id-ID')}</strong></td>
+                                <td><span class="badge-status ${badge}">${status}</span></td>
+                            </tr>`;
+                }).join('');
+            }
+
+            const info = document.getElementById("stokInfo");
+            if (info) {
+                info.textContent = total ? ("Menampilkan " + (start + 1) + "–" + end + " dari " + total + " produk") : "Menampilkan 0–0 dari 0 produk";
+            }
+            const pageLabel = document.getElementById("stokPageLabel");
+            if (pageLabel) {
+                pageLabel.textContent = "Halaman " + stokPage + " dari " + totalPages;
+            }
+        }
+
+        function stokPrev() {
+            if (stokPage > 1) { stokPage--; renderStokPage(); }
+        }
+        function stokNext() {
+            const totalPages = Math.max(1, Math.ceil(stokFiltered.length / STOK_PAGE_SIZE));
+            if (stokPage < totalPages) { stokPage++; renderStokPage(); }
         }
 
         function renderMonitorStok() {
             const tbody = document.getElementById("stokTableBody");
             if (!tbody) return;
             const q = stokSearchTerm.trim().toLowerCase();
-            const list = products.filter(p => !q ||
+            stokFiltered = products.filter(p => !q ||
                 String(p.name || "").toLowerCase().includes(q) ||
                 String(p.sku || "").toLowerCase().includes(q));
-            tbody.innerHTML = list.map(p => {
-                const min = (p.minstock != null) ? Number(p.minstock) : 5;
-                const status = p.stock >= min ? "Aman" : "Menipis";
-                const badge = status === "Aman" ? "badge-lunas" : "badge-belum";
-                return `<tr>
-                            <td><strong>${p.name}</strong></td>
-                            <td>${p.category}</td>
-                            <td><strong style="font-size:1.1rem;">${p.stock.toLocaleString('id-ID')}</strong></td>
-                            <td><span class="badge-status ${badge}">${status}</span></td>
-                        </tr>`;
-            }).join('');
+            renderStokPage();
         }
 
         // ============================================================
@@ -8564,6 +8614,8 @@
         window.rekapDetailNext = rekapDetailNext;
         window.penjualanPrev = penjualanPrev;
         window.penjualanNext = penjualanNext;
+        window.stokPrev = stokPrev;
+        window.stokNext = stokNext;
         window.applyMarkup = applyMarkup;
         window.editSellPrice = editSellPrice;
         window.openProductPriceModal = openProductPriceModal;
