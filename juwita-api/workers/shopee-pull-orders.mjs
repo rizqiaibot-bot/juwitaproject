@@ -125,7 +125,7 @@ async function getOrderDetailBatch(account, accessToken, orderSns) {
   const params = new URLSearchParams({
     partner_id: account.partner_id, timestamp: String(timestamp), sign,
     shop_id: account.shop_id, access_token: accessToken, order_sn_list: orderSns.join(","),
-    response_optional_fields: "buyer_user_name,total_amount",
+    response_optional_fields: "buyer_user_name,total_amount,item_list,recipient_address",
   });
   const res = await fetchWithRetry(`${SHOPEE_API_URL}${path}?${params}`, { method: "GET" });
   const body = await res.json();
