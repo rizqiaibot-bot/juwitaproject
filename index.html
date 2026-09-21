@@ -2533,6 +2533,14 @@
                     <tbody id="catalogTableBody"></tbody>
                 </table>
             </div>
+            <div id="catalogPager" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px;">
+                <div id="catalogInfo" style="font-size:0.74rem;color:var(--text-muted);">Menampilkan 0–0 dari 0 produk</div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <button class="aksi-btn" onclick="catalogPrev()" style="padding:6px 14px;"><i class="fas fa-chevron-left"></i> Sebelumnya</button>
+                    <span id="catalogPageLabel" style="font-size:0.74rem;font-weight:700;color:var(--text-primary);">Halaman 1 dari 1</span>
+                    <button class="aksi-btn" onclick="catalogNext()" style="padding:6px 14px;">Berikutnya <i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
         </div>
 
         <!-- ===== HALAMAN TAMBAH PRODUK ===== -->
@@ -5440,6 +5448,72 @@
         // ============================================================
         // CATALOG TABLE
         // ============================================================
+        // Pagination Katalog Daftar Produk (50/halaman). Search ke seluruh data dulu.
+        const CATALOG_PAGE_SIZE = 50;
+        let catalogFiltered = [];
+        let catalogPage = 1;
+
+        function renderCatalogPage() {
+            const tbody = document.getElementById("catalogTableBody");
+            if (!tbody) return;
+            const total = catalogFiltered.length;
+            const totalPages = Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE));
+            if (catalogPage > totalPages) catalogPage = totalPages;
+            if (catalogPage < 1) catalogPage = 1;
+
+            const start = (catalogPage - 1) * CATALOG_PAGE_SIZE;
+            const end = Math.min(start + CATALOG_PAGE_SIZE, total);
+            const page = catalogFiltered.slice(start, end);
+            const q = (document.getElementById("catalogSearch")?.value || "").toLowerCase().trim();
+
+            if (!total) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);">' + (q ? 'Tidak ada produk ditemukan' : 'Belum ada produk') + '</td></tr>';
+            } else {
+                tbody.innerHTML = page.map(p => {
+                    const levelClass = p.stock > 500 ? "badge-lunas" : p.stock > 100 ? "badge-belum" : "badge-batal";
+                    const levelText = p.stock > 500 ? "Tersedia" : p.stock > 100 ? "Sedang" : "Kritis";
+                    const thumbHtml = p.photo
+                        ? `<img src="${p.photo}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:6px;" />`
+                        : '';
+                    return `<tr>
+                                <td><strong>#${String(p.id).padStart(3,'0')}</strong></td>
+                                <td><span style="font-size:0.7rem;font-weight:600;color:var(--text-muted);">${p.sku || '-'}</span></td>
+                                <td>${thumbHtml}${p.name}</td>
+                                <td>${p.category}</td>
+                                <td><strong>${p.price.toLocaleString('id-ID')}</strong></td>
+                                <td>${p.stock}</td>
+                                <td><span class="badge-status ${levelClass}">${levelText}</span></td>
+                                <td>
+                                    <div class="aksi-group">
+                                        ${p.shopee_item_id
+                                            ? '<span class="badge-status badge-lunas" title="Item ID: ' + p.shopee_item_id + '">Sudah di Shopee</span>'
+                                            : '<button class="aksi-btn" onclick="publishProductToShopee(' + p.id + ')"><i class="fas fa-store"></i> Publish</button>'}
+                                        <button class="aksi-btn" onclick="editProduct(${p.id})"><i class="fas fa-pen"></i></button>
+                                        <button class="aksi-btn" onclick="deleteProduct(${p.id})"><i class="fas fa-trash"></i></button>
+                                    </div>
+                                </td>
+                            </tr>`;
+                }).join('');
+            }
+
+            const info = document.getElementById("catalogInfo");
+            if (info) {
+                info.textContent = total ? ("Menampilkan " + (start + 1) + "–" + end + " dari " + total + " produk") : "Menampilkan 0–0 dari 0 produk";
+            }
+            const pageLabel = document.getElementById("catalogPageLabel");
+            if (pageLabel) {
+                pageLabel.textContent = "Halaman " + catalogPage + " dari " + totalPages;
+            }
+        }
+
+        function catalogPrev() {
+            if (catalogPage > 1) { catalogPage--; renderCatalogPage(); }
+        }
+        function catalogNext() {
+            const totalPages = Math.max(1, Math.ceil(catalogFiltered.length / CATALOG_PAGE_SIZE));
+            if (catalogPage < totalPages) { catalogPage++; renderCatalogPage(); }
+        }
+
         function renderCatalogTable() {
             const tbody = document.getElementById("catalogTableBody");
             if (!tbody) return;
@@ -5453,36 +5527,9 @@
                     (p.barcode || "").toLowerCase().includes(q)
                 );
             }
-            if (!list.length) {
-                tbody.innerHTML =
-                '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);">' + (q ? 'Tidak ada produk ditemukan' : 'Belum ada produk') + '</td></tr>';
-                return;
-            }
-            tbody.innerHTML = list.map(p => {
-                const levelClass = p.stock > 500 ? "badge-lunas" : p.stock > 100 ? "badge-belum" : "badge-batal";
-                const levelText = p.stock > 500 ? "Tersedia" : p.stock > 100 ? "Sedang" : "Kritis";
-                const thumbHtml = p.photo
-                    ? `<img src="${p.photo}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:6px;" />`
-                    : '';
-                return `<tr>
-                            <td><strong>#${String(p.id).padStart(3,'0')}</strong></td>
-                            <td><span style="font-size:0.7rem;font-weight:600;color:var(--text-muted);">${p.sku || '-'}</span></td>
-                            <td>${thumbHtml}${p.name}</td>
-                            <td>${p.category}</td>
-                            <td><strong>${p.price.toLocaleString('id-ID')}</strong></td>
-                            <td>${p.stock}</td>
-                            <td><span class="badge-status ${levelClass}">${levelText}</span></td>
-                            <td>
-                                <div class="aksi-group">
-                                    ${p.shopee_item_id
-                                        ? '<span class="badge-status badge-lunas" title="Item ID: ' + p.shopee_item_id + '">Sudah di Shopee</span>'
-                                        : '<button class="aksi-btn" onclick="publishProductToShopee(' + p.id + ')"><i class="fas fa-store"></i> Publish</button>'}
-                                    <button class="aksi-btn" onclick="editProduct(${p.id})"><i class="fas fa-pen"></i></button>
-                                    <button class="aksi-btn" onclick="deleteProduct(${p.id})"><i class="fas fa-trash"></i></button>
-                                </div>
-                            </td>
-                        </tr>`;
-            }).join('');
+            catalogFiltered = list;
+            catalogPage = 1;
+            renderCatalogPage();
         }
 
         async function deleteProduct(id) {
@@ -8616,6 +8663,8 @@
         window.penjualanNext = penjualanNext;
         window.stokPrev = stokPrev;
         window.stokNext = stokNext;
+        window.catalogPrev = catalogPrev;
+        window.catalogNext = catalogNext;
         window.applyMarkup = applyMarkup;
         window.editSellPrice = editSellPrice;
         window.openProductPriceModal = openProductPriceModal;
