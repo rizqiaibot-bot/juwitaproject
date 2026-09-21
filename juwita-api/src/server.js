@@ -267,6 +267,7 @@ const DATA_TABLES = new Set([
   "stock_mutations", "attendance_records",
   "app_users", "accounting_accounts", "accounting_transactions",
   "v_account_balance", "marketplace_config", "activity_log",
+  "suppliers", "purchases", "purchase_items",
 ]);
 
 // Kolom sensitif yang tidak boleh dibaca/ditulis via data API.

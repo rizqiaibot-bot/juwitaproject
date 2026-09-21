@@ -2707,8 +2707,55 @@
         </div>
 
         <div id="page-data-pembelian" class="page-content">
-            <div class="page-header"><h1>Data Pembelian Ke Supplier</h1></div>
-            <div class="table-wrapper"><table><thead><tr><th>INVOICE SUPPLIER</th><th>SUPPLIER</th><th>TANGGAL MASUK</th><th>TOTAL HARGA BELI</th><th>STATUS</th><th>AKSI</th></tr></thead><tbody><tr><td>INV-SUP-88201</td><td>PT Sinar Roti Sejahtera</td><td>2026-06-12</td><td>1.200.000</td><td><span class="badge-status badge-lunas">Diterima</span></td><td><button class="aksi-btn" onclick="showToast('Detail dibuka')">Detail</button></td></tr><tr><td>INV-SUP-88202</td><td>CV Snack Nusantara</td><td>2026-06-15</td><td>450.000</td><td><span class="badge-status badge-belum">Dikirim</span></td><td><button class="aksi-btn" onclick="showToast('Detail dibuka')">Detail</button></td></tr></tbody></table></div>
+            <div class="page-header">
+                <div>
+                    <h1>Data Pembelian</h1>
+                    <div class="page-header-desc">Purchase order ke supplier — pantau status pembayaran &amp; penerimaan</div>
+                </div>
+                <button class="checkout-btn" onclick="openBeliForm()" style="width:auto;padding:10px 20px;"><i class="fas fa-plus"></i> Buat PO</button>
+            </div>
+
+            <div class="filter-section" style="margin-bottom:14px;">
+                <div class="filter-group search-wrapper">
+                    <label>Pencarian</label>
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="beliSearch" class="filter-control" placeholder="No PO / supplier..." oninput="beliFilterChange()" />
+                </div>
+                <div class="filter-group"><label>Supplier</label><select id="beliSupplier" class="filter-control" onchange="beliFilterChange()"></select></div>
+                <div class="filter-group"><label>Status Bayar</label><select id="beliPayStatus" class="filter-control" onchange="beliFilterChange()">
+                    <option value="all">Semua</option><option value="Belum">Belum</option><option value="Sebagian">Sebagian</option><option value="Lunas">Lunas</option>
+                </select></div>
+                <div class="filter-group"><label>Status Terima</label><select id="beliRecvStatus" class="filter-control" onchange="beliFilterChange()">
+                    <option value="all">Semua</option><option value="Belum">Belum</option><option value="Sebagian">Sebagian</option><option value="Diterima">Diterima</option>
+                </select></div>
+                <div class="filter-group" style="min-width:140px;max-width:170px;"><label>Dari</label><input type="date" id="beliDateFrom" class="filter-control" onchange="beliFilterChange()" /></div>
+                <div class="filter-group" style="min-width:140px;max-width:170px;"><label>Sampai</label><input type="date" id="beliDateTo" class="filter-control" onchange="beliFilterChange()" /></div>
+            </div>
+
+            <div class="stats-row" style="margin-bottom:14px;">
+                <div class="stat-item"><div><div class="stat-number" id="beliTotalNilai">Rp 0</div><div class="stat-label">Total Nilai Pembelian</div></div><div class="stat-icon-wrapper"><i class="fas fa-coins"></i></div></div>
+                <div class="stat-item"><div><div class="stat-number" id="beliTotalPO">0</div><div class="stat-label">Total PO</div></div><div class="stat-icon-wrapper"><i class="fas fa-file-invoice"></i></div></div>
+            </div>
+
+            <div class="table-wrapper"><table>
+                <thead><tr><th>NO PO</th><th>SUPPLIER</th><th>TANGGAL</th><th>TOTAL</th><th>STATUS BAYAR</th><th>STATUS TERIMA</th><th>AKSI</th></tr></thead>
+                <tbody id="beliTableBody"><tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">Belum ada data pembelian</td></tr></tbody>
+            </table></div>
+
+            <div id="beliPager" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:0.72rem;color:var(--text-muted);">Per halaman</span>
+                    <select id="beliPageSize" class="filter-control" style="width:auto;padding:5px 8px;" onchange="beliPageSizeChange(this)">
+                        <option value="20">20</option><option value="50">50</option>
+                    </select>
+                    <span id="beliInfo" style="font-size:0.74rem;color:var(--text-muted);">Menampilkan 0–0 dari 0</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <button class="aksi-btn" onclick="beliPrev()" style="padding:6px 14px;"><i class="fas fa-chevron-left"></i> Sebelumnya</button>
+                    <span id="beliPageLabel" style="font-size:0.74rem;font-weight:700;color:var(--text-primary);">Halaman 1 dari 1</span>
+                    <button class="aksi-btn" onclick="beliNext()" style="padding:6px 14px;">Berikutnya <i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
         </div>
 
         <div id="page-penerimaan" class="page-content">
@@ -8137,6 +8184,7 @@
             if (pageId === "pos") setTimeout(() => document.getElementById("scanInput")?.focus(), 100);
             if (pageId === "pengaturan") setTimeout(() => renderAccountCards(), 10);
             if (pageId === "akuntansi") setTimeout(() => loadAccounting(), 10);
+            if (pageId === "data-pembelian") setTimeout(() => loadPembelian(), 10);
             // Harga per channel: muat ulang product_prices (RLS authenticated)
             // saat halaman Harga Jual dibuka, lalu render ulang tabel.
             if (pageId === "harga-jual") setTimeout(() => ensureProductPricesLoaded(true), 10);
@@ -9094,6 +9142,334 @@
                 console.warn("Akuntansi load data error:", e && e.message);
             }
         }
+        // ============================================================
+        // MODUL PEMBELIAN (PO) — suppliers / purchases / purchase_items
+        // ============================================================
+        let suppliersData = [];
+        let purchasesData = [];
+        let purchaseItemsData = [];
+
+        let beliSearchTerm = "";
+        let beliSupplierFilter = "all";
+        let beliPayFilter = "all";
+        let beliRecvFilter = "all";
+        let beliDateFrom = "";
+        let beliDateTo = "";
+        let beliPage = 1;
+        let beliPageSize = 20;
+        let beliFiltered = [];
+
+        function beliSupplierName(id) {
+            for (const s of suppliersData) if (Number(s.id) === Number(id)) return s.name;
+            return "-";
+        }
+
+        function beliStatusBadge(status) {
+            let cls = "badge-batal";
+            if (status === "Lunas" || status === "Diterima") cls = "badge-lunas";
+            else if (status === "Sebagian") cls = "badge-belum";
+            return `<span class="badge-status ${cls}">${status}</span>`;
+        }
+
+        // purchase_date (type date) diserialisasi API sebagai Date UTC (tengah malam +07).
+        // Tampilkan tanggal sesuai zona Asia/Jakarta agar tidak geser satu hari.
+        function beliDateOnly(iso) {
+            if (!iso) return '-';
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return String(iso).slice(0, 10);
+            return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+        }
+
+        async function loadPembelian() {
+            if (!sb || !sb.auth) return;
+            try {
+                const [sRes, pRes, piRes] = await Promise.all([
+                    sb.from('suppliers').select('*').order('name'),
+                    sb.from('purchases').select('*').order('purchase_date', { ascending: false }),
+                    sb.from('purchase_items').select('*').order('id')
+                ]);
+                if (sRes.data) suppliersData = sRes.data;
+                if (pRes.data) purchasesData = pRes.data;
+                if (piRes.data) purchaseItemsData = piRes.data;
+            } catch (e) {
+                console.warn("Pembelian load error:", e && e.message);
+            }
+            const sel = document.getElementById("beliSupplier");
+            if (sel) {
+                const cur = sel.value || "all";
+                sel.innerHTML = '<option value="all">Semua</option>' + suppliersData.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+                sel.value = (cur && suppliersData.some(s => String(s.id) === String(cur))) ? cur : "all";
+                beliSupplierFilter = sel.value;
+            }
+            renderDataPembelian();
+        }
+
+        function beliFilterChange() {
+            beliSearchTerm = (document.getElementById("beliSearch")?.value || "").toLowerCase().trim();
+            beliSupplierFilter = document.getElementById("beliSupplier")?.value || "all";
+            beliPayFilter = document.getElementById("beliPayStatus")?.value || "all";
+            beliRecvFilter = document.getElementById("beliRecvStatus")?.value || "all";
+            beliDateFrom = document.getElementById("beliDateFrom")?.value || "";
+            beliDateTo = document.getElementById("beliDateTo")?.value || "";
+            beliPage = 1;
+            renderDataPembelian();
+        }
+
+        function beliPageSizeChange(el) {
+            beliPageSize = parseInt(el.value) || 20;
+            beliPage = 1;
+            renderDataPembelian();
+        }
+
+        function beliTotalOf(p) {
+            let t = 0;
+            for (const i of purchaseItemsData) if (Number(i.purchase_id) === Number(p.id)) t += Number(i.subtotal) || 0;
+            return t;
+        }
+
+        function renderDataPembelian() {
+            let list = purchasesData;
+            if (beliSearchTerm) {
+                list = list.filter(p => {
+                    const sup = beliSupplierName(p.supplier_id).toLowerCase();
+                    return String(p.po_number || "").toLowerCase().includes(beliSearchTerm) || sup.includes(beliSearchTerm);
+                });
+            }
+            if (beliSupplierFilter !== "all") list = list.filter(p => String(p.supplier_id) === String(beliSupplierFilter));
+            if (beliPayFilter !== "all") list = list.filter(p => p.payment_status === beliPayFilter);
+            if (beliRecvFilter !== "all") list = list.filter(p => p.receiving_status === beliRecvFilter);
+            if (beliDateFrom) list = list.filter(p => beliDateOnly(p.purchase_date) >= beliDateFrom);
+            if (beliDateTo) list = list.filter(p => beliDateOnly(p.purchase_date) <= beliDateTo);
+
+            list = list.slice().sort(function (a, b) { return String(b.purchase_date || "").localeCompare(String(a.purchase_date || "")); });
+
+            const totalNilai = list.reduce((s, p) => s + beliTotalOf(p), 0);
+            document.getElementById("beliTotalNilai").innerText = "Rp " + totalNilai.toLocaleString('id-ID');
+            document.getElementById("beliTotalPO").innerText = list.length;
+
+            beliFiltered = list;
+            renderBeliPage();
+        }
+
+        function renderBeliPage() {
+            const tbody = document.getElementById("beliTableBody");
+            if (!tbody) return;
+            const total = beliFiltered.length;
+            const totalPages = Math.max(1, Math.ceil(total / beliPageSize));
+            if (beliPage > totalPages) beliPage = totalPages;
+            if (beliPage < 1) beliPage = 1;
+            const start = (beliPage - 1) * beliPageSize;
+            const end = Math.min(start + beliPageSize, total);
+            const page = beliFiltered.slice(start, end);
+
+            if (!total) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">Tidak ada data pembelian</td></tr>';
+            } else {
+                tbody.innerHTML = page.map(p => {
+                    const dateStr = beliDateOnly(p.purchase_date);
+                    return `<tr>
+                        <td><strong>${p.po_number}</strong></td>
+                        <td>${beliSupplierName(p.supplier_id)}</td>
+                        <td>${dateStr || '-'}</td>
+                        <td><strong>${beliTotalOf(p).toLocaleString('id-ID')}</strong></td>
+                        <td>${beliStatusBadge(p.payment_status)}</td>
+                        <td>${beliStatusBadge(p.receiving_status)}</td>
+                        <td><button class="aksi-btn" onclick="openBeliDetail(${p.id})"><i class="fas fa-eye"></i> Detail</button></td>
+                    </tr>`;
+                }).join('');
+            }
+
+            const info = document.getElementById("beliInfo");
+            if (info) info.textContent = total ? ("Menampilkan " + (start + 1) + "–" + end + " dari " + total) : "Menampilkan 0–0 dari 0";
+            const pageLabel = document.getElementById("beliPageLabel");
+            if (pageLabel) pageLabel.textContent = "Halaman " + beliPage + " dari " + totalPages;
+        }
+
+        function beliPrev() { if (beliPage > 1) { beliPage--; renderBeliPage(); } }
+        function beliNext() { const tp = Math.max(1, Math.ceil(beliFiltered.length / beliPageSize)); if (beliPage < tp) { beliPage++; renderBeliPage(); } }
+
+        // ---- Buat PO ----
+        let beliDraftItems = [];
+
+        function openBeliForm() {
+            if (suppliersData.length === 0) { loadPembelian(); }
+            const supSel = document.getElementById("beliFormSupplier");
+            if (supSel) supSel.innerHTML = suppliersData.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+            const dateEl = document.getElementById("beliFormDate");
+            if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
+            const poEl = document.getElementById("beliPoNumber");
+            if (poEl) poEl.value = "";
+            beliDraftItems = [];
+            beliAddItemRow();
+            document.getElementById("beliFormModal").classList.add("active");
+        }
+
+        function beliAddItemRow() {
+            beliDraftItems.push({ product_id: "", product_name: "", qty: 1, harga_beli: 0 });
+            renderBeliItemRows();
+        }
+
+        function beliRemoveItemRow(idx) {
+            beliDraftItems.splice(idx, 1);
+            renderBeliItemRows();
+        }
+
+        function beliItemProductChange(idx, val) {
+            const pid = parseInt(val);
+            const prod = products.find(p => p.id === pid);
+            beliDraftItems[idx].product_id = pid || "";
+            beliDraftItems[idx].product_name = prod ? prod.name : "";
+            beliDraftItems[idx].harga_beli = prod ? (Number(prod.modal) || 0) : 0;
+            renderBeliItemRows();
+        }
+        function beliItemQtyChange(idx, val) { beliDraftItems[idx].qty = parseInt(val) || 0; }
+        function beliItemPriceChange(idx, val) { beliDraftItems[idx].harga_beli = parseInt(val) || 0; }
+
+        function renderBeliItemRows() {
+            const cont = document.getElementById("beliItemRows");
+            if (!cont) return;
+            const prodOpts = function (selectedId) {
+                return '<option value="">-- Pilih Produk --</option>' + products.map(p =>
+                    `<option value="${p.id}"${Number(p.id) === Number(selectedId) ? ' selected' : ''}>${p.name}</option>`).join('');
+            };
+            cont.innerHTML = beliDraftItems.map((it, idx) => {
+                const subtotal = (Number(it.harga_beli) || 0) * (Number(it.qty) || 0);
+                return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+                    <select class="form-control" style="flex:2;min-width:180px;" onchange="beliItemProductChange(${idx}, this.value)">${prodOpts(it.product_id)}</select>
+                    <input type="number" class="form-control" style="flex:1;min-width:70px;" placeholder="Qty" min="1" value="${it.qty}" oninput="beliItemQtyChange(${idx}, this.value)" />
+                    <input type="number" class="form-control" style="flex:1;min-width:110px;" placeholder="Harga Beli" min="0" value="${it.harga_beli}" oninput="beliItemPriceChange(${idx}, this.value)" />
+                    <span style="font-size:0.72rem;color:var(--text-muted);min-width:80px;">Subtotal ${subtotal.toLocaleString('id-ID')}</span>
+                    <button class="aksi-btn" style="color:var(--danger);" onclick="beliRemoveItemRow(${idx})"><i class="fas fa-trash"></i></button>
+                </div>`;
+            }).join('');
+        }
+
+        function closeBeliForm() {
+            document.getElementById("beliFormModal").classList.remove("active");
+        }
+
+        async function saveBeliPo() {
+            const supplierId = parseInt(document.getElementById("beliFormSupplier")?.value);
+            const date = document.getElementById("beliFormDate")?.value || new Date().toISOString().slice(0, 10);
+            const payStatus = document.getElementById("beliFormPayStatus")?.value || "Belum";
+            let poNumber = (document.getElementById("beliPoNumber")?.value || "").trim();
+            if (!supplierId) { showToast("Pilih supplier"); return; }
+            const items = beliDraftItems.filter(it => it.product_id && it.qty > 0);
+            if (!items.length) { showToast("Tambahkan minimal 1 item"); return; }
+            if (!poNumber) poNumber = "PO-" + date.replace(/-/g, "") + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+
+            try {
+                const { data: poData, error: poErr } = await sb.from('purchases').insert({
+                    po_number: poNumber, supplier_id: supplierId, purchase_date: date,
+                    payment_status: payStatus, receiving_status: "Belum"
+                });
+                if (poErr) throw new Error(poErr.message);
+                const purchaseId = Array.isArray(poData) && poData[0] ? poData[0].id : null;
+                if (!purchaseId) throw new Error("gagal membuat PO");
+
+                const itemRows = items.map(it => ({
+                    purchase_id: purchaseId, product_id: it.product_id, product_name: it.product_name,
+                    qty: it.qty, qty_received: 0, harga_beli: it.harga_beli, subtotal: it.harga_beli * it.qty
+                }));
+                const { error: piErr } = await sb.from('purchase_items').insert(itemRows);
+                if (piErr) throw new Error(piErr.message);
+
+                closeBeliForm();
+                showToast("PO " + poNumber + " tersimpan");
+                loadPembelian();
+            } catch (e) {
+                showToast("Gagal simpan PO: " + (e && e.message ? e.message : "gagal"));
+            }
+        }
+
+        // ---- Detail PO + Terima Barang ----
+        function openBeliDetail(id) {
+            const p = purchasesData.find(x => Number(x.id) === Number(id));
+            if (!p) return;
+            const items = purchaseItemsData.filter(i => Number(i.purchase_id) === Number(id));
+            const total = items.reduce((s, i) => s + (Number(i.subtotal) || 0), 0);
+            const receivedTotal = items.reduce((s, i) => s + (Number(i.qty_received) || 0), 0);
+            const totalQty = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
+            const dateStr = beliDateOnly(p.purchase_date);
+            const canReceive = p.receiving_status !== "Diterima";
+
+            const itemsHtml = items.map(it => `<tr>
+                <td>${it.product_name}</td>
+                <td>${it.qty}</td>
+                <td>${it.qty_received}</td>
+                <td>${(Number(it.harga_beli) || 0).toLocaleString('id-ID')}</td>
+                <td>${(Number(it.subtotal) || 0).toLocaleString('id-ID')}</td>
+                <td>${canReceive ? `<input type="number" id="beliRecvQty_${it.id}" class="form-control" style="width:76px;display:inline-block;padding:4px 8px;" min="0" max="${(Number(it.qty) || 0) - (Number(it.qty_received) || 0)}" value="${(Number(it.qty) || 0) - (Number(it.qty_received) || 0)}" />` : '-'}</td>
+            </tr>`).join('');
+
+            const content = `
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                    <h3 style="margin:0;font-size:1.05rem;"><i class="fas fa-file-invoice" style="color:var(--primary);"></i> ${p.po_number}</h3>
+                    <button class="aksi-btn" onclick="closeBeliDetail()"><i class="fas fa-times"></i></button>
+                </div>
+                <div style="font-size:0.82rem;line-height:1.8;margin-bottom:12px;">
+                    <div><strong>Supplier:</strong> ${beliSupplierName(p.supplier_id)}</div>
+                    <div><strong>Tanggal:</strong> ${dateStr || '-'}</div>
+                    <div><strong>Status Bayar:</strong> ${beliStatusBadge(p.payment_status)} &nbsp;&nbsp; <strong>Status Terima:</strong> ${beliStatusBadge(p.receiving_status)}</div>
+                    <div><strong>Total:</strong> Rp ${total.toLocaleString('id-ID')} &nbsp;&nbsp; (${receivedTotal}/${totalQty} item diterima)</div>
+                </div>
+                <div class="table-wrapper"><table><thead><tr><th>ITEM</th><th>QTY</th><th>DITERIMA</th><th>HARGA BELI</th><th>SUBTOTAL</th><th>TERIMA</th></tr></thead><tbody>${itemsHtml}</tbody></table></div>
+                ${canReceive ? `<button class="checkout-btn" style="width:100%;margin-top:12px;" onclick="receiveBeliItems(${p.id})"><i class="fas fa-boxes"></i> Terima Barang</button>` : ''}
+            `;
+            document.getElementById("beliDetailContent").innerHTML = content;
+            document.getElementById("beliDetailModal").classList.add("active");
+        }
+
+        function closeBeliDetail() {
+            document.getElementById("beliDetailModal").classList.remove("active");
+        }
+
+        async function receiveBeliItems(purchaseId) {
+            const p = purchasesData.find(x => Number(x.id) === Number(purchaseId));
+            if (!p) return;
+            const items = purchaseItemsData.filter(i => Number(i.purchase_id) === Number(purchaseId));
+            let receivedAny = false;
+
+            for (const it of items) {
+                const el = document.getElementById("beliRecvQty_" + it.id);
+                const q = parseInt(el ? el.value : "0") || 0;
+                const remaining = (Number(it.qty) || 0) - (Number(it.qty_received) || 0);
+                if (q <= 0 || q > remaining) continue;
+
+                const prod = products.find(pr => Number(pr.id) === Number(it.product_id));
+                if (prod) {
+                    const before = Number(prod.stock) || 0;
+                    const after = before + q;
+                    await sb.from('products').update({ stock: after, modal: Number(it.harga_beli) || 0 }).eq('id', it.product_id);
+                    prod.stock = after;
+                    prod.modal = Number(it.harga_beli) || 0;
+                    await sb.from('stock_mutations').insert({
+                        product_id: prod.id, product_name: prod.name, type: 'IN', quantity: q,
+                        qty_before: before, qty_after: after, source: 'Penerimaan PO: ' + p.po_number,
+                        sync_status: 'pending', created_at: new Date().toISOString()
+                    });
+                }
+                await sb.from('purchase_items').update({ qty_received: (Number(it.qty_received) || 0) + q }).eq('id', it.id);
+                it.qty_received = (Number(it.qty_received) || 0) + q;
+                receivedAny = true;
+            }
+            if (!receivedAny) { showToast("Isi jumlah terima yang valid"); return; }
+
+            const allReceived = items.every(i => (Number(i.qty_received) || 0) >= (Number(i.qty) || 0));
+            const someReceived = items.some(i => (Number(i.qty_received) || 0) > 0);
+            let newRecvStatus = "Belum";
+            if (allReceived) newRecvStatus = "Diterima";
+            else if (someReceived) newRecvStatus = "Sebagian";
+            await sb.from('purchases').update({ receiving_status: newRecvStatus }).eq('id', purchaseId);
+            p.receiving_status = newRecvStatus;
+
+            showToast("Penerimaan dicatat");
+            renderMonitorStok();
+            renderCatalogTable();
+            await loadPembelian();
+            openBeliDetail(purchaseId);
+        }
+
         window.accShowForm = accShowForm;
         window.accCloseForm = accCloseForm;
         window.accSubmit = accSubmit;
@@ -9102,6 +9478,22 @@
         window.accSubmitEdit = accSubmitEdit;
         window.syncAccountingPos = syncAccountingPos;
         window.loadAccounting = loadAccounting;
+        window.loadPembelian = loadPembelian;
+        window.beliFilterChange = beliFilterChange;
+        window.beliPageSizeChange = beliPageSizeChange;
+        window.beliPrev = beliPrev;
+        window.beliNext = beliNext;
+        window.openBeliForm = openBeliForm;
+        window.closeBeliForm = closeBeliForm;
+        window.beliAddItemRow = beliAddItemRow;
+        window.beliRemoveItemRow = beliRemoveItemRow;
+        window.beliItemProductChange = beliItemProductChange;
+        window.beliItemQtyChange = beliItemQtyChange;
+        window.beliItemPriceChange = beliItemPriceChange;
+        window.saveBeliPo = saveBeliPo;
+        window.openBeliDetail = openBeliDetail;
+        window.closeBeliDetail = closeBeliDetail;
+        window.receiveBeliItems = receiveBeliItems;
     </script>
 
     <!-- ===== MODAL TAMBAH/EDIT KARYAWAN (OWNER) ===== -->
@@ -9205,5 +9597,48 @@
     </div>
 
     <!-- ===== LOGIN OVERLAY ===== -->
+
+    <!-- ===== MODAL BUAT PO (PEMBELIAN) ===== -->
+    <div class="modal-overlay" id="beliFormModal" onclick="if(event.target===this)closeBeliForm()">
+        <div class="modal-card" style="max-width:640px;width:min(94vw,640px);text-align:left;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+                <h3 style="margin:0;font-size:1.1rem;display:flex;align-items:center;gap:8px;"><i class="fas fa-file-invoice" style="color:var(--primary);"></i> Buat Purchase Order</h3>
+            </div>
+            <div class="form-group" style="margin-bottom:10px;">
+                <label>No PO</label>
+                <input type="text" id="beliPoNumber" class="form-control" placeholder="Otomatis jika kosong" />
+            </div>
+            <div class="form-group" style="margin-bottom:10px;">
+                <label>Supplier</label>
+                <select id="beliFormSupplier" class="form-control"></select>
+            </div>
+            <div class="form-group" style="margin-bottom:10px;">
+                <label>Tanggal Pembelian</label>
+                <input type="date" id="beliFormDate" class="form-control" />
+            </div>
+            <div class="form-group" style="margin-bottom:10px;">
+                <label>Status Pembayaran</label>
+                <select id="beliFormPayStatus" class="form-control">
+                    <option value="Belum">Belum</option><option value="Sebagian">Sebagian</option><option value="Lunas">Lunas</option>
+                </select>
+            </div>
+            <div style="font-size:0.8rem;font-weight:800;margin:12px 0 6px;color:var(--text-primary);">Item Pembelian</div>
+            <div id="beliItemRows"></div>
+            <button type="button" class="aksi-btn" onclick="beliAddItemRow()" style="margin:8px 0;"><i class="fas fa-plus"></i> Tambah Item</button>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 12px;">Harga beli default = harga modal produk (products.modal), dapat diubah per item.</div>
+            <div style="display:flex;gap:10px;margin-top:12px;">
+                <button class="checkout-btn" style="flex:2;" onclick="saveBeliPo()"><i class="fas fa-save"></i> Simpan PO</button>
+                <button class="close-modal-btn" style="flex:1;background:var(--text-muted);" onclick="closeBeliForm()">Batal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== MODAL DETAIL PO (PEMBELIAN) ===== -->
+    <div class="modal-overlay" id="beliDetailModal" onclick="if(event.target===this)closeBeliDetail()">
+        <div class="modal-card" style="max-width:640px;width:min(94vw,640px);text-align:left;max-height:90vh;overflow-y:auto;">
+            <div id="beliDetailContent"></div>
+        </div>
+    </div>
+
 </body>
 </html>
