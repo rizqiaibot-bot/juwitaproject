@@ -5687,17 +5687,37 @@
         // ============================================================
         // EMPLOYEES
         // ============================================================
-        function renderEmployees() {
+        async function renderEmployees() {
             const grid = document.getElementById("employeeGrid");
             if (!grid) return;
-            grid.innerHTML = karyawanData.map(e => {
-                const initial = e.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+            // Sumber nyata = app_users (sama dengan Pengaturan → Manajemen Akun).
+            let list = appEmployees;
+            if (!list.length && JUWITA_AUTH_MODE === "auth") {
+                try {
+                    const { data, error } = await sb.from("app_users").select("*").order("created_at", { ascending: true });
+                    if (!error && data && data.length) { appEmployees = data; list = data; }
+                } catch (e) {
+                    console.warn("renderEmployees load app_users error:", e && e.message);
+                    list = [];
+                }
+            }
+            if (!list.length) {
+                grid.innerHTML = '<div style="padding:20px;color:var(--text-muted);text-align:center;">Belum ada karyawan terdaftar</div>';
+                return;
+            }
+            grid.innerHTML = list.map(emp => {
+                const name = emp.full_name || emp.name || "?";
+                const initial = String(name).split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                const roleTxt = emp.role_label || emp.role || "-";
+                const isOwner = String(emp.role || "").toLowerCase() === "owner";
+                const statusTxt = emp.status === "ACTIVE" ? "Aktif" : "Nonaktif";
+                const statusCls = emp.status === "ACTIVE" ? "badge-lunas" : "badge-belum";
                 return `<div class="emp-card">
                             <div class="emp-avatar">${initial}</div>
                             <div class="emp-info">
-                                <div class="emp-name">${e.name}</div>
-                                <div class="emp-role">${e.role}</div>
-                                <span class="emp-status ${e.theme}">${e.status}</span>
+                                <div class="emp-name">${escEmp(name)}</div>
+                                <div class="emp-role">${escEmp(roleTxt)}${isOwner ? ' · Owner' : ''}</div>
+                                <span class="emp-status ${statusCls}">${statusTxt}</span>
                             </div>
                         </div>`;
             }).join('');
@@ -8318,6 +8338,7 @@
             if (pageId === "pengaturan") setTimeout(() => renderAccountCards(), 10);
             if (pageId === "akuntansi") setTimeout(() => loadAccounting(), 10);
             if (pageId === "data-pembelian") setTimeout(() => loadPembelian(), 10);
+            if (pageId === "karyawan") setTimeout(() => renderEmployees(), 10);
             // Harga per channel: muat ulang product_prices (RLS authenticated)
             // saat halaman Harga Jual dibuka, lalu render ulang tabel.
             if (pageId === "harga-jual") setTimeout(() => ensureProductPricesLoaded(true), 10);
