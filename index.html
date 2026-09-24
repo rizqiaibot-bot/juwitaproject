@@ -2046,6 +2046,7 @@
                 <li class="dropdown" data-menu-group="gudang">
                     <a href="#"><i class="fas fa-warehouse"></i> Gudang <i class="fas fa-chevron-down"></i></a>
                     <ul class="dropdown-menu">
+                        <li data-page="penerimaan"><a href="#"><i class="fas fa-boxes-stacked"></i> Penerimaan</a></li>
                         <li data-page="picking"><a href="#"><i class="fas fa-clipboard-list"></i> Picking</a></li>
                         <li data-page="packing"><a href="#"><i class="fas fa-boxes"></i> Packing</a></li>
                         <li data-page="pengiriman"><a href="#"><i class="fas fa-truck"></i> Pengiriman</a></li>
@@ -2705,7 +2706,10 @@
                     <h1>Data Pembelian</h1>
                     <div class="page-header-desc">Purchase order ke supplier — pantau status pembayaran &amp; penerimaan</div>
                 </div>
-                <button class="checkout-btn" onclick="openBeliForm()" style="width:auto;padding:10px 20px;"><i class="fas fa-plus"></i> Buat PO</button>
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                    <button class="btn-secondary" onclick="openSupplierModal()" style="padding:10px 18px;"><i class="fas fa-truck"></i> Supplier</button>
+                    <button class="checkout-btn" onclick="openBeliForm()" style="width:auto;padding:10px 20px;"><i class="fas fa-plus"></i> Buat PO</button>
+                </div>
             </div>
 
             <div class="filter-section" style="margin-bottom:14px;">
@@ -2754,24 +2758,14 @@
         <div id="page-penerimaan" class="page-content">
             <div class="page-header">
                 <div>
-                    <h1>Penerimaan Barang Masuk</h1>
-                    <div class="page-header-desc">Catat barang masuk dari supplier dan update stok otomatis</div>
+                    <h1>Penerimaan Barang</h1>
+                    <div class="page-header-desc">Proses penerimaan PO dari supplier — stok &amp; modal bertambah otomatis</div>
                 </div>
             </div>
-            <div class="form-card" style="margin-bottom:20px;">
-                <h3 style="margin-bottom:16px;">Form Penerimaan Barang</h3>
-                <div class="form-grid">
-                    <div class="form-group"><label>No PO / Referensi</label><input type="text" id="recPO" class="form-control" placeholder="PO-2026-001" /></div>
-                    <div class="form-group"><label>Supplier</label><select id="recSupplier" class="form-control"></select></div>
-                    <div class="form-group"><label>Produk</label><select id="recProduct" class="form-control"></select></div>
-                    <div class="form-group"><label>Jumlah (Qty)</label><input type="number" id="recQty" class="form-control" placeholder="0" min="1" /></div>
-                    <div class="form-group"><label>Tanggal Diterima</label><input type="date" id="recDate" class="form-control" /></div>
-                    <div class="form-group"><label>Catatan</label><input type="text" id="recNotes" class="form-control" placeholder="Kondisi barang..." /></div>
-                </div>
-                <button class="checkout-btn" onclick="submitReceiving()" style="width:auto;padding:10px 28px;"><i class="fas fa-check"></i> Catat Penerimaan</button>
-            </div>
-            <div class="page-header" style="margin-top:8px;"><h3 style="font-size:1rem;">Riwayat Penerimaan</h3></div>
-            <div class="table-wrapper"><table><thead><tr><th>TANGGAL</th><th>NO PO</th><th>PRODUK</th><th>SUPPLIER</th><th>QTY</th><th>CATATAN</th></tr></thead><tbody id="recTableBody"></tbody></table></div>
+            <div class="table-wrapper"><table>
+                <thead><tr><th>NO PO</th><th>SUPPLIER</th><th>TANGGAL</th><th>TOTAL</th><th>STATUS TERIMA</th><th>AKSI</th></tr></thead>
+                <tbody id="penerimaanTableBody"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">Tidak ada PO menunggu penerimaan</td></tr></tbody>
+            </table></div>
         </div>
 
         <div id="page-picking" class="page-content">
@@ -8354,6 +8348,7 @@
             if (pageId === "pengaturan") setTimeout(() => renderAccountCards(), 10);
             if (pageId === "akuntansi") setTimeout(() => loadAccounting(), 10);
             if (pageId === "data-pembelian") setTimeout(() => loadPembelian(), 10);
+            if (pageId === "penerimaan") setTimeout(async () => { if (!suppliersData.length) await loadPembelian(); renderPenerimaan(); }, 10);
             if (pageId === "karyawan") setTimeout(() => renderEmployees(), 10);
             if (pageId === "rekap-kehadiran") setTimeout(() => syncKaryawanRealtime().then(() => renderRekapKehadiran()), 10);
             // Harga per channel: muat ulang product_prices (RLS authenticated)
@@ -9568,7 +9563,6 @@
             const receivedTotal = items.reduce((s, i) => s + (Number(i.qty_received) || 0), 0);
             const totalQty = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
             const dateStr = beliDateOnly(p.purchase_date);
-            const canReceive = p.receiving_status !== "Diterima";
 
             const itemsHtml = items.map(it => `<tr>
                 <td>${it.product_name}</td>
@@ -9576,7 +9570,6 @@
                 <td>${it.qty_received}</td>
                 <td>${(Number(it.harga_beli) || 0).toLocaleString('id-ID')}</td>
                 <td>${(Number(it.subtotal) || 0).toLocaleString('id-ID')}</td>
-                <td>${canReceive ? `<input type="number" id="beliRecvQty_${it.id}" class="form-control" style="width:76px;display:inline-block;padding:4px 8px;" min="0" max="${(Number(it.qty) || 0) - (Number(it.qty_received) || 0)}" value="${(Number(it.qty) || 0) - (Number(it.qty_received) || 0)}" />` : '-'}</td>
             </tr>`).join('');
 
             const content = `
@@ -9590,8 +9583,8 @@
                     <div><strong>Status Bayar:</strong> ${beliStatusBadge(p.payment_status)} &nbsp;&nbsp; <strong>Status Terima:</strong> ${beliStatusBadge(p.receiving_status)}</div>
                     <div><strong>Total:</strong> Rp ${total.toLocaleString('id-ID')} &nbsp;&nbsp; (${receivedTotal}/${totalQty} item diterima)</div>
                 </div>
-                <div class="table-wrapper"><table><thead><tr><th>ITEM</th><th>QTY</th><th>DITERIMA</th><th>HARGA BELI</th><th>SUBTOTAL</th><th>TERIMA</th></tr></thead><tbody>${itemsHtml}</tbody></table></div>
-                ${canReceive ? `<button class="checkout-btn" style="width:100%;margin-top:12px;" onclick="receiveBeliItems(${p.id})"><i class="fas fa-boxes"></i> Terima Barang</button>` : ''}
+                <div class="table-wrapper"><table><thead><tr><th>ITEM</th><th>QTY</th><th>DITERIMA</th><th>HARGA BELI</th><th>SUBTOTAL</th></tr></thead><tbody>${itemsHtml}</tbody></table></div>
+                <div style="font-size:0.72rem;color:var(--text-muted);margin-top:10px;"><i class="fas fa-info-circle"></i> Penerimaan barang dilakukan di menu Gudang → Penerimaan.</div>
             `;
             document.getElementById("beliDetailContent").innerHTML = content;
             document.getElementById("beliDetailModal").classList.add("active");
@@ -9601,14 +9594,79 @@
             document.getElementById("beliDetailModal").classList.remove("active");
         }
 
-        async function receiveBeliItems(purchaseId) {
+        // ============================================================
+        // PENERIMAAN (Gudang) — proses terima barang dari PO
+        // ============================================================
+        function renderPenerimaan() {
+            const tbody = document.getElementById("penerimaanTableBody");
+            if (!tbody) return;
+            const list = purchasesData.filter(p => p.receiving_status === "Belum" || p.receiving_status === "Sebagian")
+                .slice().sort((a, b) => String(b.purchase_date || "").localeCompare(String(a.purchase_date || "")));
+            if (!list.length) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">Tidak ada PO menunggu penerimaan</td></tr>';
+                return;
+            }
+            tbody.innerHTML = list.map(p => {
+                const dateStr = beliDateOnly(p.purchase_date);
+                return `<tr>
+                    <td><strong>${p.po_number}</strong></td>
+                    <td>${beliSupplierName(p.supplier_id)}</td>
+                    <td>${dateStr || '-'}</td>
+                    <td><strong>${beliTotalOf(p).toLocaleString('id-ID')}</strong></td>
+                    <td>${beliStatusBadge(p.receiving_status)}</td>
+                    <td><button class="aksi-btn" onclick="openPenerimaanDetail(${p.id})"><i class="fas fa-boxes"></i> Terima</button></td>
+                </tr>`;
+            }).join('');
+        }
+
+        function openPenerimaanDetail(id) {
+            const p = purchasesData.find(x => Number(x.id) === Number(id));
+            if (!p) return;
+            const items = purchaseItemsData.filter(i => Number(i.purchase_id) === Number(id));
+            const total = items.reduce((s, i) => s + (Number(i.subtotal) || 0), 0);
+            const dateStr = beliDateOnly(p.purchase_date);
+
+            const itemsHtml = items.map(it => {
+                const remaining = (Number(it.qty) || 0) - (Number(it.qty_received) || 0);
+                return `<tr>
+                    <td>${it.product_name}</td>
+                    <td>${it.qty}</td>
+                    <td>${it.qty_received}</td>
+                    <td>${remaining}</td>
+                    <td>${(Number(it.harga_beli) || 0).toLocaleString('id-ID')}</td>
+                    <td><input type="number" id="penerimaanQty_${it.id}" class="form-control" style="width:80px;display:inline-block;padding:4px 8px;" min="0" max="${remaining}" value="${remaining}" /></td>
+                </tr>`;
+            }).join('');
+
+            const content = `
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                    <h3 style="margin:0;font-size:1.05rem;"><i class="fas fa-boxes-stacked" style="color:var(--primary);"></i> ${p.po_number}</h3>
+                    <button class="aksi-btn" onclick="closePenerimaanDetail()"><i class="fas fa-times"></i></button>
+                </div>
+                <div style="font-size:0.82rem;line-height:1.8;margin-bottom:12px;">
+                    <div><strong>Supplier:</strong> ${beliSupplierName(p.supplier_id)}</div>
+                    <div><strong>Tanggal:</strong> ${dateStr || '-'}</div>
+                    <div><strong>Status Terima:</strong> ${beliStatusBadge(p.receiving_status)} &nbsp;&nbsp; <strong>Total:</strong> Rp ${total.toLocaleString('id-ID')}</div>
+                </div>
+                <div class="table-wrapper"><table><thead><tr><th>ITEM</th><th>QTY PO</th><th>SUDAH DITERIMA</th><th>SISA</th><th>HARGA BELI</th><th>TERIMA SEKARANG</th></tr></thead><tbody>${itemsHtml}</tbody></table></div>
+                <button class="checkout-btn" style="width:100%;margin-top:12px;" onclick="receivePenerimaanItems(${p.id})"><i class="fas fa-check"></i> Simpan Penerimaan</button>
+            `;
+            document.getElementById("penerimaanDetailContent").innerHTML = content;
+            document.getElementById("penerimaanDetailModal").classList.add("active");
+        }
+
+        function closePenerimaanDetail() {
+            document.getElementById("penerimaanDetailModal").classList.remove("active");
+        }
+
+        async function receivePenerimaanItems(purchaseId) {
             const p = purchasesData.find(x => Number(x.id) === Number(purchaseId));
             if (!p) return;
             const items = purchaseItemsData.filter(i => Number(i.purchase_id) === Number(purchaseId));
             let receivedAny = false;
 
             for (const it of items) {
-                const el = document.getElementById("beliRecvQty_" + it.id);
+                const el = document.getElementById("penerimaanQty_" + it.id);
                 const q = parseInt(el ? el.value : "0") || 0;
                 const remaining = (Number(it.qty) || 0) - (Number(it.qty_received) || 0);
                 if (q <= 0 || q > remaining) continue;
@@ -9643,8 +9701,104 @@
             showToast("Penerimaan dicatat");
             renderMonitorStok();
             renderCatalogTable();
+            closePenerimaanDetail();
+            renderPenerimaan();
             await loadPembelian();
-            openBeliDetail(purchaseId);
+        }
+
+        // ============================================================
+        // SUPPLIER CRUD
+        // ============================================================
+        let supplierEditingId = null;
+
+        function openSupplierModal() {
+            supplierEditingId = null;
+            document.getElementById("supName").value = "";
+            document.getElementById("supContact").value = "";
+            document.getElementById("supPhone").value = "";
+            document.getElementById("supAddress").value = "";
+            document.getElementById("supSaveBtn").innerHTML = '<i class="fas fa-save"></i> Tambah Supplier';
+            renderSupplierList();
+            document.getElementById("supplierModal").classList.add("active");
+        }
+
+        function closeSupplierModal() {
+            document.getElementById("supplierModal").classList.remove("active");
+        }
+
+        function renderSupplierList() {
+            const cont = document.getElementById("supplierList");
+            if (!cont) return;
+            if (!suppliersData.length) {
+                cont.innerHTML = '<div style="padding:14px;color:var(--text-muted);font-size:0.8rem;">Belum ada supplier</div>';
+                return;
+            }
+            cont.innerHTML = suppliersData.map(s => `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border-color);">
+                <div style="min-width:0;">
+                    <div style="font-weight:700;font-size:0.85rem;">${ppEscapeHtml(s.name)}</div>
+                    <div style="font-size:0.72rem;color:var(--text-muted);">${ppEscapeHtml(s.phone || s.contact_person || '-')}</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-shrink:0;">
+                    <button class="aksi-btn" onclick="editSupplier(${s.id})"><i class="fas fa-pen"></i></button>
+                    <button class="aksi-btn" style="color:var(--danger);" onclick="deleteSupplier(${s.id})"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>`).join('');
+        }
+
+        function editSupplier(id) {
+            const s = suppliersData.find(x => Number(x.id) === Number(id));
+            if (!s) return;
+            supplierEditingId = id;
+            document.getElementById("supName").value = s.name || "";
+            document.getElementById("supContact").value = s.contact_person || "";
+            document.getElementById("supPhone").value = s.phone || "";
+            document.getElementById("supAddress").value = s.address || "";
+            document.getElementById("supSaveBtn").innerHTML = '<i class="fas fa-save"></i> Update Supplier';
+        }
+
+        async function saveSupplier() {
+            const name = (document.getElementById("supName").value || "").trim();
+            const contact = (document.getElementById("supContact").value || "").trim();
+            const phone = (document.getElementById("supPhone").value || "").trim();
+            const address = (document.getElementById("supAddress").value || "").trim();
+            if (!name) { showToast("Nama supplier wajib diisi"); return; }
+            try {
+                if (supplierEditingId != null) {
+                    const { error } = await sb.from('suppliers').update({ name, contact_person: contact || null, phone: phone || null, address: address || null }).eq('id', supplierEditingId);
+                    if (error) throw new Error(error.message);
+                    showToast("Supplier diperbarui");
+                } else {
+                    const { error } = await sb.from('suppliers').insert({ name, contact_person: contact || null, phone: phone || null, address: address || null });
+                    if (error) throw new Error(error.message);
+                    showToast("Supplier ditambahkan");
+                }
+                supplierEditingId = null;
+                document.getElementById("supName").value = "";
+                document.getElementById("supContact").value = "";
+                document.getElementById("supPhone").value = "";
+                document.getElementById("supAddress").value = "";
+                document.getElementById("supSaveBtn").innerHTML = '<i class="fas fa-save"></i> Tambah Supplier';
+                await loadPembelian();
+                renderSupplierList();
+            } catch (e) {
+                showToast("Gagal simpan supplier: " + (e && e.message ? e.message : "gagal"));
+            }
+        }
+
+        async function deleteSupplier(id) {
+            const s = suppliersData.find(x => Number(x.id) === Number(id));
+            if (!s) return;
+            if (!confirm("Hapus supplier \"" + s.name + "\"?")) return;
+            try {
+                const { error } = await sb.from('suppliers').delete().eq('id', id);
+                if (error) throw new Error(error.message);
+                showToast("Supplier dihapus");
+                suppliersData = suppliersData.filter(x => Number(x.id) !== Number(id));
+                renderSupplierList();
+                await loadPembelian();
+            } catch (e) {
+                showToast("Gagal hapus supplier: " + (e && e.message ? e.message : "gagal"));
+            }
         }
 
         window.accShowForm = accShowForm;
@@ -9670,7 +9824,15 @@
         window.saveBeliPo = saveBeliPo;
         window.openBeliDetail = openBeliDetail;
         window.closeBeliDetail = closeBeliDetail;
-        window.receiveBeliItems = receiveBeliItems;
+        window.openSupplierModal = openSupplierModal;
+        window.closeSupplierModal = closeSupplierModal;
+        window.saveSupplier = saveSupplier;
+        window.editSupplier = editSupplier;
+        window.deleteSupplier = deleteSupplier;
+        window.renderPenerimaan = renderPenerimaan;
+        window.openPenerimaanDetail = openPenerimaanDetail;
+        window.closePenerimaanDetail = closePenerimaanDetail;
+        window.receivePenerimaanItems = receivePenerimaanItems;
     </script>
 
     <!-- ===== MODAL TAMBAH/EDIT KARYAWAN (OWNER) ===== -->
@@ -9814,6 +9976,32 @@
     <div class="modal-overlay" id="beliDetailModal" onclick="if(event.target===this)closeBeliDetail()">
         <div class="modal-card" style="max-width:640px;width:min(94vw,640px);text-align:left;max-height:90vh;overflow-y:auto;">
             <div id="beliDetailContent"></div>
+        </div>
+    </div>
+
+    <!-- ===== MODAL PENERIMAAN (GUDANG) ===== -->
+    <div class="modal-overlay" id="penerimaanDetailModal" onclick="if(event.target===this)closePenerimaanDetail()">
+        <div class="modal-card" style="max-width:680px;width:min(94vw,680px);text-align:left;max-height:90vh;overflow-y:auto;">
+            <div id="penerimaanDetailContent"></div>
+        </div>
+    </div>
+
+    <!-- ===== MODAL SUPPLIER CRUD ===== -->
+    <div class="modal-overlay" id="supplierModal" onclick="if(event.target===this)closeSupplierModal()">
+        <div class="modal-card" style="max-width:540px;width:min(94vw,540px);text-align:left;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                <h3 style="margin:0;font-size:1.05rem;"><i class="fas fa-truck" style="color:var(--primary);"></i> Supplier</h3>
+                <button class="aksi-btn" onclick="closeSupplierModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="form-grid" style="margin-bottom:12px;">
+                <div class="form-group form-grid-full"><label>Nama Supplier</label><input id="supName" class="form-control" placeholder="Nama supplier" /></div>
+                <div class="form-group"><label>Kontak</label><input id="supContact" class="form-control" placeholder="Nama kontak" /></div>
+                <div class="form-group"><label>Telepon</label><input id="supPhone" class="form-control" placeholder="08xxxxxxxxxx" /></div>
+                <div class="form-group form-grid-full"><label>Alamat</label><input id="supAddress" class="form-control" placeholder="Alamat" /></div>
+            </div>
+            <button class="checkout-btn" onclick="saveSupplier()" style="width:100%;" id="supSaveBtn"><i class="fas fa-save"></i> Tambah Supplier</button>
+            <div style="font-size:0.8rem;font-weight:800;margin:14px 0 6px;color:var(--text-primary);">Daftar Supplier</div>
+            <div id="supplierList"></div>
         </div>
     </div>
 
