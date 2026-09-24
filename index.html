@@ -5687,20 +5687,36 @@
         // ============================================================
         // EMPLOYEES
         // ============================================================
+        function mapAppUsersToKaryawan(list) {
+            return (list || []).map(emp => ({
+                name: emp.full_name || emp.name || "?",
+                role: emp.role_label || emp.role || "-",
+                status: emp.status === "ACTIVE" ? "Aktif" : "Nonaktif",
+                theme: emp.status === "ACTIVE" ? "badge-lunas" : "badge-belum"
+            }));
+        }
+
+        async function syncKaryawanRealtime() {
+            if (JUWITA_AUTH_MODE !== "auth") return false;
+            try {
+                const { data, error } = await sb.from("app_users").select("*").order("created_at", { ascending: true });
+                if (!error && data && data.length) {
+                    appEmployees = data;
+                    karyawanData = mapAppUsersToKaryawan(data);
+                    return true;
+                }
+            } catch (e) {
+                console.warn("sync karyawan realtime error:", e && e.message);
+            }
+            return false;
+        }
+
         async function renderEmployees() {
             const grid = document.getElementById("employeeGrid");
             if (!grid) return;
             // Sumber nyata = app_users (sama dengan Pengaturan → Manajemen Akun).
             let list = appEmployees;
-            if (!list.length && JUWITA_AUTH_MODE === "auth") {
-                try {
-                    const { data, error } = await sb.from("app_users").select("*").order("created_at", { ascending: true });
-                    if (!error && data && data.length) { appEmployees = data; list = data; }
-                } catch (e) {
-                    console.warn("renderEmployees load app_users error:", e && e.message);
-                    list = [];
-                }
-            }
+            if (!list.length) { await syncKaryawanRealtime(); list = appEmployees; }
             if (!list.length) {
                 grid.innerHTML = '<div style="padding:20px;color:var(--text-muted);text-align:center;">Belum ada karyawan terdaftar</div>';
                 return;
@@ -8339,6 +8355,7 @@
             if (pageId === "akuntansi") setTimeout(() => loadAccounting(), 10);
             if (pageId === "data-pembelian") setTimeout(() => loadPembelian(), 10);
             if (pageId === "karyawan") setTimeout(() => renderEmployees(), 10);
+            if (pageId === "rekap-kehadiran") setTimeout(() => syncKaryawanRealtime().then(() => renderRekapKehadiran()), 10);
             // Harga per channel: muat ulang product_prices (RLS authenticated)
             // saat halaman Harga Jual dibuka, lalu render ulang tabel.
             if (pageId === "harga-jual") setTimeout(() => ensureProductPricesLoaded(true), 10);
