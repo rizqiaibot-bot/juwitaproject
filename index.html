@@ -2240,8 +2240,7 @@
             </div>
             <div class="form-card" style="margin-bottom:16px;">
                 <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
-                    <div class="form-group" style="min-width:180px;"><label>Tanggal</label><input type="date" id="rekapTanggal" class="form-control" /></div>
-                    <button class="checkout-btn" onclick="renderRekapPenjualan()" style="width:auto;padding:10px 24px;margin-bottom:2px;"><i class="fas fa-search"></i> Tampilkan</button>
+                    <div class="form-group" style="min-width:180px;"><label>Tanggal</label><input type="date" id="rekapTanggal" class="form-control" onchange="renderRekapPenjualan()" /></div>
                     <button class="btn-secondary" onclick="printRekapPenjualan()" style="padding:10px 20px;margin-bottom:2px;"><i class="fas fa-print"></i> Print</button>
                 </div>
             </div>
@@ -2252,7 +2251,7 @@
             </div>
             <div id="rekapSyncInfo" style="font-size:0.72rem;color:var(--text-muted);margin:-6px 0 4px;">Sinkron terakhir: -</div>
             <div id="rekapRangeInfo" style="font-size:0.72rem;color:var(--text-muted);margin:0 0 12px;">Transaksi pertama: - &middot; Terakhir: -</div>
-            <div class="table-wrapper"><table><thead><tr><th>CHANNEL</th><th>OMZET</th><th>TRANSAKSI</th><th>ITEM</th></tr></thead><tbody id="rekapTableBody"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Pilih tanggal lalu klik Tampilkan</td></tr></tbody></table></div>
+            <div class="table-wrapper"><table><thead><tr><th>CHANNEL</th><th>OMZET</th><th>TRANSAKSI</th><th>ITEM</th></tr></thead><tbody id="rekapTableBody"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Memuat data...</td></tr></tbody></table></div>
             <!-- ===== BREAKDOWN PEMBAYARAN POS ===== -->
             <div id="posBreakdownSection" style="margin-top:20px;">
                 <div style="font-size:0.9rem;font-weight:800;margin-bottom:10px;color:var(--text-primary);"><i class="fas fa-wallet" style="color:var(--primary);margin-right:6px;"></i>Breakdown Pembayaran POS</div>
@@ -2271,7 +2270,7 @@
                 <div style="font-size:0.9rem;font-weight:800;margin-bottom:10px;color:var(--text-primary);"><i class="fas fa-user-tie" style="color:var(--primary);margin-right:6px;"></i>Per Kasir (POS)</div>
                 <div class="table-wrapper"><table>
                     <thead><tr><th>KASIR</th><th>TRX</th><th>OMZET</th><th>CASH</th><th>QRIS</th><th>EDC</th><th>TRANSFER</th><th>PIUTANG</th></tr></thead>
-                    <tbody id="rekapKasirBody"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted);">Pilih tanggal lalu klik Tampilkan</td></tr></tbody>
+                    <tbody id="rekapKasirBody"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted);">Memuat data...</td></tr></tbody>
                 </table></div>
             </div>
             <div class="table-wrapper" style="margin-top:16px;">
@@ -8358,6 +8357,8 @@
             if (pageId === "pricing") setTimeout(() => ensureProductPricesLoaded(true), 10);
             // Pastikan polling live tetap berjalan saat halaman Penjualan dibuka.
             if (pageId === "daftar-penjualan") ensureOrdersPolling();
+            // Rekap Penjualan: muat otomatis saat halaman dibuka.
+            if (pageId === "rekap-penjualan") setTimeout(() => renderRekapPenjualan(), 10);
         }
 
         // ============================================================
