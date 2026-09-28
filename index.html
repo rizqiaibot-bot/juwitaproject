@@ -600,6 +600,30 @@
             #rekapPrintArea .rp-summary span {
                 font-weight: 700;
             }
+            /* Detail transaksi: font lebih kecil + nowrap agar tiap baris muat satu baris. */
+            #rekapPrintArea .rp-detail {
+                font-size: 9px;
+            }
+            #rekapPrintArea .rp-detail th,
+            #rekapPrintArea .rp-detail td {
+                padding: 3px 6px;
+                white-space: nowrap;
+                word-break: normal;
+            }
+            #rekapPrintArea .rp-detail td span {
+                font-size: inherit !important;
+                padding: 0 !important;
+                background: transparent !important;
+                border-radius: 0 !important;
+                font-weight: 600 !important;
+            }
+            #rekapPrintArea .rp-detail .badge-status {
+                display: inline !important;
+                gap: 0 !important;
+            }
+            #rekapPrintArea .rp-detail .badge-status::before {
+                display: none !important;
+            }
         }
 
         /* ===== FILTER ===== */
@@ -7384,7 +7408,7 @@
                 '<table><thead><tr><th>Kasir</th><th>Trx</th><th>Omzet</th><th>Cash</th><th>QRIS</th><th>EDC</th><th>Transfer</th><th>Piutang</th></tr></thead>' +
                 '<tbody>' + rowsHtml("rekapKasirBody") + '</tbody></table>' +
                 '<h3>Detail Transaksi</h3>' +
-                '<table><thead><tr><th>Order ID</th><th>Channel</th><th>Tanggal &amp; Jam</th><th>Total</th><th>Status</th></tr></thead>' +
+                '<table class="rp-detail"><thead><tr><th>Order ID</th><th>Channel</th><th>Tanggal &amp; Jam</th><th>Total</th><th>Status</th></tr></thead>' +
                 '<tbody>' + rowsHtml("rekapDetailBody") + '</tbody></table>';
 
             // window.print() — dialog browser: pilih printer atau "Save as PDF".
