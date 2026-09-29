@@ -1788,6 +1788,12 @@
             .mobile-toggle {
                 display: block;
             }
+            /* Profil (avatar/nama/Logout) dipindah ke bawah navbar agar tidak
+               menutupi tombol hamburger di layar mobile. */
+            #globalUserChip {
+                top: 76px !important;
+                z-index: 9997 !important;
+            }
             .nav-menu-horizontal {
                 display: none;
                 flex-direction: column;
@@ -1916,6 +1922,9 @@
             }
             .nav-container {
                 min-height: 60px;
+            }
+            #globalUserChip {
+                top: 66px !important;
             }
             .logo-text h2 {
                 font-size: 1rem;
