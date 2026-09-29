@@ -3703,7 +3703,7 @@
         const PROTO_HASH = "e3fbca6520fe58a82ecaf643e7ce8a4576331df7be8df9330fd2f2e95c8ff154"; // sha256("081234567890|juwita-proto|dummy123")
         // FULL MENU untuk akun prototype/testkasir (diambil dari daftar menu admin,
         // agar selalu konsisten dengan menu yang benar-benar tersedia di aplikasi).
-        const PROTO_FULL_MENUS = ["pos", "penjualan", "katalog", "persediaan", "pembelian", "gudang", "pricing", "hr", "pengaturan"];
+        const PROTO_FULL_MENUS = ["pos", "penjualan", "katalog", "persediaan", "pembelian", "gudang", "pricing", "akuntansi", "hr", "pengaturan"];
 
         function protoFullMenus() {
             const admin = userAccounts.find(a => a.username === "admin");
@@ -4346,11 +4346,11 @@
             const totalEl = document.getElementById("totalAkun");
             if (totalEl) totalEl.textContent = `Total: ${userAccounts.length} Akun`;
 
-            const allMenus = ["pos","penjualan","katalog","persediaan","pembelian","gudang","pricing","hr","pengaturan"];
+            const allMenus = ["pos","penjualan","katalog","persediaan","pembelian","gudang","pricing","akuntansi","hr","pengaturan"];
             const menuLabels = {
                 pos: "POS", penjualan: "Penjualan", katalog: "Katalog",
                 persediaan: "Persediaan", pembelian: "Pembelian", gudang: "Gudang",
-                pricing: "Pricing", hr: "HR", pengaturan: "Pengaturan"
+                pricing: "Pricing", akuntansi: "Akuntansi", hr: "HR", pengaturan: "Pengaturan"
             };
 
             container.innerHTML = userAccounts.map((a, i) => {
@@ -4392,8 +4392,8 @@
         // ============================================================
         // MANAJEMEN KARYAWAN (app_users) — HANYA OWNER/Super Admin
         // ============================================================
-        const APP_MENU_KEYS = ["pos", "penjualan", "katalog", "persediaan", "pembelian", "gudang", "pricing", "hr", "pengaturan"];
-        const APP_MENU_LABELS = { pos: "POS", penjualan: "Penjualan", katalog: "Katalog", persediaan: "Persediaan", pembelian: "Pembelian", gudang: "Gudang", pricing: "Pricing", hr: "HR", pengaturan: "Pengaturan" };
+        const APP_MENU_KEYS = ["pos", "penjualan", "katalog", "persediaan", "pembelian", "gudang", "pricing", "akuntansi", "hr", "pengaturan"];
+        const APP_MENU_LABELS = { pos: "POS", penjualan: "Penjualan", katalog: "Katalog", persediaan: "Persediaan", pembelian: "Pembelian", gudang: "Gudang", pricing: "Pricing", akuntansi: "Akuntansi", hr: "HR", pengaturan: "Pengaturan" };
         const APP_ROLES = [
             { value: "kasir", label: "Kasir" },
             { value: "gudang", label: "Gudang" },
@@ -9921,6 +9921,7 @@
                         <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="pembelian" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />Pembelian</label>
                         <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="gudang" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />Gudang</label>
                         <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="pricing" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />Pricing</label>
+                        <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="akuntansi" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />Akuntansi</label>
                         <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="hr" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />HR</label>
                         <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="pengaturan" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />Pengaturan</label>
                     </div>
