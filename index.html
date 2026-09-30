@@ -6506,11 +6506,10 @@
             warehouseReceiving.unshift(record);
 
             if (prod) {
-                const qtyBefore = prod.stock;
                 prod.stock += qty;
                 prod.maxStock = Math.max(prod.maxStock || 0, prod.stock * 2);
+                // Backend /api/data/products PATCH mencatat stock_mutation otomatis.
                 sb.from('products').update({ stock: prod.stock, maxStock: prod.maxStock }).eq('id', pid);
-                logStockMutation(prod.id, prod.name, 'IN', qty, qtyBefore, prod.stock, 'Penerimaan: ' + (po || record.po_number));
             }
             sb.from('warehouse_receiving').insert(record).then(r => { if (r.error) console.warn(r.error.message); });
 
@@ -6999,26 +6998,9 @@
             </tr>`).join('');
         }
 
-        // ============================================================
-        // STOCK MUTATION LOGGER (untuk sync stok ke Shopee)
-        // ============================================================
-        async function logStockMutation(productId, productName, type, qty, qtyBefore, qtyAfter, source) {
-            const prod = products.find(p => p.id === productId);
-            const mutations = [];
-            if (prod && prod.shopee_item_id) {
-                mutations.push({
-                    product_id: productId, product_name: productName, type, quantity: qty,
-                    qty_before: qtyBefore, qty_after: qtyAfter, source,
-                    shopee_account: 'toko_1', shopee_item_id: prod.shopee_item_id, shopee_sku: prod.shopee_sku || '',
-                    sync_status: 'pending', created_at: new Date().toISOString()
-                });
-            }
-            if (mutations.length === 0) return;
-            return sb.from('stock_mutations').insert(mutations).then(r => {
-                if (r.error) console.warn("Stock mutation log error:", r.error.message);
-                return r.error ? null : r.data;
-            });
-        }
+        // Catatan: perubahan products.stock sekarang dicatat otomatis oleh backend
+        // (server.js handleDataWrite → recordProductStockMutation), sehingga tidak
+        // ada lagi pencatatan mutation manual di frontend (hindari mutation ganda).
 
         // ============================================================
         // REKAP KEHADIRAN
@@ -8680,11 +8662,7 @@
                 }
 
                 products.push(saved);
-
-                // Stock mutation hanya setelah insert berhasil (hanya jika produk ter-mapping Shopee)
-                if (saved.stock > 0) {
-                    logStockMutation(saved.id, saved.name, 'IN', saved.stock, 0, saved.stock, 'Produk Baru');
-                }
+                // Backend /api/data/products POST mencatat stock_mutation awal otomatis.
 
                 renderProducts();
                 renderCatalogTable();
@@ -9751,16 +9729,11 @@
 
                 const prod = products.find(pr => Number(pr.id) === Number(it.product_id));
                 if (prod) {
-                    const before = Number(prod.stock) || 0;
-                    const after = before + q;
+                    const after = (Number(prod.stock) || 0) + q;
+                    // Backend /api/data/products PATCH mencatat stock_mutation otomatis.
                     await sb.from('products').update({ stock: after, modal: Number(it.harga_beli) || 0 }).eq('id', it.product_id);
                     prod.stock = after;
                     prod.modal = Number(it.harga_beli) || 0;
-                    await sb.from('stock_mutations').insert({
-                        product_id: prod.id, product_name: prod.name, type: 'IN', quantity: q,
-                        qty_before: before, qty_after: after, source: 'Penerimaan PO: ' + p.po_number,
-                        sync_status: 'pending', created_at: new Date().toISOString()
-                    });
                 }
                 await sb.from('purchase_items').update({ qty_received: (Number(it.qty_received) || 0) + q }).eq('id', it.id);
                 it.qty_received = (Number(it.qty_received) || 0) + q;

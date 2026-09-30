@@ -10,11 +10,6 @@ import { pool } from "./db.js";
 const SHOPEE_API_URL = "https://partner.shopeemobile.com";
 const FETCH_TIMEOUT_MS = 15000;
 
-// Pemetaan shopee_account (stock_mutations) → shop_id Shopee, dan sebaliknya.
-// JANGAN mencampur: Shopee 1 hanya pakai akun Shopee 1, Shopee 2 hanya akun Shopee 2.
-const ACCOUNT_TO_SHOP = { toko_1: "724153261", toko_2: "1214362884" };
-const SHOP_TO_ACCOUNT = { "724153261": "toko_1", "1214362884": "toko_2" };
-
 function env(name) {
   return process.env[name] || "";
 }
@@ -206,82 +201,131 @@ export async function pullOrders(shopId) {
   return { inserted };
 }
 
-// Stock sync: kirim products.stock (sumber stok fisik POS) ke Shopee.
-// Setiap produk hanya dikirim ke shop_id yang benar sesuai mapping + shopee_account.
+// Stock sync: kirim products.stock (single source of truth) ke SEMUA Shopee
+// yang ter-mapping untuk product_id tersebut. shopee_account TIDAK menentukan
+// target — target ditentukan dari product_shopee_mapping (bisa Shopee 1 & 2).
 export async function syncStock(shopId) {
   const accounts = await loadAccounts();
   const accountByShop = {};
   for (const a of accounts) accountByShop[String(a.shop_id)] = a;
 
-  // Dedupe pending per (product_id, shopee_account), pakai stok produk terkini.
-  const { rows: mutations } = await pool.query(
-    `SELECT DISTINCT ON (m.product_id, m.shopee_account)
-            m.id AS mutation_id, m.product_id, m.shopee_account, p.name, p.stock
+  // Dedupe pending per product_id (pakai mutation terbaru tiap produk).
+  const { rows: products } = await pool.query(
+    `SELECT DISTINCT ON (m.product_id) m.product_id, p.name, p.stock, m.id AS mutation_id
      FROM stock_mutations m
      JOIN products p ON p.id = m.product_id
      WHERE m.sync_status = 'pending'
-     ORDER BY m.product_id, m.shopee_account, m.id DESC`
+     ORDER BY m.product_id, m.id DESC`
   );
 
   let synced = 0, failed = 0;
   const results = [];
-  for (const m of mutations) {
-    const targetShop = ACCOUNT_TO_SHOP[m.shopee_account] || null;
-    if (!targetShop) { failed++; continue; }
-    if (shopId && targetShop !== String(shopId)) continue;
+  for (const p of products) {
+    const stock = Math.max(0, Math.round(Number(p.stock)));
 
-    const acc = accountByShop[targetShop];
-    if (!acc || !acc.partner_id) {
-      failed++;
-      results.push({ product_id: m.product_id, shop_id: targetShop, error: "akun Shopee tidak tersedia" });
-      continue;
-    }
-
-    // Mapping KHUSUS shop ini — jangan pernah mencampur shop_id/account.
+    // Cari SEMUA mapping Shopee milik produk ini (target sebenarnya).
     const { rows: maps } = await pool.query(
-      "SELECT shopee_item_id FROM product_shopee_mapping WHERE product_id = $1 AND shop_id = $2 LIMIT 1",
-      [m.product_id, targetShop]
+      "SELECT shop_id, shopee_item_id FROM product_shopee_mapping WHERE product_id = $1",
+      [p.product_id]
     );
-    if (!maps.length || maps[0].shopee_item_id == null) {
-      failed++;
-      results.push({ product_id: m.product_id, shop_id: targetShop, error: "belum ada mapping Shopee" });
-      continue;
-    }
-    const shopeeItemId = maps[0].shopee_item_id;
-    const stock = Math.max(0, Math.round(Number(m.stock)));
 
-    const { access_token, refresh_token } = await ensureToken(acc);
-    if (!access_token) {
-      failed++;
-      results.push({ product_id: m.product_id, shop_id: targetShop, error: "access_token Shopee tidak tersedia" });
+    const targets = maps.filter((mp) => !shopId || String(mp.shop_id) === String(shopId));
+
+    if (targets.length === 0) {
+      // Tidak ada mapping yang perlu dikirim → tandai synced agar tidak nyangkut pending.
+      await pool.query("UPDATE stock_mutations SET sync_status='synced', shopee_sync_at=now() WHERE id=$1", [p.mutation_id]);
+      synced++;
+      results.push({ product_id: p.product_id, product_name: p.name, stock, skipped: true, ok: true });
       continue;
     }
-    let token = access_token;
-    let r = await updateStockOne(acc, token, shopeeItemId, stock);
-    if (!r.ok && refresh_token) {
-      const rr = await refreshToken(acc, acc.shop_id, refresh_token);
-      if (rr.access_token) {
-        token = rr.access_token;
-        r = await updateStockOne(acc, token, shopeeItemId, stock);
+
+    let allOk = true;
+    for (const mp of targets) {
+      const targetShop = String(mp.shop_id);
+      const acc = accountByShop[targetShop];
+      if (!acc || !acc.partner_id) {
+        allOk = false;
+        failed++;
+        results.push({ product_id: p.product_id, product_name: p.name, shop_id: targetShop, stock, ok: false, error: "akun Shopee tidak tersedia" });
+        continue;
+      }
+
+      const { access_token, refresh_token } = await ensureToken(acc);
+      if (!access_token) {
+        allOk = false;
+        failed++;
+        results.push({ product_id: p.product_id, product_name: p.name, shop_id: targetShop, stock, ok: false, error: "access_token Shopee tidak tersedia" });
+        continue;
+      }
+
+      let token = access_token;
+      let r = await updateStockOne(acc, token, mp.shopee_item_id, stock);
+      if (!r.ok && refresh_token) {
+        const rr = await refreshToken(acc, acc.shop_id, refresh_token);
+        if (rr.access_token) {
+          token = rr.access_token;
+          r = await updateStockOne(acc, token, mp.shopee_item_id, stock);
+        }
+      }
+
+      if (r.ok) {
+        results.push({ product_id: p.product_id, product_name: p.name, shop_id: targetShop, shopee_item_id: mp.shopee_item_id, stock, ok: true });
+      } else {
+        allOk = false;
+        failed++;
+        results.push({ product_id: p.product_id, product_name: p.name, shop_id: targetShop, shopee_item_id: mp.shopee_item_id, stock, ok: false, error: r.error });
       }
     }
 
-    await pool.query(
-      "UPDATE stock_mutations SET sync_status = $1, shopee_sync_at = now() WHERE id = $2",
-      [r.ok ? "synced" : "failed", m.mutation_id]
-    );
-    if (r.ok) synced++; else failed++;
-    results.push({
-      product_id: m.product_id,
-      product_name: m.name,
-      shop_id: targetShop,
-      shopee_item_id: shopeeItemId,
-      stock,
-      ok: r.ok,
-      error: r.error,
-    });
+    if (allOk) {
+      await pool.query("UPDATE stock_mutations SET sync_status='synced', shopee_sync_at=now() WHERE id=$1", [p.mutation_id]);
+      synced++;
+    }
+    // else: biarkan pending agar di-retry pada tick berikutnya.
   }
   return { synced, failed, results };
+}
+
+// Stock sync SATU produk ke SEMUA mapping Shopee-nya (untuk test/verifikasi).
+export async function syncStockForProduct(productId) {
+  const accounts = await loadAccounts();
+  const accountByShop = {};
+  for (const a of accounts) accountByShop[String(a.shop_id)] = a;
+
+  const { rows: prods } = await pool.query("SELECT id, name, stock FROM products WHERE id = $1 LIMIT 1", [productId]);
+  if (!prods.length) return { ok: false, error: "produk tidak ditemukan" };
+
+  const p = prods[0];
+  const stock = Math.max(0, Math.round(Number(p.stock)));
+
+  const { rows: maps } = await pool.query(
+    "SELECT shop_id, shopee_item_id FROM product_shopee_mapping WHERE product_id = $1",
+    [productId]
+  );
+
+  if (!maps.length) return { ok: true, skipped: true, product_id: Number(productId), product_name: p.name, stock, results: [] };
+
+  const results = [];
+  let allOk = true;
+  for (const mp of maps) {
+    const targetShop = String(mp.shop_id);
+    const acc = accountByShop[targetShop];
+    if (!acc || !acc.partner_id) { allOk = false; results.push({ shop_id: targetShop, shopee_item_id: mp.shopee_item_id, stock, ok: false, error: "akun Shopee tidak tersedia" }); continue; }
+
+    const { access_token, refresh_token } = await ensureToken(acc);
+    if (!access_token) { allOk = false; results.push({ shop_id: targetShop, shopee_item_id: mp.shopee_item_id, stock, ok: false, error: "access_token Shopee tidak tersedia" }); continue; }
+
+    let token = access_token;
+    let r = await updateStockOne(acc, token, mp.shopee_item_id, stock);
+    if (!r.ok && refresh_token) {
+      const rr = await refreshToken(acc, acc.shop_id, refresh_token);
+      if (rr.access_token) { token = rr.access_token; r = await updateStockOne(acc, token, mp.shopee_item_id, stock); }
+    }
+    if (!r.ok) allOk = false;
+    results.push({ shop_id: targetShop, shopee_item_id: mp.shopee_item_id, stock, ok: r.ok, error: r.error });
+  }
+
+  return { ok: allOk, product_id: Number(productId), product_name: p.name, stock, results };
 }
 
 // Stock sync SATU produk + SATU shop (dipakai untuk test/verifikasi manual).

@@ -313,6 +313,19 @@ async function handleDataGet(req, res, table) {
   }
 }
 
+// Catat mutation stok (pending) agar worker sync mengirim ke SEMUA mapping Shopee.
+// TIDAK boleh ada jalur ubah products.stock yang melewati fungsi ini.
+async function recordProductStockMutation(productId, productName, qtyBefore, qtyAfter, source) {
+  if (qtyAfter === qtyBefore) return;
+  const type = qtyAfter > qtyBefore ? "IN" : "OUT";
+  const quantity = Math.abs(qtyAfter - qtyBefore);
+  await pool.query(
+    `INSERT INTO stock_mutations (product_id, product_name, type, quantity, qty_before, qty_after, source, sync_status, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,'pending',now())`,
+    [productId, productName, type, quantity, qtyBefore, qtyAfter, source]
+  );
+}
+
 async function handleDataWrite(req, res, table, method) {
   if (!DATA_TABLES.has(table)) return sendJson(res, 404, { error: "not_found" });
   const { error, data } = await readJsonBody(req, 2 * 1024 * 1024);
@@ -338,6 +351,15 @@ async function handleDataWrite(req, res, table, method) {
         `INSERT INTO ${table} (${colList}) VALUES ${valueList} RETURNING *`,
         flat
       );
+      // Produk baru: stok awal > 0 → catat mutation agar sinkron ke Shopee.
+      if (table === "products") {
+        for (const row of inserted) {
+          const initialStock = Number(row.stock) || 0;
+          if (initialStock > 0) {
+            await recordProductStockMutation(row.id, row.name, 0, initialStock, "Produk Baru");
+          }
+        }
+      }
       sendJson(res, 200, { data: inserted });
     } catch (err) {
       console.error(`data POST ${table} failed:`, err.message);
@@ -382,6 +404,16 @@ async function handleDataWrite(req, res, table, method) {
     if (FORBIDDEN_COLUMNS.has(c)) return sendJson(res, 400, { error: "forbidden_column" });
   }
   const setList = cols.map((c, i) => `${c} = $${idx + i}`).join(", ");
+
+  // Perubahan products.stock lewat data API wajib mencatat mutation (pending)
+  // agar worker sync mengirim stok terbaru ke SEMUA mapping Shopee produk.
+  const trackStock = table === "products" && cols.includes("stock");
+  let beforeMap = {};
+  if (trackStock) {
+    const { rows: beforeRows } = await pool.query(`SELECT id, name, stock FROM products${where}`, params);
+    for (const r of beforeRows) beforeMap[String(r.id)] = r;
+  }
+
   try {
     const { rows: updated } = await pool.query(
       `UPDATE ${table} SET ${setList}${where} RETURNING *`,
@@ -390,6 +422,17 @@ async function handleDataWrite(req, res, table, method) {
         return (typeof v === "object" && v !== null) ? JSON.stringify(v) : v;
       })]
     );
+
+    if (trackStock) {
+      for (const row of updated) {
+        const before = beforeMap[String(row.id)];
+        if (!before) continue;
+        const qtyBefore = Number(before.stock) || 0;
+        const qtyAfter = Number(row.stock) || 0;
+        await recordProductStockMutation(row.id, row.name || before.name, qtyBefore, qtyAfter, "Perubahan Stok");
+      }
+    }
+
     sendJson(res, 200, { data: updated });
   } catch (err) {
     console.error(`data PATCH ${table} failed:`, err.message);
