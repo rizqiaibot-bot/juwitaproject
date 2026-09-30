@@ -667,6 +667,16 @@ function makeLocalSb() {
 const SB = makeLocalSb();
 
 // ============================================================
+// CUTOFF STOCK MUTATIONS — backlog/bug lama (sebelum perbaikan multi-channel
+// 30 Sep 2026 15:55 WIB) TIDAK ditampilkan sebagai pending/failed actionable.
+// Data tetap utuh di DB; hanya tampilan dashboard yang dibatasi.
+// ============================================================
+const STOCK_MUTATION_CUTOFF_MS = Date.parse("2026-09-30T15:55:00+07:00");
+function isAfterMutationCutoff(r) {
+  return !!(r && r.created_at && Date.parse(r.created_at) >= STOCK_MUTATION_CUTOFF_MS);
+}
+
+// ============================================================
 // TOAST
 // ============================================================
 function showToast(msg, type) {
@@ -729,12 +739,12 @@ async function loadSummary() {
   try {
     var results = await Promise.all([
       SB.from("marketplace_config").select("id", { count: "exact", head: true }).eq("connection_status", "connected"),
-      SB.from("stock_mutations").select("id", { count: "exact", head: true }).eq("sync_status", "pending"),
-      SB.from("stock_mutations").select("id", { count: "exact", head: true }).eq("sync_status", "failed")
+      SB.from("stock_mutations").select("*").eq("sync_status", "pending"),
+      SB.from("stock_mutations").select("*").eq("sync_status", "failed")
     ]);
     document.getElementById("cardConnected").textContent = results[0].count || 0;
-    document.getElementById("cardPending").textContent = results[1].count || 0;
-    document.getElementById("cardFailed").textContent = results[2].count || 0;
+    document.getElementById("cardPending").textContent = (results[1].data || []).filter(isAfterMutationCutoff).length;
+    document.getElementById("cardFailed").textContent = (results[2].data || []).filter(isAfterMutationCutoff).length;
   } catch (err) {
     console.error("loadSummary:", err);
   }
@@ -816,8 +826,8 @@ async function loadPendingMutations() {
       tbody.innerHTML = '<tr><td colspan="6" class="empty-state" style="color:var(--danger);">Gagal memuat: ' + res.error.message + '</td></tr>';
       return;
     }
-    var data = res.data;
-    if (!data || !data.length) {
+    var data = (res.data || []).filter(isAfterMutationCutoff);
+    if (!data.length) {
       tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Tidak ada mutasi pending. Sinkronisasi lancar.</td></tr>';
       return;
     }
@@ -848,8 +858,8 @@ async function loadFailedMutations() {
       tbody.innerHTML = '<tr><td colspan="7" class="empty-state" style="color:var(--danger);">Gagal memuat: ' + res.error.message + '</td></tr>';
       return;
     }
-    var data = res.data;
-    if (!data || !data.length) {
+    var data = (res.data || []).filter(isAfterMutationCutoff);
+    if (!data.length) {
       tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Tidak ada mutasi gagal.</td></tr>';
       return;
     }
