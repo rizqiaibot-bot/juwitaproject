@@ -3661,6 +3661,10 @@
         ];
 
         let products = [];
+        // productsLoaded: products berhasil diambil dari API (array, bisa kosong).
+        // dataLoading: initSupabaseData sedang berjalan (cegah fetch ganda).
+        let productsLoaded = false;
+        let dataLoading = false;
 
         let ordersData = [
             { orderId: "ORD-20260615-01", date: "2026-06-15 11:20", channel: "Juwita App", customer: "Budi Santoso",
@@ -3802,6 +3806,9 @@
                 : (currentUser.menus[0] || "pos");
             showPage(avail);
             ensureOrdersPolling();
+            // Pastikan data (produk POS, dll.) di-load SETELAH auth tersedia,
+            // agar tidak bergantung pada fetch sebelum login yang gagal (401).
+            initSupabaseData();
         }
 
         function hasPrivilege(priv) {
@@ -4035,7 +4042,13 @@
             return { data: all, error: null };
         }
 
-        async function initSupabaseData() {
+        async function initSupabaseData(force) {
+            if (dataLoading) return;
+            if (productsLoaded && !force) return;
+            // Jangan fetch sebelum auth (token belum ada) → tunggu login/restore.
+            if (JUWITA_AUTH_MODE === "auth" && !localStorage.getItem(JUWITA_TOKEN_KEY)) return;
+            dataLoading = true;
+            renderProducts(currentSearch, posCategory);
             try {
                 const [pRes, oRes, kRes, wRecRes, wRackRes, wOpRes, oiRes] = await Promise.all([
                     fetchAllProducts(),
@@ -4046,7 +4059,7 @@
                     sb.from('warehouse_opname').select('*').order('session_date', { ascending: false }),
                     fetchAllOrderItems()
                 ]);
-                if (pRes.data && pRes.data.length > 0) products = pRes.data;
+                if (pRes.data != null) { products = pRes.data; productsLoaded = true; }
                 if (oRes.data && oRes.data.length > 0) ordersData = oRes.data.map(mapOrderRowToView);
                 if (kRes.data && kRes.data.length > 0) karyawanData = kRes.data;
                 if (wRecRes.data && wRecRes.data.length > 0) warehouseReceiving = wRecRes.data;
@@ -4075,6 +4088,7 @@
                 console.warn("Supabase: using local data fallback", err.message);
                 seedWarehouseData();
             }
+            dataLoading = false;
             // Harga per channel (product_prices) — gagal baca tidak menghentikan UI.
             await ensureProductPricesLoaded(true);
             refreshAllUI();
@@ -4732,6 +4746,12 @@
         function renderProducts(search, category) {
             const grid = document.getElementById("productGrid");
             if (!grid) return;
+            if (!productsLoaded) {
+                grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);"><i class="fas fa-spinner fa-spin" style="margin-right:8px;"></i>Memuat produk...</div>';
+                const info = document.getElementById("posPageInfo");
+                if (info) info.textContent = "Memuat produk...";
+                return;
+            }
             const filtered = posFilteredProducts(search, category);
             const total = filtered.length;
             posLastTotal = total;
@@ -5699,7 +5719,7 @@
                 }
                 if (data && data.ok && data.item_id) {
                     showToast("Publish berhasil. Item ID Shopee: " + data.item_id);
-                    await initSupabaseData();
+                    await initSupabaseData(true);
                 } else {
                     showToast("Publish gagal: " + ((data && data.error) ? data.error : "Unknown error"));
                 }
