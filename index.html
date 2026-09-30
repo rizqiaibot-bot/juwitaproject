@@ -2554,7 +2554,7 @@
             <div class="table-wrapper">
                 <table>
                     <thead>
-                        <tr><th>ID PRODUK</th><th>SKU</th><th>NAMA PRODUK</th><th>KATEGORI</th><th>HARGA JUAL</th><th>STOK</th><th>LEVEL STOK</th><th>AKSI</th></tr>
+                        <tr><th>ID PRODUK</th><th>SKU</th><th>NAMA PRODUK</th><th>KATEGORI</th><th>AKSI</th></tr>
                     </thead>
                     <tbody id="catalogTableBody"></tbody>
                 </table>
@@ -2574,7 +2574,7 @@
             <div class="page-header">
                 <div>
                     <h1 id="addProductTitle">Tambah Produk Baru</h1>
-                    <div class="page-header-desc">Tambahkan produk baru ke dalam database inventaris toko</div>
+                    <div class="page-header-desc" id="addProductDesc">Tambahkan produk baru ke dalam database inventaris toko</div>
                 </div>
             </div>
             <div class="form-card">
@@ -2608,11 +2608,11 @@
                                 <option value="">-- Pilih Supplier --</option>
                             </select>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group" id="priceFieldGroup">
                             <label>Harga Jual</label>
                             <input type="number" id="newProdPrice" class="form-control" placeholder="Contoh: 15000" required />
                         </div>
-                        <div class="form-group">
+                        <div class="form-group" id="stockFieldGroup">
                             <label>Stok Awal</label>
                             <input type="number" id="newProdStock" class="form-control" placeholder="Contoh: 100" required />
                         </div>
@@ -5575,22 +5575,17 @@
             const q = (document.getElementById("catalogSearch")?.value || "").toLowerCase().trim();
 
             if (!total) {
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);">' + (q ? 'Tidak ada produk ditemukan' : 'Belum ada produk') + '</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">' + (q ? 'Tidak ada produk ditemukan' : 'Belum ada produk') + '</td></tr>';
             } else {
                 tbody.innerHTML = page.map(p => {
-                    const levelClass = p.stock > 500 ? "badge-lunas" : p.stock > 100 ? "badge-belum" : "badge-batal";
-                    const levelText = p.stock > 500 ? "Tersedia" : p.stock > 100 ? "Sedang" : "Kritis";
-                    const thumbHtml = p.photo
-                        ? `<img src="${p.photo}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:6px;" />`
+                    const thumbHtml = (p.photo || p.imageicon)
+                        ? `<img src="${p.photo || p.imageicon}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:6px;" onerror="this.style.display='none';" />`
                         : '';
                     return `<tr>
                                 <td><strong>#${String(p.id).padStart(3,'0')}</strong></td>
                                 <td><span style="font-size:0.7rem;font-weight:600;color:var(--text-muted);">${p.sku || '-'}</span></td>
-                                <td>${thumbHtml}${p.name}</td>
+                                <td><span style="cursor:pointer;" onclick="editProduct(${p.id})" title="Lihat detail produk">${thumbHtml}${p.name}</span></td>
                                 <td>${p.category}</td>
-                                <td><strong>${p.price.toLocaleString('id-ID')}</strong></td>
-                                <td>${p.stock}</td>
-                                <td><span class="badge-status ${levelClass}">${levelText}</span></td>
                                 <td>
                                     <div class="aksi-group">
                                         ${p.shopee_item_id
@@ -5661,8 +5656,14 @@
             editingProductId = null;
             const t = document.getElementById("addProductTitle");
             if (t) t.textContent = "Tambah Produk Baru";
+            const d = document.getElementById("addProductDesc");
+            if (d) d.textContent = "Tambahkan produk baru ke dalam database inventaris toko";
             const b = document.getElementById("addProductSubmit");
             if (b) b.textContent = "Simpan Produk";
+            const pg = document.getElementById("priceFieldGroup");
+            if (pg) pg.style.display = "";
+            const sg = document.getElementById("stockFieldGroup");
+            if (sg) sg.style.display = "";
             ["newProdName","newProdSKU","newProdModal","newProdPrice","newProdStock","newProdLength","newProdWidth","newProdHeight","newProdWeight","newProdBarcode","newProdPLU","newProdShopeeId","newProdShopeeSku"].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.value = "";
@@ -5688,14 +5689,35 @@
             document.getElementById("newProdModal").value = p.modal || 0;
             const supEl = document.getElementById("newProdSupplier");
             if (supEl) supEl.value = p.supplier || "";
-            document.getElementById("newProdPrice").value = p.price || 0;
-            document.getElementById("newProdStock").value = p.stock || 0;
             document.getElementById("newProdBarcode").value = p.barcode || "";
             document.getElementById("newProdPLU").value = p.plu || "";
+            document.getElementById("newProdLength").value = p.length || "";
+            document.getElementById("newProdWidth").value = p.width || "";
+            document.getElementById("newProdHeight").value = p.height || "";
+            document.getElementById("newProdWeight").value = p.weight || "";
             document.getElementById("newProdShopeeId").value = p.shopee_item_id || "";
             document.getElementById("newProdShopeeSku").value = p.shopee_sku || "";
+            // Katalog = master data & spesifikasi; sembunyikan Harga Jual + Stok Awal.
+            const pg = document.getElementById("priceFieldGroup");
+            if (pg) pg.style.display = "none";
+            const sg = document.getElementById("stockFieldGroup");
+            if (sg) sg.style.display = "none";
+            // Pre-fill foto bila sudah ada.
+            pendingPhotoData = null;
+            const existingPhoto = p.photo || p.imageicon || "";
+            const ph = document.getElementById("photoPreviewPlaceholder");
+            const img = document.getElementById("photoPreviewImg");
+            if (existingPhoto) {
+                if (ph) ph.style.display = "none";
+                if (img) { img.src = existingPhoto; img.style.display = "block"; }
+            } else {
+                if (ph) ph.style.display = "";
+                if (img) { img.style.display = "none"; img.src = ""; }
+            }
             const t = document.getElementById("addProductTitle");
-            if (t) t.textContent = "Edit Produk";
+            if (t) t.textContent = "Detail Produk";
+            const d = document.getElementById("addProductDesc");
+            if (d) d.textContent = "Detail dan spesifikasi produk (katalog)";
             const b = document.getElementById("addProductSubmit");
             if (b) b.textContent = "Simpan Perubahan";
             showPage("tambah-produk");
@@ -8501,6 +8523,7 @@
                 el.addEventListener("click", function(e) {
                     e.preventDefault();
                     const page = this.dataset.page;
+                    if (page === "tambah-produk") resetProductForm();
                     if (page) showPage(page);
                     // Tutup dropdown setelah navigasi
                     const drop = this.closest(".dropdown");
@@ -8562,16 +8585,16 @@
                 const plu = document.getElementById("newProdPLU").value.trim() || null;
                 const shopee_item_id = parseInt(document.getElementById("newProdShopeeId").value) || null;
                 const shopee_sku = document.getElementById("newProdShopeeSku").value.trim() || null;
-                if (!name || isNaN(modal) || isNaN(price) || isNaN(stock)) { showToast("Isi semua field wajib"); return; }
 
-                // EDIT MODE
+                // EDIT MODE — Katalog hanya ubah master data/spesifikasi (tanpa harga jual & stok).
                 if (editingProductId != null) {
+                    if (!name || isNaN(modal)) { showToast("Isi semua field wajib"); return; }
                     const finalSku = sku || ("SKU" + String(editingProductId).padStart(4, "0"));
                     if (products.some(p => p.id !== editingProductId && (p.sku || "").toLowerCase() === finalSku.toLowerCase())) {
                         showToast(`SKU "${finalSku}" sudah digunakan`);
                         return;
                     }
-                    const updates = { name, sku: finalSku, category: cat, modal, price, stock, supplier, barcode: barcode || null, plu, shopee_item_id, shopee_sku };
+                    const updates = { name, sku: finalSku, category: cat, modal, supplier, barcode: barcode || null, plu, shopee_item_id, shopee_sku };
                     const { error: upErr } = await sb.from('products').update(updates).eq('id', editingProductId);
                     if (upErr) {
                         console.error("Supabase update product error:", upErr.message);
@@ -8591,6 +8614,7 @@
                 }
 
                 // ADD MODE
+                if (!name || isNaN(modal) || isNaN(price) || isNaN(stock)) { showToast("Isi semua field wajib"); return; }
                 // Seed hanya untuk SKU cadangan bila kosong (SKU tidak unique-constrained di DB).
                 const seedId = products.length ? Math.max(...products.map(p => p.id)) + 1 : 1;
                 const finalSku = sku || ("SKU" + String(seedId).padStart(4, "0"));
