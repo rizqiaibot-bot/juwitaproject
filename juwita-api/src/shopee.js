@@ -474,6 +474,15 @@ export async function syncPrice(shopId) {
 }
 
 async function updatePriceOne(acc, accessToken, itemId, price) {
+  // Item 2-tier (variasi) wajib kirim model_id per model; 1-tier cukup original_price.
+  const ml = await getModelList(acc, accessToken, itemId);
+  if (ml.error) return { ok: false, error: ml.error };
+
+  const n = Number(price);
+  const priceList = ml.models.length > 0
+    ? ml.models.map((m) => ({ model_id: Number(m.model_id), original_price: n }))
+    : [{ original_price: n }];
+
   const ts = Math.floor(Date.now() / 1000);
   const path = "/api/v2/product/update_price";
   const sign = await signShopee(acc.partner_id, acc.partner_key, path, ts, accessToken, acc.shop_id);
@@ -481,7 +490,7 @@ async function updatePriceOne(acc, accessToken, itemId, price) {
   const { res, body } = await fetchJson(`${SHOPEE_API_URL}${path}?${p}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ item_id: Number(itemId), price_list: [{ original_price: Number(price) }] }),
+    body: JSON.stringify({ item_id: Number(itemId), price_list: priceList }),
   });
   if (!res.ok) return { ok: false, error: "HTTP " + res.status };
   if (body.error) return { ok: false, error: String(body.error || "shopee_error") };
