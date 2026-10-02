@@ -8549,6 +8549,18 @@
         }
             window.previewPhoto = previewPhoto;
 
+        // Scanner barcode mengirim ENTER otomatis setelah scan. Cegah ENTER pada
+        // field barcode/PLU agar TIDAK submit form — user harus klik "Simpan Perubahan".
+        ["newProdBarcode", "newProdPLU"].forEach(function (id) {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener("keydown", function (e) {
+                if (e.key === "Enter" || e.keyCode === 13) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            });
+        });
+
         document.getElementById("addProductForm").addEventListener("submit", async function(e) {
                 e.preventDefault();
                 const name = document.getElementById("newProdName").value.trim();
