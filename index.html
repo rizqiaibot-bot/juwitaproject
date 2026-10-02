@@ -8584,7 +8584,9 @@
                 if (editingProductId != null) {
                     if (!name || isNaN(modal)) { showToast("Isi semua field wajib"); return; }
                     const finalSku = sku || ("SKU" + String(editingProductId).padStart(4, "0"));
-                    if (products.some(p => p.id !== editingProductId && (p.sku || "").toLowerCase() === finalSku.toLowerCase())) {
+                    // Kecualikan produk yang sedang diedit (bandingkan sebagai string agar
+                    // aman dari selisih tipe number/string).
+                    if (products.some(p => String(p.id) !== String(editingProductId) && (p.sku || "").toLowerCase() === finalSku.toLowerCase())) {
                         showToast(`SKU "${finalSku}" sudah digunakan`);
                         return;
                     }
