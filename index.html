@@ -4492,6 +4492,7 @@
                         '<div style="display:flex;gap:6px;align-items:center;">' +
                         '<button class="aksi-btn" onclick="openEmployeeForm(\'edit\',\'' + emp.id + '\')"><i class="fas fa-edit"></i> Edit</button>' +
                         '<button class="aksi-btn" onclick="resetEmployeePassword(\'' + emp.id + '\')"><i class="fas fa-key"></i> Reset Password</button>' +
+                        (isOwner ? "" : '<button class="aksi-btn" style="color:var(--danger);" onclick="deleteEmployee(\'' + emp.id + '\')"><i class="fas fa-trash"></i> Hapus</button>') +
                         "</div></div>" +
                         '<div style="display:flex;flex-wrap:wrap;gap:3px;">' + chips + "</div>" +
                         "</div>";
@@ -4577,10 +4578,11 @@
                 });
 
                 if (passRow) passRow.style.display = "none";
-                phoneInput.disabled = true; // Nomor HP = identitas login (read-only)
 
                 if (isOwnerRow) {
                     // OWNER / RIZKIN → terkunci penuh kecuali nama
+                    phoneInput.disabled = true;
+                    phoneInput.title = "Nomor HP owner terkunci";
                     roleSel.disabled = true;
                     roleSel.title = "Role owner terkunci";
                     labelInput.disabled = true;
@@ -4589,7 +4591,9 @@
                     statusSel.title = "Owner selalu Aktif";
                     menuBoxes.forEach(function (c) { c.disabled = true; });
                 } else {
-                    // KARYAWAN BIASA → role/status/label/menu SEMUA AKTIF
+                    // KARYAWAN BIASA → role/status/label/menu/HP SEMUA AKTIF
+                    phoneInput.disabled = false;
+                    phoneInput.title = "";
                     roleSel.disabled = false;
                     labelInput.disabled = false;
                     statusSel.disabled = false;
@@ -4665,12 +4669,18 @@
             }
             if (empEditingId) {
                 const editing = appEmployees.find(function (e) { return e.id === empEditingId; }) || null;
-                const payload = { full_name: name, role: role, role_label: roleLabel, menus: menus, status: status };
+                // Validasi nomor HP (edit) + cegah duplikat dengan karyawan lain.
+                if (!/^\d{10,13}$/.test(phone)) { if (errEl) errEl.textContent = "Nomor HP tidak valid"; return; }
+                if (appEmployees.some(function (e) { return String(e.id) !== String(empEditingId) && String(e.phone || "") === String(phone || ""); })) {
+                    if (errEl) errEl.textContent = "Nomor HP sudah digunakan karyawan lain"; return;
+                }
+                const payload = { full_name: name, phone: phone, role: role, role_label: roleLabel, menus: menus, status: status };
                 if (editing && String(editing.role || "").toLowerCase() === "owner") {
-                    // Owner tidak bisa diubah status/role/menus lewat UI → cegah lockout.
+                    // Owner tidak bisa diubah status/role/menus/phone lewat UI → cegah lockout.
                     payload.role = editing.role;
                     payload.status = editing.status;
                     payload.menus = editing.menus;
+                    payload.phone = editing.phone;
                 }
                 const { error } = await sb.from("app_users").update(payload).eq("id", empEditingId);
                 if (error) { if (errEl) errEl.textContent = "Gagal simpan: " + error.message; return; }
@@ -4702,11 +4712,24 @@
             const np = prompt("Password baru untuk " + emp.full_name + " (min 6 karakter):");
             if (!np || np.length < 6) { showToast("Password minimal 6 karakter"); return; }
             try {
-                await employeeAdminCall({ action: "reset_password", auth_user_id: emp.auth_user_id, password: np });
+                await employeeAdminCall({ action: "reset_password", id: emp.id, password: np });
                 showToast("Password " + emp.full_name + " berhasil di-reset");
             } catch (err) {
                 showToast("Gagal reset: " + err.message);
             }
+        }
+
+        async function deleteEmployee(id) {
+            if (!canManageUsers()) { showToast("Akses ditolak"); return; }
+            const emp = appEmployees.find(function (e) { return e.id === id; });
+            if (!emp) return;
+            if (String(emp.role || "").toLowerCase() === "owner") { showToast("Owner tidak dapat dihapus"); return; }
+            if (emp.id === currentUser.id || emp.phone === currentUser.phone) { showToast("Tidak dapat menghapus akun yang sedang dipakai"); return; }
+            if (!confirm('Hapus karyawan "' + emp.full_name + '" (' + emp.phone + ')? Tindakan ini tidak dapat dibatalkan.')) return;
+            const { error } = await sb.from("app_users").delete().eq("id", id);
+            if (error) { showToast("Gagal hapus: " + error.message); return; }
+            renderAccountCards();
+            showToast("Karyawan dihapus");
         }
 
         // ============================================================
@@ -8972,6 +8995,7 @@
         window.closeEmployeeForm = closeEmployeeForm;
         window.saveEmployeeForm = saveEmployeeForm;
         window.resetEmployeePassword = resetEmployeePassword;
+        window.deleteEmployee = deleteEmployee;
 
         // ============================================================
         // AKUNTANSI V1
@@ -9914,7 +9938,7 @@
                 <div class="form-group">
                     <label>Nomor HP</label>
                     <input type="tel" id="empPhone" class="form-control" placeholder="08xxxxxxxxxx" autocomplete="off" />
-                    <div style="font-size:0.62rem;color:var(--text-muted);margin-top:3px;">Nomor HP = identitas login karyawan (tidak dapat diubah setelah akun dibuat).</div>
+                    <div style="font-size:0.62rem;color:var(--text-muted);margin-top:3px;">Nomor HP = identitas login karyawan (bisa diubah saat edit).</div>
                 </div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
                     <div class="form-group" style="flex:1;min-width:150px;">
