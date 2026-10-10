@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=yes, interactive-widget=resizes-content" />
     <title>Juwita One - All-in-One Management</title>
     <!-- Google Fonts: Poppins -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -2019,6 +2019,57 @@
             }
             .page-content {
                 max-width: 100%;
+            }
+        }
+
+        /* ===== RESPONSIVE ENHANCEMENTS (HP/tablet/desktop) ===== */
+        /* Modal tidak keluar layar & bisa di-scroll saat konten tinggi/keyboard terbuka. */
+        .modal-overlay {
+            overflow-y: auto;
+            align-items: flex-start;
+            padding: 12px;
+        }
+        .modal-card {
+            margin: auto;
+            max-height: calc(100vh - 24px);
+            max-height: calc(100dvh - 24px);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
+        }
+
+        /* Scroll horizontal tabel tetap mulus di layar sentuh. */
+        .table-wrapper {
+            -webkit-overflow-scrolling: touch;
+        }
+
+        @media (max-width: 640px) {
+            /* Cegah auto-zoom iOS saat input difokus (font minimal 16px). */
+            .form-control,
+            .filter-control,
+            .pos-search-wrapper input,
+            .pp-price-input {
+                font-size: 16px;
+            }
+            /* Target sentuh memadai untuk tombol-tombol penting. */
+            .aksi-btn { min-height: 40px; padding: 8px 14px; }
+            .payment-btn { min-height: 48px; }
+            .cash-btn { min-height: 40px; }
+            .filter-tab, .pp-tab { min-height: 40px; padding: 10px 16px; }
+            .pos-side-btn { min-height: 44px; }
+            .checkout-btn { min-height: 48px; }
+            /* Tombol pagination POS mudah disentuh. */
+            #posPrevBtn, #posNextBtn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 44px;
+                min-height: 44px;
+                font-size: 1rem;
+            }
+            /* Safe area iOS (notch/home indicator). */
+            .main-container {
+                padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
             }
         }
     </style>
