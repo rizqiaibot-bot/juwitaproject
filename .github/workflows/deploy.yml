@@ -1,0 +1,82 @@
+name: Deploy Juwita One
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: juwita-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ke VPS Biznet
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Deteksi perubahan frontend/backend
+        id: changes
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          filters: |
+            frontend:
+              - 'index.html'
+              - 'config.js'
+              - 'offline-db.js'
+              - 'marketplace.html'
+              - 'juwitalogo.png'
+              - 'logoshopee.png'
+              - 'logowa.png'
+            backend:
+              - 'juwita-api/src/**'
+              - 'juwita-api/package.json'
+              - 'juwita-api/package-lock.json'
+
+      - name: Setup SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host juwita\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/deploy_key\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n' "$VPS_HOST" "$VPS_USER" > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+      - name: Deploy frontend (web) ke /var/www/html
+        if: steps.changes.outputs.frontend == 'true'
+        run: |
+          set -euo pipefail
+          rsync -avzc \
+            index.html config.js offline-db.js marketplace.html \
+            juwitalogo.png logoshopee.png logowa.png \
+            juwita:/var/www/html/
+
+      - name: Deploy backend ke /var/www/juwita-api
+        if: steps.changes.outputs.backend == 'true'
+        run: |
+          set -euo pipefail
+          rsync -avzc \
+            --exclude 'node_modules' \
+            --exclude '.env' \
+            --exclude '.env.*' \
+            --exclude 'backups' \
+            --exclude '.git' \
+            juwita-api/ juwita:/var/www/juwita-api/
+
+      - name: Restart backend (juwita-api.service)
+        if: steps.changes.outputs.backend == 'true'
+        run: |
+          set -euo pipefail
+          ssh juwita "sudo systemctl restart juwita-api.service && systemctl is-active juwita-api.service"
