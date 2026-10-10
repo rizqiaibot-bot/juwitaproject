@@ -4735,13 +4735,42 @@
         // ============================================================
         // RENDER FUNCTIONS
         // ============================================================
+        // Total qty terjual per product_id dari order Shopee yang valid.
+        // Sumber: orders (channel='Shopee') + order_items (product_id, qty),
+        // data lokal DB — TIDAK memanggil API Shopee. Order yang dibatalkan
+        // (CANCELLED/FAILED/IN_CANCEL/TO_RETURN) tidak pernah masuk orders,
+        // jadi cukup filter channel='Shopee'.
+        function computeShopeeQtyMap() {
+            const qty = {};
+            const shopeeIds = new Set();
+            for (let i = 0; i < ordersData.length; i++) {
+                if (ordersData[i].channel === "Shopee") shopeeIds.add(ordersData[i].orderId);
+            }
+            for (let j = 0; j < orderItemsData.length; j++) {
+                const oi = orderItemsData[j];
+                if (!shopeeIds.has(oi.orderid)) continue;
+                const pid = Number(oi.product_id);
+                if (!pid) continue;
+                qty[pid] = (qty[pid] || 0) + (Number(oi.qty) || 0);
+            }
+            return qty;
+        }
+
         function posFilteredProducts(search, category) {
             const s = search || currentSearch;
             const c = category || posCategory;
             let list = products;
             if (s) list = list.filter(p => (p.name || "").toLowerCase().indexOf(s.toLowerCase()) !== -1);
             if (c && c !== "all") list = list.filter(p => p.category === c);
-            return list;
+            // Urutkan: qty terjual Shopee tertinggi → terendah; qty sama → nama;
+            // produk tanpa penjualan Shopee di belakang (urut nama).
+            const shopeeQty = computeShopeeQtyMap();
+            return list.slice().sort(function (a, b) {
+                const qa = shopeeQty[a.id] || 0;
+                const qb = shopeeQty[b.id] || 0;
+                if (qa !== qb) return qb - qa;
+                return String(a.name || "").localeCompare(String(b.name || ""), "id-ID", { sensitivity: "base" });
+            });
         }
 
         function posUpdatePagination(total) {
