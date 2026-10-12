@@ -1837,7 +1837,8 @@
                 visibility: visible !important;
                 transform: none !important;
                 transition: none !important;
-                display: none;
+                display: none !important;
+                overflow: visible !important;
                 width: 100% !important;
                 min-width: 0 !important;
                 max-width: 100% !important;
@@ -1855,10 +1856,19 @@
                 position: static !important;
                 display: flex !important;
                 flex-direction: column !important;
+                width: 100% !important;
+                overflow: visible !important;
                 float: none !important;
+            }
+            #navMenu .dropdown > a {
+                width: 100% !important;
+                box-sizing: border-box !important;
             }
             #navMenu>li {
                 position: static !important;
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
             }
             #navMenu .dropdown.active .dropdown-menu {
                 display: block !important;
