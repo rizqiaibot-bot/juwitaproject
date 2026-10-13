@@ -58,7 +58,7 @@ jobs:
         if: steps.changes.outputs.frontend == 'true'
         run: |
           set -euo pipefail
-          rsync -avzc \
+          rsync -avzc --rsync-path="sudo rsync" \
             index.html config.js offline-db.js marketplace.html \
             juwitalogo.png logoshopee.png logowa.png \
             juwita:/var/www/html/
