@@ -277,6 +277,78 @@ const TABLE_READ_COLUMNS = {
   app_users: "id, auth_user_id, phone, email, full_name, role, role_label, menus, status, created_at, updated_at",
 };
 
+// ============================================================
+// OTORISASI DATA API (default-deny)
+// owner = akses penuh. Non-owner dibatasi role + status ACTIVE
+// (sudah dicek requireAuth) + menu + operasi + kolom.
+// Nilai operasi: "*" = semua user terautentikasi; array = daftar menu;
+// null/tidak ada = hanya owner.
+// ============================================================
+const DATA_TABLE_ACCESS = {
+  products:                { read: "*", create: ["katalog"], update: ["katalog", "pricing", "persediaan", "pembelian"], delete: null },
+  orders:                  { read: ["pos", "penjualan", "gudang"], create: null, update: null, delete: null },
+  order_items:             { read: ["pos", "penjualan", "gudang"], create: null, update: null, delete: null },
+  karyawan:                { read: ["hr", "pengaturan"], create: null, update: null, delete: null },
+  attendance_records:      { read: ["hr"], create: ["hr"], update: ["hr"], delete: ["hr"] },
+  warehouse_receiving:     { read: ["gudang"], create: ["gudang"], update: ["gudang"], delete: ["gudang"] },
+  warehouse_racks:         { read: ["gudang"], create: ["gudang"], update: ["gudang"], delete: ["gudang"] },
+  warehouse_opname:        { read: ["gudang"], create: ["gudang"], update: ["gudang"], delete: ["gudang"] },
+  stock_mutations:         { read: ["persediaan", "gudang", "katalog"], create: null, update: null, delete: null },
+  app_users:               { read: ["hr", "pengaturan"], create: null, update: null, delete: null },
+  accounting_accounts:     { read: ["akuntansi"], create: null, update: null, delete: null },
+  accounting_transactions: { read: ["akuntansi"], create: ["akuntansi"], update: ["akuntansi"], delete: ["akuntansi"] },
+  v_account_balance:       { read: ["akuntansi"], create: null, update: null, delete: null },
+  marketplace_config:      { read: ["pengaturan"], create: null, update: null, delete: null },
+  activity_log:            { read: ["penjualan", "pengaturan"], create: null, update: null, delete: null },
+  suppliers:               { read: ["pembelian"], create: ["pembelian"], update: ["pembelian"], delete: ["pembelian"] },
+  purchases:               { read: ["pembelian"], create: ["pembelian"], update: ["pembelian"], delete: ["pembelian"] },
+  purchase_items:          { read: ["pembelian"], create: ["pembelian"], update: ["pembelian"], delete: ["pembelian"] },
+};
+
+// Grup kolom produk (non-owner): kolom sensitif dibatasi per menu.
+const PRODUCT_STOCK_COLUMNS = new Set(["stock", "maxstock", "minstock"]);
+const PRODUCT_PRICE_COLUMNS = new Set(["price"]);
+const PRODUCT_MODAL_COLUMNS = new Set(["modal"]);
+
+function isOwnerUser(user) {
+  return !!user && String(user.role || "").toLowerCase() === "owner";
+}
+
+function userHasMenu(user, menus) {
+  if (!user || !Array.isArray(user.menus)) return false;
+  return menus.some((m) => user.menus.includes(m));
+}
+
+function checkTableAccess(user, table, op) {
+  if (isOwnerUser(user)) return true;
+  const rule = DATA_TABLE_ACCESS[table];
+  if (!rule) return false; // default-deny
+  const allowed = rule[op];
+  if (allowed === "*") return true;
+  if (!Array.isArray(allowed) || allowed.length === 0) return false;
+  return userHasMenu(user, allowed);
+}
+
+function productColumnMenus(col) {
+  if (PRODUCT_STOCK_COLUMNS.has(col)) return ["persediaan", "pembelian", "katalog"];
+  if (PRODUCT_PRICE_COLUMNS.has(col)) return ["pricing", "katalog"];
+  if (PRODUCT_MODAL_COLUMNS.has(col)) return ["pembelian", "katalog"];
+  return ["katalog"]; // master
+}
+
+function checkProductColumns(user, cols) {
+  if (isOwnerUser(user)) return true;
+  for (const c of cols) {
+    if (!userHasMenu(user, productColumnMenus(c))) return false;
+  }
+  return true;
+}
+
+function checkMenuAccess(user, menu) {
+  if (isOwnerUser(user)) return true;
+  return userHasMenu(user, [menu]);
+}
+
 function tableName(pathname) {
   return pathname.replace(/^\/api\/data\//, "");
 }
@@ -340,6 +412,9 @@ async function handleDataWrite(req, res, table, method) {
       if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(c)) return sendJson(res, 400, { error: "invalid_column" });
       if (FORBIDDEN_COLUMNS.has(c)) return sendJson(res, 400, { error: "forbidden_column" });
     }
+    if (table === "products" && !checkProductColumns(req.user, cols)) {
+      return sendJson(res, 403, { error: "forbidden" });
+    }
     const colList = cols.join(", ");
     const valueList = rows.map((r) => `(${cols.map((c, i) => `$${i + 1}`).join(", ")})`).join(", ");
     const flat = rows.flatMap((r) => cols.map((c) => {
@@ -382,6 +457,18 @@ async function handleDataWrite(req, res, table, method) {
   const where = ` WHERE ${filters.join(" AND ")}`;
 
   if (method === "DELETE") {
+    // Transaksi akuntansi POS_SALE tidak boleh dihapus (read-only dari POS).
+    if (table === "accounting_transactions") {
+      try {
+        const { rows: targets } = await pool.query(`SELECT id, type FROM accounting_transactions${where}`, params);
+        if (targets.some((r) => r.type === "POS_SALE")) {
+          return sendJson(res, 403, { error: "forbidden", message: "Transaksi POS tidak dapat dihapus" });
+        }
+      } catch (err) {
+        console.error(`data DELETE accounting_transactions precheck failed:`, err.message);
+        return sendJson(res, 500, { error: "internal_error" });
+      }
+    }
     try {
       const { rows: deleted } = await pool.query(
         `DELETE FROM ${table}${where} RETURNING *`,
@@ -402,6 +489,9 @@ async function handleDataWrite(req, res, table, method) {
   for (const c of cols) {
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(c)) return sendJson(res, 400, { error: "invalid_column" });
     if (FORBIDDEN_COLUMNS.has(c)) return sendJson(res, 400, { error: "forbidden_column" });
+  }
+  if (table === "products" && !checkProductColumns(req.user, cols)) {
+    return sendJson(res, 403, { error: "forbidden" });
   }
   const setList = cols.map((c, i) => `${c} = $${idx + i}`).join(", ");
 
@@ -561,12 +651,14 @@ async function handleShopeeAction(req, res, action) {
 async function handleRpc(req, res, name) {
   try {
     if (name === "close_opname") {
+      if (!checkMenuAccess(req.user, "gudang")) return sendJson(res, 403, { error: "forbidden" });
       const { data } = await readJsonBody(req, 64 * 1024);
       const opnameId = data && data.p_opname_id ? String(data.p_opname_id) : "";
       const { rows } = await pool.query("SELECT close_opname($1) AS result", [opnameId]);
       return sendJson(res, 200, { data: rows[0].result });
     }
     if (name === "accounting_sync_pos") {
+      if (!checkMenuAccess(req.user, "akuntansi")) return sendJson(res, 403, { error: "forbidden" });
       const { rows } = await pool.query("SELECT accounting_sync_pos() AS result");
       return sendJson(res, 200, { data: rows[0].result });
     }
@@ -690,6 +782,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && pathname === "/api/orders") {
     const user = await requireAuth(req, res);
     if (!user) return;
+    if (!checkMenuAccess(user, "pos")) return sendJson(res, 403, { error: "forbidden" });
     return handleOrdersPost(req, res);
   }
   if (req.method === "POST" && pathname === "/api/employees") {
@@ -701,6 +794,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "PATCH" && pathname.startsWith("/api/orders/")) {
     const user = await requireAuth(req, res);
     if (!user) return;
+    if (!checkMenuAccess(user, "gudang")) return sendJson(res, 403, { error: "forbidden" });
     return handleOrdersPatch(req, res, decodeURIComponent(pathname.slice("/api/orders/".length)));
   }
   if (req.method === "POST" && pathname.startsWith("/api/rpc/")) {
@@ -718,11 +812,18 @@ const server = http.createServer(async (req, res) => {
     const user = await requireAuth(req, res);
     if (!user) return;
     const table = tableName(pathname);
+    if (!DATA_TABLES.has(table)) return sendJson(res, 404, { error: "not_found" });
+    const op =
+      req.method === "GET" ? "read" :
+      req.method === "POST" ? "create" :
+      req.method === "PATCH" ? "update" :
+      req.method === "DELETE" ? "delete" : null;
+    if (!op) return sendJson(res, 405, { error: "method_not_allowed" });
+    if (!checkTableAccess(user, table, op)) return sendJson(res, 403, { error: "forbidden" });
     if (req.method === "GET") return handleDataGet(req, res, table);
     if (req.method === "POST") return handleDataWrite(req, res, table, "POST");
     if (req.method === "PATCH") return handleDataWrite(req, res, table, "PATCH");
     if (req.method === "DELETE") return handleDataWrite(req, res, table, "DELETE");
-    return sendJson(res, 405, { error: "method_not_allowed" });
   }
   sendJson(res, 404, { status: "error", message: "Not Found" });
 });
