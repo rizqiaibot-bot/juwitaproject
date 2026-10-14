@@ -340,6 +340,24 @@
             color: var(--text-primary);
             cursor: pointer;
         }
+        /* Shortcut Presensi di navbar mobile (selalu terlihat, tidak di dalam hamburger) */
+        .mobile-presensi-btn {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            background: var(--primary-gradient);
+            border: none;
+            border-radius: var(--radius-lg);
+            padding: 8px 12px;
+            cursor: pointer;
+            color: #fff;
+            font-size: 0.74rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .mobile-presensi-btn i {
+            font-size: 0.85rem;
+        }
 
         /* ===== MAIN ===== */
         .main-container {
@@ -1802,6 +1820,9 @@
             .mobile-toggle {
                 display: block;
             }
+            .mobile-presensi-btn {
+                display: inline-flex;
+            }
             /* Profil (avatar/nama/Logout) dipindah ke bawah navbar agar tidak
                menutupi tombol hamburger di layar mobile. */
             #globalUserChip {
@@ -2196,6 +2217,7 @@
             </ul>
 
             <div class="nav-actions">
+                <button class="mobile-presensi-btn" type="button" onclick="showPage('absensi')" aria-label="Buka Presensi"><i class="fas fa-camera"></i> Presensi</button>
                 <button class="mobile-toggle" id="mobileToggleBtn" aria-label="Buka Menu">
                     <i class="fas fa-bars"></i>
                 </button>
@@ -3035,6 +3057,10 @@
                     <video id="attendanceVideo" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1);"></video>
                     <canvas id="attendanceCanvas" style="display:none;"></canvas>
                     <div id="attendanceCamMsg" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;color:#cbd5e1;font-size:0.8rem;">Menyalakan kamera…</div>
+                </div>
+
+                <div style="display:flex;justify-content:center;margin:12px 0 4px;">
+                    <button class="aksi-btn" type="button" id="btnAttendanceCam" onclick="attendanceStartCamera()" style="padding:8px 16px;"><i class="fas fa-camera"></i> Nyalakan Kamera</button>
                 </div>
 
                 <div id="attendanceToday" style="margin:14px 0;font-size:0.82rem;color:var(--text-primary);min-height:20px;"></div>
@@ -8556,6 +8582,8 @@
         let attendanceStream = null;
         let attendanceToday = null;
         let attendanceClockTimer = null;
+        let attendanceCamGen = 0;        // token utk membatalkan getUserMedia yang usang
+        let attendanceCamStarting = false;
 
         function attendanceCanViewAll() {
             if (!currentUser) return false;
@@ -8584,35 +8612,101 @@
             } catch (e) { el.textContent = ""; }
         }
 
+        function escCam(s) {
+            return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+                return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+            });
+        }
+
+        // Tampilkan status/error kamera yang SEBENARNYA (name + message).
+        function attendanceShowCamMsg(html, isError) {
+            const msg = document.getElementById("attendanceCamMsg");
+            if (!msg) return;
+            msg.style.color = isError ? "#fca5a5" : "#cbd5e1";
+            msg.style.display = "flex";
+            msg.innerHTML = html;
+        }
+
+        function attendanceErrText(e) {
+            if (!e) return "penyebab tidak diketahui";
+            const name = e.name || "";
+            const msg = e.message || "";
+            const map = {
+                NotAllowedError: "izin kamera ditolak",
+                PermissionDeniedError: "izin kamera ditolak",
+                NotFoundError: "kamera tidak ditemukan",
+                DevicesNotFoundError: "kamera tidak ditemukan",
+                NotReadableError: "kamera sedang dipakai aplikasi lain",
+                TrackStartError: "kamera sedang dipakai aplikasi lain",
+                OverconstrainedError: "kamera tidak cocok dengan permintaan",
+                SecurityError: "diblokir oleh keamanan browser",
+                AbortError: "permintaan dibatalkan",
+                TypeError: "API kamera tidak tersedia"
+            };
+            let t = map[name] || name || "gagal";
+            if (msg) t += " (" + msg + ")";
+            return t;
+        }
+
         async function attendanceStartCamera() {
             const video = document.getElementById("attendanceVideo");
-            const msg = document.getElementById("attendanceCamMsg");
             if (!video) return;
-            if (attendanceStream) return;
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                if (msg) { msg.textContent = "Kamera tidak didukung di perangkat ini."; msg.style.display = "flex"; }
+            if (attendanceStream) return;        // sudah aktif
+            if (attendanceCamStarting) return;   // sedang meminta izin
+
+            // Penyebab paling umum di HP: bukan HTTPS (getUserMedia butuh secure context).
+            if (!window.isSecureContext) {
+                attendanceShowCamMsg("Kamera butuh koneksi <b>HTTPS</b>. Buka lewat <b>https://…</b>, bukan http/IP.", true);
                 return;
             }
+            if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+                attendanceShowCamMsg("Browser ini tidak mendukung kamera (getUserMedia). Coba <b>Chrome/Safari terbaru</b> lewat HTTPS.", true);
+                return;
+            }
+
+            attendanceCamStarting = true;
+            const gen = ++attendanceCamGen;
+            attendanceShowCamMsg("Meminta izin kamera…", false);
+            console.log("[presensi] minta getUserMedia; secureContext=", window.isSecureContext, "ua=", navigator.userAgent);
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+                if (gen !== attendanceCamGen) { // sudah keluar dari halaman Presensi
+                    stream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} });
+                    return;
+                }
                 attendanceStream = stream;
+                video.setAttribute("playsinline", "true");
+                video.setAttribute("webkit-playsinline", "true");
+                video.muted = true;
                 video.srcObject = stream;
-                try { await video.play(); } catch (e) {}
+                try {
+                    await video.play();
+                } catch (playErr) {
+                    console.warn("[presensi] video.play() gagal:", playErr && playErr.name, playErr && playErr.message);
+                    attendanceShowCamMsg("Preview gagal tampil: " + escCam(attendanceErrText(playErr)) + "<br>Ketuk <b>Nyalakan Kamera</b> untuk mencoba lagi.", true);
+                    return;
+                }
+                const msg = document.getElementById("attendanceCamMsg");
                 if (msg) msg.style.display = "none";
+                console.log("[presensi] kamera aktif ", video.videoWidth + "x" + video.videoHeight);
             } catch (e) {
-                if (msg) { msg.textContent = "Tidak bisa mengakses kamera. Izinkan akses kamera lalu buka ulang halaman."; msg.style.display = "flex"; }
+                if (gen !== attendanceCamGen) return;
+                console.warn("[presensi] getUserMedia gagal:", e && e.name, e && e.message);
+                attendanceShowCamMsg("Kamera gagal: <b>" + escCam(attendanceErrText(e)) + "</b><br>Ketuk <b>Nyalakan Kamera</b> untuk mencoba lagi.", true);
+            } finally {
+                attendanceCamStarting = false;
             }
         }
 
         function attendanceStopCamera() {
+            attendanceCamGen += 1; // batalkan permintaan yang masih berjalan
             if (attendanceStream) {
-                attendanceStream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+                attendanceStream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} });
                 attendanceStream = null;
             }
             const video = document.getElementById("attendanceVideo");
             if (video) video.srcObject = null;
-            const msg = document.getElementById("attendanceCamMsg");
-            if (msg) { msg.textContent = "Menyalakan kamera…"; msg.style.display = "flex"; }
+            attendanceShowCamMsg("Menyalakan kamera…", false);
         }
 
         function attendanceCaptureDataUrl() {
@@ -8753,6 +8847,18 @@
             attendanceStopCamera();
             if (attendanceClockTimer) { clearInterval(attendanceClockTimer); attendanceClockTimer = null; }
         }
+
+        // Lifecycle HP: lepas kamera saat app ke background, nyalakan lagi saat kembali
+        // ke halaman Presensi. Mencegah kamera "macet"/boros saat pindah aplikasi.
+        document.addEventListener("visibilitychange", function () {
+            const page = document.getElementById("page-absensi");
+            const onPage = !!(page && page.classList.contains("active-page"));
+            if (document.hidden) {
+                attendanceStopCamera();
+            } else if (onPage) {
+                attendanceStartCamera();
+            }
+        });
 
         // ============================================================
         // NAVIGATION
