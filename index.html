@@ -2116,6 +2116,8 @@
 
             <ul class="nav-menu-horizontal" id="navMenu">
                 <li class="nav-item" data-page="pos" data-menu-group="pos"><a href="#"><i class="fas fa-cash-register"></i> POS</a></li>
+                <!-- PRESENSI (absen selfie) — menu utama, semua user login -->
+                <li class="nav-item" data-page="absensi"><a href="#"><i class="fas fa-camera"></i> Presensi</a></li>
                 <!-- PENJUALAN -->
                 <li class="dropdown" data-menu-group="penjualan">
                     <a href="#"><i class="fas fa-chart-line"></i> Penjualan <i class="fas fa-chevron-down"></i></a>
@@ -2175,9 +2177,6 @@
                         <li data-page="akuntansi"><a href="#"><i class="fas fa-wallet"></i> Dashboard Akuntansi</a></li>
                     </ul>
                 </li>
-
-                <!-- KEHADIRAN (absen kamera) — tersedia untuk semua user login -->
-                <li class="nav-item" data-page="absensi"><a href="#"><i class="fas fa-camera"></i> Kehadiran</a></li>
 
                 <!-- HR -->
                 <li class="dropdown" data-menu-group="hr">
@@ -3023,7 +3022,7 @@
         <div id="page-absensi" class="page-content">
             <div class="page-header">
                 <div>
-                    <h1>Kehadiran</h1>
+                    <h1>Presensi</h1>
                     <div class="page-header-desc">Absen masuk &amp; pulang dengan selfie langsung dari kamera</div>
                 </div>
                 <span id="attendanceClockText" style="font-size:0.78rem;color:var(--text-muted);"></span>
@@ -3051,7 +3050,7 @@
 
             <div id="attendanceMonitor" style="display:none;margin-top:20px;">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-                    <h3 style="margin:0;font-size:1rem;"><i class="fas fa-clipboard-list" style="color:var(--primary);"></i> Data Kehadiran</h3>
+                    <h3 style="margin:0;font-size:1rem;"><i class="fas fa-clipboard-list" style="color:var(--primary);"></i> Data Presensi</h3>
                     <input type="date" id="attendanceDate" class="filter-control" style="max-width:200px;" onchange="renderAttendanceMonitor()" />
                 </div>
                 <div class="table-wrapper"><table>
@@ -8550,7 +8549,7 @@
         }
 
         // ============================================================
-        // KEHADIRAN (ABSEN KAMERA)
+        // PRESENSI (ABSEN KAMERA)
         // Absen masuk/pulang dengan selfie langsung dari kamera.
         // Identitas & waktu dari server; foto disimpan sebagai data URL.
         // ============================================================
@@ -8736,7 +8735,7 @@
                     body.appendChild(tr);
                 });
             } catch (e) {
-                body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--danger);">Gagal memuat data kehadiran.</td></tr>';
+                body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--danger);">Gagal memuat data presensi.</td></tr>';
             }
         }
 
