@@ -746,6 +746,34 @@ async function handleAttendanceMe(req, res) {
   }
 }
 
+// Rekap presensi bulanan (HR/owner): TANPA foto (ringan untuk tabel rekap).
+// month = 0-11 (mengikuti indeks bulan di frontend).
+async function handleAttendanceRekap(req, res) {
+  try {
+    const u = new URL(req.url, "http://localhost");
+    const year = Number(u.searchParams.get("year"));
+    const month = Number(u.searchParams.get("month"));
+    if (!Number.isInteger(year) || year < 2000 || year > 2100 ||
+        !Number.isInteger(month) || month < 0 || month > 11) {
+      return sendJson(res, 400, { error: "invalid_period" });
+    }
+    const { rows } = await pool.query(
+      `SELECT employee_id, employee_name,
+              work_date::text AS work_date,
+              check_in_at, check_out_at
+         FROM public.attendance_clock
+        WHERE work_date >= make_date($1, $2, 1)
+          AND work_date <  (make_date($1, $2, 1) + INTERVAL '1 month')
+        ORDER BY work_date ASC, check_in_at ASC`,
+      [year, month + 1]
+    );
+    return sendJson(res, 200, { data: rows });
+  } catch (err) {
+    console.error("attendance rekap failed:", err.message);
+    return sendJson(res, 500, { error: "internal_error" });
+  }
+}
+
 // --- Shopee (pengganti Edge Function) ---
 async function handleShopeeAction(req, res, action) {
   const { data } = await readJsonBody(req, 64 * 1024);
@@ -934,6 +962,15 @@ const server = http.createServer(async (req, res) => {
     const user = await requireAuth(req, res);
     if (!user) return;
     return handleAttendanceMe(req, res);
+  }
+  if (req.method === "GET" && pathname === "/api/attendance/rekap") {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    // Rekap presensi: HR (menu "hr") atau owner.
+    if (!isOwnerUser(user) && !userHasMenu(user, ["hr"])) {
+      return sendJson(res, 403, { error: "forbidden" });
+    }
+    return handleAttendanceRekap(req, res);
   }
   if (req.method === "PATCH" && pathname.startsWith("/api/orders/")) {
     const user = await requireAuth(req, res);

@@ -3413,6 +3413,17 @@
                 <span class="rk-lg"><span class="rk-box" style="background:#f1f5f9;color:#94a3b8;">L</span> Libur</span>
                 <span class="rk-lg"><span class="rk-box" style="background:#fafafa;color:#cbd5e1;">?</span> Belum ada data</span>
             </div>
+
+            <div style="margin-top:20px;">
+                <div style="font-size:0.9rem;font-weight:800;margin-bottom:8px;color:var(--text-primary);">
+                    <i class="fas fa-camera" style="color:var(--primary);margin-right:6px;"></i>Detail Presensi (Selfie) —
+                    <span id="rekapDetailPeriode"></span>
+                </div>
+                <div class="table-wrapper" style="overflow-x:auto;"><table>
+                    <thead><tr><th>NAMA</th><th>TANGGAL</th><th>JAM MASUK</th><th>JAM PULANG</th><th>STATUS</th></tr></thead>
+                    <tbody id="rekapDetailBody"><tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text-muted);">Belum ada data.</td></tr></tbody>
+                </table></div>
+            </div>
         </div>
 
         <!-- ===== MODAL EDIT ABSENSI ===== -->
@@ -3823,16 +3834,9 @@
                 total: 35000, payStatus: "Batal", wmsStatus: "Batal", courier: "-", resi: "-" }
         ];
 
-        let karyawanData = [
-            { name: "Ahmad Hidayat", role: "Manager Operasional", status: "Aktif", theme: "badge-lunas" },
-            { name: "Siti Aminah", role: "Kasir POS Utama", status: "Aktif", theme: "badge-lunas" },
-            { name: "Doni Setiawan", role: "Staf Gudang / WMS", status: "Aktif", theme: "badge-lunas" },
-            { name: "Ria Safitri", role: "Admin Online Marketplace", status: "Cuti", theme: "badge-belum" },
-            { name: "Budi Utomo", role: "Kurir Pengiriman", status: "Off", theme: "badge-batal" },
-            { name: "Fitri Handayani", role: "Admin Keuangan", status: "Aktif", theme: "badge-lunas" },
-            { name: "Eko Prasetyo", role: "Staf Gudang", status: "Aktif", theme: "badge-lunas" },
-            { name: "Dewi Lestari", role: "Kasir", status: "Aktif", theme: "badge-lunas" }
-        ];
+        // Sumber karyawan nyata = app_users (diisi oleh syncKaryawanRealtime).
+        // Tidak ada lagi seed karyawan dummy.
+        let karyawanData = [];
 
         // --- ACCOUNTS & PERMISSIONS ---
         const userAccounts = [
@@ -7228,55 +7232,66 @@
         // REKAP KEHADIRAN
         // ============================================================
         const attendanceEdits = {};
+        // Data presensi selfie bulan terpilih:
+        //   attendanceClockMonth[name][day] = { in, out }
+        //   attendanceClockList = baris mentah utk tabel Detail Presensi
+        let attendanceClockMonth = {};
+        let attendanceClockList = [];
 
-        function generateAttendanceData(year, month) {
+        // Muat data presensi selfie (attendance_clock) untuk bulan terpilih.
+        // month = 0-11. Tanpa foto (ringan). Butuh menu HR / owner.
+        async function loadAttendanceClockMonth(year, month) {
+            let rows = [];
+            try {
+                const res = await apiFetch("/api/attendance/rekap?year=" + year + "&month=" + month);
+                if (res.ok && res.data && Array.isArray(res.data.data)) rows = res.data.data;
+                else if (res.status === 403) console.warn("Rekap presensi: akses ditolak (perlu menu HR)");
+            } catch (e) {
+                console.warn("load attendance month error:", e && e.message);
+            }
+            const map = {};
+            rows.forEach(r => {
+                const p = String(r.work_date || "").split("-");
+                if (p.length !== 3) return;
+                const d = parseInt(p[2], 10);
+                const key = r.employee_name || "?";
+                if (!map[key]) map[key] = {};
+                map[key][d] = { in: r.check_in_at || null, out: r.check_out_at || null };
+            });
+            attendanceClockMonth = map;
+            attendanceClockList = rows;
+            return rows;
+        }
+
+        // Bangun matriks kehadiran dari DATA NYATA (selfie) + koreksi manual HR.
+        // Tidak ada data acak. Minggu = "-" (libur); hari tanpa presensi = "" (ditampilkan "?").
+        function buildRekapData(year, month) {
             const daysInMonth = new Date(year, month + 1, 0).getDate();
             const data = {};
+            const clock = attendanceClockMonth || {};
             karyawanData.forEach(k => {
                 const days = [];
                 for (let d = 1; d <= daysInMonth; d++) {
                     const date = new Date(year, month, d);
-                    if (date.getDay() === 0) { days.push("-"); continue; }
-                    const rand = Math.random();
-                    if (rand < 0.70) days.push("H");
-                    else if (rand < 0.78) days.push("H");
-                    else if (rand < 0.84) days.push("L");
-                    else if (rand < 0.89) days.push("S");
-                    else if (rand < 0.93) days.push("I");
-                    else if (rand < 0.96) days.push("LM");
-                    else if (rand < 0.98) days.push("A");
-                    else days.push("M");
+                    if (date.getDay() === 0) { days.push("-"); continue; } // Minggu libur
+                    const rec = clock[k.name] && clock[k.name][d];
+                    days.push(rec && rec.in ? "H" : ""); // "" = belum ada data presensi
                 }
-                // Override for specific cases
-                if (k.name === "Ria Safitri") {
-                    for (let i = 0; i < days.length; i++) {
-                        const date = new Date(year, month, i + 1);
-                        if (date.getDay() === 0) days[i] = "-";
-                        else days[i] = i % 2 === 0 ? "H" : "I";
+                // Koreksi manual HR (attendance_records) — prioritas tertinggi.
+                Object.keys(attendanceEdits).forEach(key => {
+                    const p = key.split("|");
+                    const y = parseInt(p[0], 10), m = parseInt(p[1], 10), d = parseInt(p[2], 10);
+                    const name = p.slice(3).join("|");
+                    if (y === year && m === month && name === k.name && d >= 1 && d <= daysInMonth) {
+                        days[d - 1] = attendanceEdits[key].status;
                     }
-                }
-                if (k.name === "Budi Utomo") {
-                    for (let i = 0; i < days.length; i++) {
-                        const date = new Date(year, month, i + 1);
-                        if (date.getDay() === 0) days[i] = "-";
-                        else days[i] = i < 3 ? "M" : "H";
-                    }
-                }
+                });
                 data[k.name] = days;
-            });
-            // Terapkan edit absensi (sesi berjalan)
-            Object.keys(attendanceEdits).forEach(key => {
-                const p = key.split("|");
-                const y = parseInt(p[0], 10), m = parseInt(p[1], 10), d = parseInt(p[2], 10);
-                const name = p.slice(3).join("|");
-                if (y === year && m === month && data[name]) {
-                    data[name][d - 1] = attendanceEdits[key].status;
-                }
             });
             return data;
         }
 
-        function renderRekapKehadiran() {
+        async function renderRekapKehadiran() {
             const search = (document.getElementById("rekapSearch")?.value || "").toLowerCase();
             const month = rekapBulan,
                 year = rekapTahun;
@@ -7284,7 +7299,8 @@
             const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September",
                 "Oktober", "November", "Desember"
             ];
-            const attData = generateAttendanceData(year, month);
+            await loadAttendanceClockMonth(year, month);
+            const attData = buildRekapData(year, month);
 
             // Populate month selector
             const bulanSel = document.getElementById("rekapBulan");
@@ -7372,6 +7388,33 @@
                         `<td style="text-align:center;font-weight:700;color:${pctColor};font-size:0.72rem;white-space:nowrap;">${pct}%</td></tr>`;
                     return rowHtml;
                 }).join('');
+            }
+
+            // Detail Presensi (selfie) — data nyata attendance_clock bulan terpilih.
+            const periodeEl = document.getElementById("rekapDetailPeriode");
+            if (periodeEl) periodeEl.textContent = monthNames[month] + " " + year;
+            const detailBody = document.getElementById("rekapDetailBody");
+            if (detailBody) {
+                const drows = (attendanceClockList || []).filter(r =>
+                    !search || String(r.employee_name || "").toLowerCase().includes(search));
+                if (!drows.length) {
+                    detailBody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text-muted);">Belum ada data presensi pada bulan ini.</td></tr>';
+                } else {
+                    const wibTime = (ts) => { const s = fmtWIB(ts); return s ? s.slice(11, 16) : "-"; };
+                    detailBody.innerHTML = drows.map(r => {
+                        const tgl = String(r.work_date || "").slice(0, 10);
+                        const inT = r.check_in_at ? wibTime(r.check_in_at) : "-";
+                        const outT = r.check_out_at ? wibTime(r.check_out_at) : "-";
+                        const status = r.check_in_at ? (r.check_out_at ? "Hadir (lengkap)" : "Hadir") : "-";
+                        return '<tr>' +
+                            '<td>' + escEmp(r.employee_name || "-") + '</td>' +
+                            '<td>' + tgl + '</td>' +
+                            '<td>' + inT + '</td>' +
+                            '<td>' + outT + '</td>' +
+                            '<td>' + status + '</td>' +
+                            '</tr>';
+                    }).join("");
+                }
             }
         }
 
