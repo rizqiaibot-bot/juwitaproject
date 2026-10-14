@@ -3059,9 +3059,11 @@
                     <div id="attendanceCamMsg" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;color:#cbd5e1;font-size:0.8rem;">Menyalakan kamera…</div>
                 </div>
 
-                <div style="display:flex;justify-content:center;margin:12px 0 4px;">
+                <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:12px 0 4px;">
                     <button class="aksi-btn" type="button" id="btnAttendanceCam" onclick="attendanceStartCamera()" style="padding:8px 16px;"><i class="fas fa-camera"></i> Nyalakan Kamera</button>
+                    <button class="aksi-btn" type="button" id="btnAbsenTanpaFoto" onclick="attendanceUseNoPhoto()" style="padding:8px 16px;display:none;"><i class="fas fa-user-slash"></i> Lanjutkan Tanpa Foto</button>
                 </div>
+                <div id="attendanceNoPhotoHint" style="display:none;font-size:0.72rem;color:#f59e0b;text-align:center;margin-bottom:6px;"><i class="fas fa-triangle-exclamation"></i> Mode tanpa foto aktif — absen tetap tercatat tanpa selfie.</div>
 
                 <div id="attendanceToday" style="margin:14px 0;font-size:0.82rem;color:var(--text-primary);min-height:20px;"></div>
 
@@ -3420,8 +3422,8 @@
                     <span id="rekapDetailPeriode"></span>
                 </div>
                 <div class="table-wrapper" style="overflow-x:auto;"><table>
-                    <thead><tr><th>NAMA</th><th>TANGGAL</th><th>JAM MASUK</th><th>JAM PULANG</th><th>STATUS</th></tr></thead>
-                    <tbody id="rekapDetailBody"><tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text-muted);">Belum ada data.</td></tr></tbody>
+                    <thead><tr><th>NAMA</th><th>TANGGAL</th><th>JAM MASUK</th><th>JAM PULANG</th><th>FOTO</th><th>STATUS</th></tr></thead>
+                    <tbody id="rekapDetailBody"><tr><td colspan="6" style="text-align:center;padding:16px;color:var(--text-muted);">Belum ada data.</td></tr></tbody>
                 </table></div>
             </div>
         </div>
@@ -7398,7 +7400,7 @@
                 const drows = (attendanceClockList || []).filter(r =>
                     !search || String(r.employee_name || "").toLowerCase().includes(search));
                 if (!drows.length) {
-                    detailBody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text-muted);">Belum ada data presensi pada bulan ini.</td></tr>';
+                    detailBody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:16px;color:var(--text-muted);">Belum ada data presensi pada bulan ini.</td></tr>';
                 } else {
                     const wibTime = (ts) => { const s = fmtWIB(ts); return s ? s.slice(11, 16) : "-"; };
                     detailBody.innerHTML = drows.map(r => {
@@ -7406,11 +7408,16 @@
                         const inT = r.check_in_at ? wibTime(r.check_in_at) : "-";
                         const outT = r.check_out_at ? wibTime(r.check_out_at) : "-";
                         const status = r.check_in_at ? (r.check_out_at ? "Hadir (lengkap)" : "Hadir") : "-";
+                        const adaFoto = !!(r.has_check_in_photo || r.has_check_out_photo);
+                        const fotoTxt = adaFoto
+                            ? '<span style="color:var(--success);font-weight:600;">Berfoto</span>'
+                            : '<span style="color:var(--text-muted);">Tanpa Foto</span>';
                         return '<tr>' +
                             '<td>' + escEmp(r.employee_name || "-") + '</td>' +
                             '<td>' + tgl + '</td>' +
                             '<td>' + inT + '</td>' +
                             '<td>' + outT + '</td>' +
+                            '<td>' + fotoTxt + '</td>' +
                             '<td>' + status + '</td>' +
                             '</tr>';
                     }).join("");
@@ -8627,6 +8634,7 @@
         let attendanceClockTimer = null;
         let attendanceCamGen = 0;        // token utk membatalkan getUserMedia yang usang
         let attendanceCamStarting = false;
+        let attendanceNoPhotoMode = false; // alur "Lanjutkan Tanpa Foto" (kamera ditolak/tidak ada)
 
         function attendanceCanViewAll() {
             if (!currentUser) return false;
@@ -8664,10 +8672,37 @@
         // Tampilkan status/error kamera yang SEBENARNYA (name + message).
         function attendanceShowCamMsg(html, isError) {
             const msg = document.getElementById("attendanceCamMsg");
-            if (!msg) return;
-            msg.style.color = isError ? "#fca5a5" : "#cbd5e1";
-            msg.style.display = "flex";
-            msg.innerHTML = html;
+            if (msg) {
+                msg.style.color = isError ? "#fca5a5" : "#cbd5e1";
+                msg.style.display = "flex";
+                msg.innerHTML = html;
+            }
+            if (isError) attendanceOfferNoPhoto(true); // kamera gagal → tawarkan absen tanpa foto
+        }
+
+        function attendanceOfferNoPhoto(show) {
+            const btn = document.getElementById("btnAbsenTanpaFoto");
+            if (btn) btn.style.display = show ? "inline-flex" : "none";
+        }
+
+        // Pilih alur tanpa foto (dipakai bila kamera ditolak/tidak tersedia).
+        function attendanceUseNoPhoto() {
+            attendanceNoPhotoMode = true;
+            attendanceOfferNoPhoto(false);
+            const hint = document.getElementById("attendanceNoPhotoHint");
+            if (hint) hint.style.display = "block";
+            const camBtn = document.getElementById("btnAttendanceCam");
+            if (camBtn) camBtn.style.display = "none";
+            attendanceShowCamMsg("Mode tanpa foto aktif. Pilih <b>Absen Masuk</b> atau <b>Absen Pulang</b>.", false);
+        }
+
+        function attendanceResetNoPhotoMode() {
+            attendanceNoPhotoMode = false;
+            attendanceOfferNoPhoto(false);
+            const hint = document.getElementById("attendanceNoPhotoHint");
+            if (hint) hint.style.display = "none";
+            const camBtn = document.getElementById("btnAttendanceCam");
+            if (camBtn) camBtn.style.display = "";
         }
 
         function attendanceErrText(e) {
@@ -8731,6 +8766,7 @@
                 }
                 const msg = document.getElementById("attendanceCamMsg");
                 if (msg) msg.style.display = "none";
+                attendanceResetNoPhotoMode(); // kamera berhasil → kembali ke alur selfie
                 console.log("[presensi] kamera aktif ", video.videoWidth + "x" + video.videoHeight);
             } catch (e) {
                 if (gen !== attendanceCamGen) return;
@@ -8782,13 +8818,17 @@
         }
 
         async function attendanceSubmit(kind) {
-            const dataUrl = attendanceCaptureDataUrl();
-            if (!dataUrl) { showToast("Kamera belum siap. Tunggu sebentar lalu coba lagi."); return; }
+            // Alur normal = selfie; alur "Lanjutkan Tanpa Foto" mengirim photo:null.
+            let photo = null;
+            if (!attendanceNoPhotoMode) {
+                photo = attendanceCaptureDataUrl();
+                if (!photo) { showToast("Kamera belum siap. Tunggu sebentar, atau pilih \"Lanjutkan Tanpa Foto\"."); return; }
+            }
             const path = kind === "in" ? "/api/attendance/checkin" : "/api/attendance/checkout";
             const btn = document.getElementById(kind === "in" ? "btnAbsenMasuk" : "btnAbsenPulang");
             if (btn) btn.disabled = true;
             try {
-                const res = await apiFetch(path, { method: "POST", body: { photo: dataUrl } });
+                const res = await apiFetch(path, { method: "POST", body: { photo: photo } });
                 if (!res.ok) {
                     const code = res.data && res.data.error;
                     if (code === "already_checked_in") showToast("Sudah absen masuk hari ini");
@@ -8798,7 +8838,8 @@
                     else if (code === "invalid_photo") showToast("Foto tidak valid, coba lagi");
                     else showToast("Gagal menyimpan absen");
                 } else {
-                    showToast(kind === "in" ? "Absen masuk tersimpan" : "Absen pulang tersimpan");
+                    const label = kind === "in" ? "Absen masuk" : "Absen pulang";
+                    showToast(photo ? (label + " tersimpan") : (label + " tersimpan (tanpa foto)"));
                 }
                 await attendanceLoadToday();
                 if (attendanceCanViewAll()) renderAttendanceMonitor();
@@ -8826,16 +8867,18 @@
             const td = document.createElement("td");
             const safe = attendanceSafePhoto(src);
             if (!safe) {
-                td.textContent = "-";
+                td.textContent = "Tanpa Foto";
                 td.style.color = "var(--text-muted)";
+                td.style.fontSize = "0.72rem";
                 return td;
             }
             const img = document.createElement("img");
             img.alt = alt;
             img.style.cssText = "width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--border-color);";
             img.addEventListener("error", function () {
-                td.textContent = "-";
+                td.textContent = "Tanpa Foto";
                 td.style.color = "var(--text-muted)";
+                td.style.fontSize = "0.72rem";
             });
             img.src = safe;
             td.appendChild(img);
@@ -8877,6 +8920,7 @@
         }
 
         function attendanceInit() {
+            attendanceResetNoPhotoMode();
             attendanceStartCamera();
             attendanceLoadToday();
             attendanceTickClock();
@@ -8888,6 +8932,7 @@
 
         function attendanceLeave() {
             attendanceStopCamera();
+            attendanceResetNoPhotoMode();
             if (attendanceClockTimer) { clearInterval(attendanceClockTimer); attendanceClockTimer = null; }
         }
 

@@ -655,6 +655,18 @@ function isSelfieDataUrl(v) {
   return typeof v === "string" && SELFIE_DATA_URL_RE.test(v);
 }
 
+// Normalisasi foto absen:
+//   null / undefined  → { ok:true, photo:null }  (alur "Lanjutkan Tanpa Foto")
+//   data URL valid    → { ok:true, photo:<string> }
+//   selain itu        → { ok:false } (invalid) / { ok:false, tooLarge:true }
+// TIDAK membuat foto palsu; foto kosong tetap null.
+function normalizeAttendancePhoto(raw) {
+  if (raw === null || raw === undefined) return { ok: true, photo: null };
+  if (typeof raw !== "string" || !SELFIE_DATA_URL_RE.test(raw)) return { ok: false };
+  if (raw.length > ATTENDANCE_PHOTO_MAX) return { ok: false, tooLarge: true };
+  return { ok: true, photo: raw };
+}
+
 async function handleAttendanceCheck(req, res, kind) {
   const contentType = String(req.headers["content-type"] || "").toLowerCase();
   if (!contentType.startsWith("application/json")) {
@@ -668,9 +680,13 @@ async function handleAttendanceCheck(req, res, kind) {
     if (error === "too_large") return sendJson(res, 413, { error: "photo_too_large" });
     if (error || !data || typeof data !== "object") return sendJson(res, 400, { error: "invalid_request" });
 
-    const photo = data.photo;
-    if (!isSelfieDataUrl(photo)) return sendJson(res, 400, { error: "invalid_photo" });
-    if (photo.length > ATTENDANCE_PHOTO_MAX) return sendJson(res, 413, { error: "photo_too_large" });
+    // Foto boleh null (alur tanpa foto) atau data URL selfie valid.
+    const norm = normalizeAttendancePhoto(data.photo);
+    if (!norm.ok) {
+      return sendJson(res, norm.tooLarge ? 413 : 400,
+        { error: norm.tooLarge ? "photo_too_large" : "invalid_photo" });
+    }
+    const photo = norm.photo; // null = tanpa foto
 
     const userId = req.user.id;
     const name = req.user.name || req.user.phone || "?";
@@ -760,7 +776,9 @@ async function handleAttendanceRekap(req, res) {
     const { rows } = await pool.query(
       `SELECT employee_id, employee_name,
               work_date::text AS work_date,
-              check_in_at, check_out_at
+              check_in_at, check_out_at,
+              (check_in_photo IS NOT NULL)  AS has_check_in_photo,
+              (check_out_photo IS NOT NULL) AS has_check_out_photo
          FROM public.attendance_clock
         WHERE work_date >= make_date($1, $2, 1)
           AND work_date <  (make_date($1, $2, 1) + INTERVAL '1 month')
