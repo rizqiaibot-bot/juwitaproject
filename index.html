@@ -1782,6 +1782,19 @@
             font-size: 0.75rem;
             color: var(--text-muted);
         }
+        .emp-no {
+            flex: 0 0 auto;
+            min-width: 24px;
+            height: 24px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            background: var(--bg-muted, #f1f5f9);
+            border-radius: 50%;
+        }
 
         /* ===== RESPONSIVE ===== */
         @media (max-width: 1024px) {
@@ -2792,7 +2805,7 @@
 
         <div id="page-mutasi-stok" class="page-content">
             <div class="page-header"><h1>Mutasi Stok</h1><div class="page-header-desc">Catat perpindahan stok antar gudang atau lokasi</div></div>
-            <div class="form-card"><h3 style="margin-bottom:16px;">Form Mutasi Barang</h3><div class="form-grid"><div class="form-group"><label>Produk</label><select class="form-control"><option>TASAJI ROTI MARYAM ORIGINAL</option><option>RUJAK CIRENG BRECXELLE</option></select></div><div class="form-group"><label>Jumlah</label><input type="number" class="form-control" value="1" /></div><div class="form-group"><label>Dari Lokasi</label><select class="form-control"><option>Gudang Utama</option><option>Gudang Cabang</option></select></div><div class="form-group"><label>Ke Lokasi</label><select class="form-control"><option>Gudang Cabang</option><option>Gudang Utama</option></select></div></div><button class="checkout-btn" onclick="showToast('Mutasi stok berhasil dicatat')"><i class="fas fa-check"></i> Proses Mutasi</button></div>
+            <div class="form-card"><h3 style="margin-bottom:16px;">Form Mutasi Barang</h3><div class="form-grid"><div class="form-group"><label>Produk</label><select id="mutasiProductSelect" class="form-control"><option value="">Pilih produk</option></select></div><div class="form-group"><label>Jumlah</label><input type="number" class="form-control" value="1" /></div><div class="form-group"><label>Dari Lokasi</label><select class="form-control"><option>Gudang Utama</option><option>Gudang Cabang</option></select></div><div class="form-group"><label>Ke Lokasi</label><select class="form-control"><option>Gudang Cabang</option><option>Gudang Utama</option></select></div></div><button class="checkout-btn" onclick="showToast('Mutasi stok berhasil dicatat')"><i class="fas fa-check"></i> Proses Mutasi</button></div>
         </div>
 
         <div id="page-data-pembelian" class="page-content">
@@ -3440,7 +3453,7 @@
 
             <div style="font-size:0.9rem;font-weight:800;margin:10px 0;color:var(--text-primary);"><i class="fas fa-clock-rotate-left" style="color:var(--primary);margin-right:6px;"></i>Riwayat Transaksi</div>
             <div class="table-wrapper"><table>
-                <thead><tr><th>TANGGAL</th><th>KETERANGAN</th><th>MASUK</th><th>KELUAR</th><th>AKUN</th><th>AKSI</th></tr></thead>
+                <thead><tr><th>TANGGAL</th><th>AKUN</th><th>MASUK</th><th>KELUAR</th><th>KETERANGAN</th><th>AKSI</th></tr></thead>
                 <tbody id="accHistoryBody"><tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">Belum ada transaksi.</td></tr></tbody>
             </table></div>
         </div>
@@ -4105,6 +4118,33 @@
             return { data: all, error: null };
         }
 
+        // Isi dropdown PRODUK halaman Mutasi Stok dari global `products`
+        // (seluruh produk, tanpa filter stok; stok 0/negatif tetap tampil).
+        function populateMutasiStokProducts() {
+            const sel = document.getElementById("mutasiProductSelect");
+            if (!sel) return;
+            if (!Array.isArray(products) || products.length === 0) return;
+            const list = products.slice().sort(function (a, b) {
+                return String(a.name || "").localeCompare(String(b.name || ""), "id-ID", { sensitivity: "base" });
+            });
+            const frag = document.createDocumentFragment();
+            const ph = document.createElement("option");
+            ph.value = "";
+            ph.disabled = true;
+            ph.selected = true;
+            ph.textContent = "Pilih produk";
+            frag.appendChild(ph);
+            list.forEach(function (p) {
+                const o = document.createElement("option");
+                o.value = p.id;
+                o.textContent = p.name || ("#" + p.id);
+                frag.appendChild(o);
+            });
+            sel.innerHTML = "";
+            sel.appendChild(frag);
+        }
+        window.populateMutasiStokProducts = populateMutasiStokProducts;
+
         async function initSupabaseData(force) {
             if (dataLoading) return;
             if (productsLoaded && !force) return;
@@ -4154,6 +4194,7 @@
             dataLoading = false;
             // Harga per channel (product_prices) — gagal baca tidak menghentikan UI.
             await ensureProductPricesLoaded(true);
+            populateMutasiStokProducts();
             refreshAllUI();
         }
 
@@ -4536,7 +4577,7 @@
                     return;
                 }
                 if (totalEl) totalEl.textContent = "Total: " + list.length + " Karyawan";
-                container.innerHTML = list.map(function (emp) {
+                container.innerHTML = list.map(function (emp, idx) {
                     const isOwner = String(emp.role || "").toLowerCase() === "owner";
                     const statusCls = emp.status === "ACTIVE" ? "badge-lunas" : "badge-belum";
                     const statusTxt = emp.status === "ACTIVE" ? "Aktif" : "Nonaktif";
@@ -4547,11 +4588,13 @@
                     const roleTag = emp.role_label || emp.role || "";
                     return '<div class="account-card">' +
                         '<div class="account-header">' +
+                        '<div style="display:flex;align-items:center;gap:12px;min-width:0;">' +
+                        '<span class="emp-no">' + (idx + 1) + "</span>" +
                         '<div class="account-info">' +
                         '<span class="acc-name">' + escEmp(emp.full_name) + "</span>" +
                         '<span class="acc-detail">' + escEmp(emp.phone) + " · " + escEmp(roleTag) +
                         ' · <span class="badge-status ' + statusCls + '">' + statusTxt + "</span>" +
-                        (isOwner ? " · OWNER" : "") + "</span></div>" +
+                        (isOwner ? " · OWNER" : "") + "</span></div></div>" +
                         '<div style="display:flex;gap:6px;align-items:center;">' +
                         '<button class="aksi-btn" onclick="openEmployeeForm(\'edit\',\'' + emp.id + '\')"><i class="fas fa-edit"></i> Edit</button>' +
                         '<button class="aksi-btn" onclick="resetEmployeePassword(\'' + emp.id + '\')"><i class="fas fa-key"></i> Reset Password</button>' +
@@ -6728,7 +6771,7 @@
                 'Dipick': 'Sudah Dipick',
                 'Siap Kirim': 'Sudah Dipacking',
                 'Packing': 'Packing',
-                'Dikirim': 'Dikirim',
+                'Dikirim': 'Sudah Dikirim',
                 'Selesai': 'Selesai',
                 'Batal': 'Batal',
                 'Perlu Verifikasi': 'Perlu Verifikasi'
@@ -8522,6 +8565,7 @@
             if (pageId === "penerimaan") setTimeout(async () => { if (!suppliersData.length) await loadPembelian(); renderPenerimaan(); }, 10);
             if (pageId === "karyawan") setTimeout(() => renderEmployees(), 10);
             if (pageId === "rekap-kehadiran") setTimeout(() => syncKaryawanRealtime().then(() => renderRekapKehadiran()), 10);
+            if (pageId === "mutasi-stok") setTimeout(() => populateMutasiStokProducts(), 10);
             // Harga per channel: muat ulang product_prices (RLS authenticated)
             // saat halaman Harga Jual dibuka, lalu render ulang tabel.
             if (pageId === "harga-jual") setTimeout(() => ensureProductPricesLoaded(true), 10);
@@ -9451,10 +9495,10 @@
             }
             return '<tr>' +
                 '<td>' + dateStr + '</td>' +
-                '<td>' + (t.keterangan || "") + ' <span style="opacity:.6;font-size:.7rem;">[' + label + ']</span></td>' +
+                '<td>' + akun + '</td>' +
                 '<td style="color:var(--success);font-weight:700;">' + masuk + '</td>' +
                 '<td style="color:var(--danger);font-weight:700;">' + keluar + '</td>' +
-                '<td>' + akun + '</td>' +
+                '<td>' + (t.keterangan || "") + ' <span style="opacity:.6;font-size:.7rem;">[' + label + ']</span></td>' +
                 '<td>' + aksi + '</td>' +
                 '</tr>';
         }
