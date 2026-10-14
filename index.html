@@ -3228,21 +3228,35 @@
             #page-rekap-kehadiran #rekapTable tbody tr:last-child td {
                 border-bottom: none;
             }
+            /* Modal HR (edit Rekap Kehadiran): tepat di tengah viewport (x & y),
+               responsif, tidak melebihi layar, konten bisa di-scroll bila panjang. */
+            #editAbsensiModal {
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+            }
             #editAbsensiModal .edit-absensi-card {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%) scale(0.95);
                 background: var(--bg-card);
                 border: 1px solid var(--border-color);
                 border-radius: var(--radius-xl);
                 box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-                width: 100%;
+                box-sizing: border-box;
+                width: calc(100% - 24px);
                 max-width: 440px;
-                max-height: 90vh;
+                max-height: calc(100vh - 24px);
+                max-height: calc(100dvh - 24px);
                 overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                overscroll-behavior: contain;
                 padding: 20px 24px;
-                transform: scale(0.95);
                 transition: var(--transition);
             }
             #editAbsensiModal.active .edit-absensi-card {
-                transform: scale(1);
+                transform: translate(-50%, -50%) scale(1);
             }
             #editAbsensiModal .eab-head {
                 display: flex;
