@@ -5997,12 +5997,17 @@
         // EMPLOYEES
         // ============================================================
         function mapAppUsersToKaryawan(list) {
-            return (list || []).map(emp => ({
-                name: emp.full_name || emp.name || "?",
-                role: emp.role_label || emp.role || "-",
-                status: emp.status === "ACTIVE" ? "Aktif" : "Nonaktif",
-                theme: emp.status === "ACTIVE" ? "badge-lunas" : "badge-belum"
-            }));
+            // Rekap hanya memakai karyawan AKTIF (sesuai app_users).
+            // Sertakan id (app_users.id) agar pencocokan presensi stabil walau nama berubah.
+            return (list || [])
+                .filter(emp => String(emp.status || "").toUpperCase() === "ACTIVE")
+                .map(emp => ({
+                    id: emp.id,
+                    name: emp.full_name || emp.name || "?",
+                    role: emp.role_label || emp.role || "-",
+                    status: "Aktif",
+                    theme: "badge-lunas"
+                }));
         }
 
         async function syncKaryawanRealtime() {
@@ -7270,7 +7275,8 @@
                 const p = String(r.work_date || "").split("-");
                 if (p.length !== 3) return;
                 const d = parseInt(p[2], 10);
-                const key = r.employee_name || "?";
+                const key = String(r.employee_id || "");
+                if (!key) return;
                 if (!map[key]) map[key] = {};
                 map[key][d] = { in: r.check_in_at || null, out: r.check_out_at || null };
             });
@@ -7279,29 +7285,25 @@
             return rows;
         }
 
-        // Bangun matriks kehadiran dari DATA NYATA (selfie) + koreksi manual HR.
-        // Tidak ada data acak. Minggu = "-" (libur); hari tanpa presensi = "" (ditampilkan "?").
+        // Bangun matriks kehadiran dari DATA NYATA (attendance_clock) + koreksi manual HR.
+        // Prioritas: presensi NYATA (H) > koreksi manual (attendance_records) > "" (belum ada data).
+        // Presensi asli tidak pernah ditimpa/dihilangkan oleh koreksi manual.
+        // Minggu = "-" (libur); tanpa presensi & tanpa koreksi = "" (ditampilkan "?").
         function buildRekapData(year, month) {
             const daysInMonth = new Date(year, month + 1, 0).getDate();
             const data = {};
             const clock = attendanceClockMonth || {};
             karyawanData.forEach(k => {
+                const byDay = clock[String(k.id)] || {};
                 const days = [];
                 for (let d = 1; d <= daysInMonth; d++) {
                     const date = new Date(year, month, d);
                     if (date.getDay() === 0) { days.push("-"); continue; } // Minggu libur
-                    const rec = clock[k.name] && clock[k.name][d];
-                    days.push(rec && rec.in ? "H" : ""); // "" = belum ada data presensi
+                    const rec = byDay[d];
+                    if (rec && rec.in) { days.push("H"); continue; } // presensi NYATA (selfie) — tidak ditimpa
+                    const editKey = `${year}|${month}|${d}|${k.name}`;
+                    days.push(attendanceEdits[editKey] ? attendanceEdits[editKey].status : "");
                 }
-                // Koreksi manual HR (attendance_records) — prioritas tertinggi.
-                Object.keys(attendanceEdits).forEach(key => {
-                    const p = key.split("|");
-                    const y = parseInt(p[0], 10), m = parseInt(p[1], 10), d = parseInt(p[2], 10);
-                    const name = p.slice(3).join("|");
-                    if (y === year && m === month && name === k.name && d >= 1 && d <= daysInMonth) {
-                        days[d - 1] = attendanceEdits[key].status;
-                    }
-                });
                 data[k.name] = days;
             });
             return data;
@@ -7411,13 +7413,20 @@
             if (periodeEl) periodeEl.textContent = monthNames[month] + " " + year;
             const detailBody = document.getElementById("rekapDetailBody");
             if (detailBody) {
-                const drows = (attendanceClockList || []).filter(r =>
-                    !search || String(r.employee_name || "").toLowerCase().includes(search));
+                // Hanya presensi milik karyawan AKTIF; nama ditampilkan dari app_users (nama terkini).
+                const nameById = {};
+                (karyawanData || []).forEach(k => { nameById[String(k.id)] = k.name; });
+                const activeIds = new Set(Object.keys(nameById));
+                const drows = (attendanceClockList || [])
+                    .filter(r => activeIds.has(String(r.employee_id)))
+                    .map(r => ({ r: r, name: nameById[String(r.employee_id)] || r.employee_name || "-" }))
+                    .filter(x => !search || String(x.name).toLowerCase().includes(search));
                 if (!drows.length) {
                     detailBody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:16px;color:var(--text-muted);">Belum ada data presensi pada bulan ini.</td></tr>';
                 } else {
                     const wibTime = (ts) => { const s = fmtWIB(ts); return s ? s.slice(11, 16) : "-"; };
-                    detailBody.innerHTML = drows.map(r => {
+                    detailBody.innerHTML = drows.map(x => {
+                        const r = x.r;
                         const tgl = String(r.work_date || "").slice(0, 10);
                         const inT = r.check_in_at ? wibTime(r.check_in_at) : "-";
                         const outT = r.check_out_at ? wibTime(r.check_out_at) : "-";
@@ -7427,7 +7436,7 @@
                             ? '<span style="color:var(--success);font-weight:600;">Berfoto</span>'
                             : '<span style="color:var(--text-muted);">Tanpa Foto</span>';
                         return '<tr>' +
-                            '<td>' + escEmp(r.employee_name || "-") + '</td>' +
+                            '<td>' + escEmp(x.name) + '</td>' +
                             '<td>' + tgl + '</td>' +
                             '<td>' + inT + '</td>' +
                             '<td>' + outT + '</td>' +
