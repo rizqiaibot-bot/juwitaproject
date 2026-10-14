@@ -778,7 +778,8 @@ async function handleAttendanceRekap(req, res) {
               work_date::text AS work_date,
               check_in_at, check_out_at,
               (check_in_photo IS NOT NULL)  AS has_check_in_photo,
-              (check_out_photo IS NOT NULL) AS has_check_out_photo
+              (check_out_photo IS NOT NULL) AS has_check_out_photo,
+              check_in_photo, check_out_photo
          FROM public.attendance_clock
         WHERE work_date >= make_date($1, $2, 1)
           AND work_date <  (make_date($1, $2, 1) + INTERVAL '1 month')

@@ -3176,7 +3176,7 @@
                 font-size: 0.52rem;
             }
             #page-rekap-kehadiran #rekapTable {
-                min-width: 1000px;
+                min-width: 1200px;
             }
             #page-rekap-kehadiran #rekapTable th {
                 padding: 6px 3px;
@@ -3437,7 +3437,7 @@
                 </div>
                 <div class="table-wrapper" style="overflow-x:auto;"><table>
                     <thead><tr><th>NAMA</th><th>TANGGAL</th><th>JAM MASUK</th><th>JAM PULANG</th><th>FOTO</th><th>STATUS</th></tr></thead>
-                    <tbody id="rekapDetailBody"><tr><td colspan="6" style="text-align:center;padding:16px;color:var(--text-muted);">Belum ada data.</td></tr></tbody>
+                    <tbody id="rekapKehadiranDetailBody"><tr><td colspan="6" style="text-align:center;padding:16px;color:var(--text-muted);">Belum ada data.</td></tr></tbody>
                 </table></div>
             </div>
         </div>
@@ -3488,9 +3488,10 @@
 
                 <div class="eab-section">
                     <div class="eab-label">Jam Kerja</div>
+                    <div id="eabPresensiInfo" style="font-size:0.72rem;color:var(--text-secondary);margin-bottom:8px;"></div>
                     <div class="eab-grid2">
-                        <div class="eab-field"><label>Jam Masuk</label><input type="time" class="form-control" id="eabMasuk" value="08:00" oninput="hitungTotalKerja()"></div>
-                        <div class="eab-field"><label>Jam Pulang</label><input type="time" class="form-control" id="eabPulang" value="17:00" oninput="hitungTotalKerja()"></div>
+                        <div class="eab-field"><label>Jam Masuk</label><input type="time" class="form-control" id="eabMasuk" value="" oninput="hitungTotalKerja()"></div>
+                        <div class="eab-field"><label>Jam Pulang</label><input type="time" class="form-control" id="eabPulang" value="" oninput="hitungTotalKerja()"></div>
                         <div class="eab-field"><label>Mulai Istirahat</label><input type="time" class="form-control" id="eabIstirahatMulai" value="12:00" oninput="hitungTotalKerja()"></div>
                         <div class="eab-field"><label>Selesai Istirahat</label><input type="time" class="form-control" id="eabIstirahatSelesai" value="13:00" oninput="hitungTotalKerja()"></div>
                     </div>
@@ -7309,6 +7310,38 @@
             return data;
         }
 
+        // Sel teks Detail Rekap (textContent → aman).
+        function rekapTextTd(text) {
+            const td = document.createElement("td");
+            td.textContent = text == null ? "" : String(text);
+            return td;
+        }
+
+        // Sel foto Detail Rekap: thumbnail presensi bila ada (via properti DOM, aman),
+        // atau "Tanpa Foto". Klik thumbnail → buka gambar.
+        function rekapFotoTd(photoUrl) {
+            const td = document.createElement("td");
+            const safe = attendanceSafePhoto(photoUrl);
+            if (!safe) {
+                td.textContent = "Tanpa Foto";
+                td.style.color = "var(--text-muted)";
+                td.style.fontSize = "0.72rem";
+                return td;
+            }
+            const img = document.createElement("img");
+            img.alt = "selfie presensi";
+            img.style.cssText = "width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--border-color);cursor:pointer;";
+            img.addEventListener("click", function () { try { window.open(safe, "_blank"); } catch (e) {} });
+            img.addEventListener("error", function () {
+                td.textContent = "Tanpa Foto";
+                td.style.color = "var(--text-muted)";
+                td.style.fontSize = "0.72rem";
+            });
+            img.src = safe;
+            td.appendChild(img);
+            return td;
+        }
+
         async function renderRekapKehadiran() {
             const search = (document.getElementById("rekapSearch")?.value || "").toLowerCase();
             const month = rekapBulan,
@@ -7395,12 +7428,22 @@
                     let rowHtml =
                         `<tr><td style="position:sticky;left:0;z-index:1;background:#fff;font-weight:600;white-space:nowrap;">${k.name}</td>`;
                     days.forEach((s, idx) => {
-                        const date = new Date(year, month, idx + 1);
-                        const editKey = `${year}|${month}|${idx + 1}|${k.name}`;
+                        const dayNum = idx + 1;
+                        const editKey = `${year}|${month}|${dayNum}|${k.name}`;
                         let st = attMap[s] || { t: "?", bg: "#fafafa", c: "#cbd5e1" };
-                        if (date > today && !attendanceEdits[editKey]) { st = { t: "?", bg: "#fafafa", c: "#cbd5e1" }; }
+                        // Jam presensi aktual (attendance_clock) untuk karyawan & tanggal ini.
+                        const rec = (attendanceClockMonth[String(k.id)] || {})[dayNum];
+                        let timeLine = "";
+                        let title = "Edit absensi";
+                        if (rec && rec.in) {
+                            const inT = (fmtWIB(rec.in) || "").slice(11, 16);
+                            const outT = rec.out ? (fmtWIB(rec.out) || "").slice(11, 16) : "";
+                            timeLine = `<div style="font-size:0.48rem;line-height:1.05;margin-top:1px;color:#0f766e;white-space:nowrap;">${inT}${outT ? "–" + outT : ""}</div>`;
+                            title = `Presensi: masuk ${inT} WIB` + (rec.out ? `, pulang ${outT} WIB` : " (belum pulang)");
+                        }
+                        if (attendanceEdits[editKey]) title += " · ada koreksi manual";
                         rowHtml +=
-                            `<td style="text-align:center;padding:5px 3px;"><span class="rk-box" style="background:${st.bg};color:${st.c};cursor:pointer;" title="Edit absensi" onclick="openEditAbsensi('${k.name}', ${idx + 1}, '${s}')">${st.t}</span></td>`;
+                            `<td style="text-align:center;padding:4px 2px;"><span class="rk-box" style="background:${st.bg};color:${st.c};cursor:pointer;" title="${title}" onclick="openEditAbsensi('${k.name}', ${dayNum}, '${s}', '${k.id}')">${st.t}</span>${timeLine}</td>`;
                     });
                     rowHtml +=
                         `<td style="text-align:center;font-weight:700;color:${pctColor};font-size:0.72rem;white-space:nowrap;">${pct}%</td></tr>`;
@@ -7411,7 +7454,7 @@
             // Detail Presensi (selfie) — data nyata attendance_clock bulan terpilih.
             const periodeEl = document.getElementById("rekapDetailPeriode");
             if (periodeEl) periodeEl.textContent = monthNames[month] + " " + year;
-            const detailBody = document.getElementById("rekapDetailBody");
+            const detailBody = document.getElementById("rekapKehadiranDetailBody");
             if (detailBody) {
                 // Hanya presensi milik karyawan AKTIF; nama ditampilkan dari app_users (nama terkini).
                 const nameById = {};
@@ -7421,29 +7464,22 @@
                     .filter(r => activeIds.has(String(r.employee_id)))
                     .map(r => ({ r: r, name: nameById[String(r.employee_id)] || r.employee_name || "-" }))
                     .filter(x => !search || String(x.name).toLowerCase().includes(search));
+                detailBody.innerHTML = "";
                 if (!drows.length) {
                     detailBody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:16px;color:var(--text-muted);">Belum ada data presensi pada bulan ini.</td></tr>';
                 } else {
                     const wibTime = (ts) => { const s = fmtWIB(ts); return s ? s.slice(11, 16) : "-"; };
-                    detailBody.innerHTML = drows.map(x => {
+                    drows.forEach(x => {
                         const r = x.r;
-                        const tgl = String(r.work_date || "").slice(0, 10);
-                        const inT = r.check_in_at ? wibTime(r.check_in_at) : "-";
-                        const outT = r.check_out_at ? wibTime(r.check_out_at) : "-";
-                        const status = r.check_in_at ? (r.check_out_at ? "Hadir (lengkap)" : "Hadir") : "-";
-                        const adaFoto = !!(r.has_check_in_photo || r.has_check_out_photo);
-                        const fotoTxt = adaFoto
-                            ? '<span style="color:var(--success);font-weight:600;">Berfoto</span>'
-                            : '<span style="color:var(--text-muted);">Tanpa Foto</span>';
-                        return '<tr>' +
-                            '<td>' + escEmp(x.name) + '</td>' +
-                            '<td>' + tgl + '</td>' +
-                            '<td>' + inT + '</td>' +
-                            '<td>' + outT + '</td>' +
-                            '<td>' + fotoTxt + '</td>' +
-                            '<td>' + status + '</td>' +
-                            '</tr>';
-                    }).join("");
+                        const tr = document.createElement("tr");
+                        tr.appendChild(rekapTextTd(x.name));
+                        tr.appendChild(rekapTextTd(String(r.work_date || "").slice(0, 10)));
+                        tr.appendChild(rekapTextTd(r.check_in_at ? wibTime(r.check_in_at) : "-"));
+                        tr.appendChild(rekapTextTd(r.check_out_at ? wibTime(r.check_out_at) : "-"));
+                        tr.appendChild(rekapFotoTd(r.check_in_photo || r.check_out_photo));
+                        tr.appendChild(rekapTextTd(r.check_in_at ? (r.check_out_at ? "Hadir (lengkap)" : "Hadir") : "-"));
+                        detailBody.appendChild(tr);
+                    });
                 }
             }
         }
@@ -7465,7 +7501,7 @@
         let editAbsensiNama = "";
         let editAbsensiDay = 0;
 
-        function openEditAbsensi(name, day, status) {
+        function openEditAbsensi(name, day, status, empId) {
             editAbsensiKey = `${rekapTahun}|${rekapBulan}|${day}|${name}`;
             editAbsensiNama = name;
             editAbsensiDay = day;
@@ -7477,6 +7513,26 @@
             document.getElementById("eabNama").textContent = name;
             document.getElementById("eabTanggal").textContent = `${hari}, ${day} ${bulan} ${rekapTahun}`;
             document.getElementById("eabMenitLembur").value = 0;
+
+            // Jam presensi AKTUAL dari attendance_clock (bukan default 08:00–17:00).
+            const inEl = document.getElementById("eabMasuk");
+            const outEl = document.getElementById("eabPulang");
+            const infoEl = document.getElementById("eabPresensiInfo");
+            const rec = empId ? (attendanceClockMonth[String(empId)] || {})[day] : null;
+            const wibTime = (ts) => { const s = fmtWIB(ts); return s ? s.slice(11, 16) : ""; };
+            if (rec && rec.in) {
+                const inT = wibTime(rec.in);
+                const outT = rec.out ? wibTime(rec.out) : "";
+                if (inEl) inEl.value = inT;
+                if (outEl) outEl.value = outT;
+                if (infoEl) infoEl.innerHTML = 'Presensi selfie (aktual): masuk <b>' + inT + ' WIB</b>' +
+                    (outT ? ', pulang <b>' + outT + ' WIB</b>' : ' <span style="color:var(--text-muted);">(belum absen pulang)</span>') +
+                    '<br><span style="color:var(--text-muted);font-size:0.68rem;">Jam di bawah terisi dari presensi; ubah hanya bila perlu.</span>';
+            } else {
+                if (inEl) inEl.value = "";
+                if (outEl) outEl.value = "";
+                if (infoEl) infoEl.innerHTML = '<span style="color:var(--text-muted);">Tidak ada presensi selfie untuk hari ini.</span>';
+            }
 
             const prev = attendanceEdits[editAbsensiKey];
             const cur = prev ? prev.status : status;
