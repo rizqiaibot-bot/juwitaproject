@@ -62,6 +62,27 @@ function isLoginRateLimited(ip) {
   return false;
 }
 
+// --- Rate limit absen sederhana (in-memory, per user) ---
+// Normal: maks 2 absen/hari; 10/menit cukup longgar untuk retry kamera.
+const ATTENDANCE_WINDOW_MS = 60 * 1000;
+const ATTENDANCE_MAX_ATTEMPTS = 10;
+const attendanceAttempts = new Map();
+
+function isAttendanceRateLimited(userId) {
+  const key = String(userId || "");
+  if (!key) return true;
+  const now = Date.now();
+  let arr = attendanceAttempts.get(key) || [];
+  arr = arr.filter((t) => now - t < ATTENDANCE_WINDOW_MS);
+  if (arr.length >= ATTENDANCE_MAX_ATTEMPTS) {
+    attendanceAttempts.set(key, arr);
+    return true;
+  }
+  arr.push(now);
+  attendanceAttempts.set(key, arr);
+  return false;
+}
+
 // --- Baca body JSON dengan batas ukuran ---
 function readJsonBody(req, maxBytes) {
   return new Promise((resolve) => {
@@ -264,7 +285,7 @@ async function handleProductPricesPut(req, res) {
 const DATA_TABLES = new Set([
   "products", "orders", "order_items", "karyawan",
   "warehouse_receiving", "warehouse_racks", "warehouse_opname",
-  "stock_mutations", "attendance_records",
+  "stock_mutations", "attendance_records", "attendance_clock",
   "app_users", "accounting_accounts", "accounting_transactions",
   "v_account_balance", "marketplace_config", "activity_log",
   "suppliers", "purchases", "purchase_items",
@@ -290,6 +311,9 @@ const DATA_TABLE_ACCESS = {
   order_items:             { read: ["pos", "penjualan", "gudang"], create: null, update: null, delete: null },
   karyawan:                { read: ["hr", "pengaturan"], create: null, update: null, delete: null },
   attendance_records:      { read: ["hr"], create: ["hr"], update: ["hr"], delete: ["hr"] },
+  // Kehadiran (absen kamera): baca untuk HR/owner. Tulis HANYA lewat
+  // endpoint /api/attendance/* (identitas & waktu dari server).
+  attendance_clock:        { read: ["hr"], create: null, update: null, delete: null },
   warehouse_receiving:     { read: ["gudang"], create: ["gudang"], update: ["gudang"], delete: ["gudang"] },
   warehouse_racks:         { read: ["gudang"], create: ["gudang"], update: ["gudang"], delete: ["gudang"] },
   warehouse_opname:        { read: ["gudang"], create: ["gudang"], update: ["gudang"], delete: ["gudang"] },
@@ -617,6 +641,111 @@ async function handleEmployeesPost(req, res) {
   }
 }
 
+// --- Kehadiran (absen kamera) ---
+// Identitas diambil dari req.user (JWT → app_users), waktu dari server
+// (NOW() AT TIME ZONE 'Asia/Jakarta'). Foto = data URL (base64) selfie
+// langsung dari kamera. Cegah absen ganda via UNIQUE(employee_id, work_date).
+const ATTENDANCE_PHOTO_MAX = 2 * 1024 * 1024; // batas panjang string data URL
+
+// Validasi KETAT: seluruh string wajib data URL gambar + base64 murni.
+// Menolak payload yang menyelipkan kutip/< > (vektor stored XSS).
+const SELFIE_DATA_URL_RE = /^data:image\/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+function isSelfieDataUrl(v) {
+  return typeof v === "string" && SELFIE_DATA_URL_RE.test(v);
+}
+
+async function handleAttendanceCheck(req, res, kind) {
+  const contentType = String(req.headers["content-type"] || "").toLowerCase();
+  if (!contentType.startsWith("application/json")) {
+    return sendJson(res, 415, { error: "unsupported_media_type" });
+  }
+  if (isAttendanceRateLimited(req.user && req.user.id)) {
+    return sendJson(res, 429, { error: "too_many_attempts" });
+  }
+  try {
+    const { error, data } = await readJsonBody(req, 3 * 1024 * 1024);
+    if (error === "too_large") return sendJson(res, 413, { error: "photo_too_large" });
+    if (error || !data || typeof data !== "object") return sendJson(res, 400, { error: "invalid_request" });
+
+    const photo = data.photo;
+    if (!isSelfieDataUrl(photo)) return sendJson(res, 400, { error: "invalid_photo" });
+    if (photo.length > ATTENDANCE_PHOTO_MAX) return sendJson(res, 413, { error: "photo_too_large" });
+
+    const userId = req.user.id;
+    const name = req.user.name || req.user.phone || "?";
+
+    const { rows } = await pool.query(
+      `SELECT id, check_in_at, check_out_at,
+              work_date::text AS work_date
+         FROM public.attendance_clock
+        WHERE employee_id = $1
+          AND work_date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date
+        LIMIT 1`,
+      [userId]
+    );
+    let row = rows[0];
+
+    if (kind === "in") {
+      if (row && row.check_in_at) return sendJson(res, 409, { error: "already_checked_in" });
+      if (row) {
+        const upd = await pool.query(
+          `UPDATE public.attendance_clock
+              SET check_in_at = NOW(), check_in_photo = $2, updated_at = NOW()
+            WHERE id = $1 AND check_in_at IS NULL
+            RETURNING id, work_date::text AS work_date, check_in_at, check_out_at`,
+          [row.id, photo]
+        );
+        if (!upd.rows.length) return sendJson(res, 409, { error: "already_checked_in" });
+        return sendJson(res, 200, { data: upd.rows[0] });
+      }
+      const ins = await pool.query(
+        `INSERT INTO public.attendance_clock
+           (employee_id, employee_name, work_date, check_in_at, check_in_photo)
+         VALUES ($1, $2, (NOW() AT TIME ZONE 'Asia/Jakarta')::date, NOW(), $3)
+         ON CONFLICT (employee_id, work_date) DO NOTHING
+         RETURNING id, work_date::text AS work_date, check_in_at, check_out_at`,
+        [userId, name, photo]
+      );
+      if (!ins.rows.length) return sendJson(res, 409, { error: "already_checked_in" });
+      return sendJson(res, 200, { data: ins.rows[0] });
+    }
+
+    // kind === "out"
+    if (!row || !row.check_in_at) return sendJson(res, 409, { error: "not_checked_in" });
+    if (row.check_out_at) return sendJson(res, 409, { error: "already_checked_out" });
+    const upd = await pool.query(
+      `UPDATE public.attendance_clock
+          SET check_out_at = NOW(), check_out_photo = $2, updated_at = NOW()
+        WHERE id = $1 AND check_out_at IS NULL
+        RETURNING id, work_date::text AS work_date, check_in_at, check_out_at`,
+      [row.id, photo]
+    );
+    if (!upd.rows.length) return sendJson(res, 409, { error: "already_checked_out" });
+    return sendJson(res, 200, { data: upd.rows[0] });
+  } catch (err) {
+    console.error("attendance check failed:", err.message);
+    return sendJson(res, 500, { error: "internal_error" });
+  }
+}
+
+async function handleAttendanceMe(req, res) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, work_date::text AS work_date, check_in_at, check_out_at
+         FROM public.attendance_clock
+        WHERE employee_id = $1
+          AND work_date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date
+        LIMIT 1`,
+      [req.user.id]
+    );
+    return sendJson(res, 200, { data: rows[0] || null });
+  } catch (err) {
+    console.error("attendance me failed:", err.message);
+    return sendJson(res, 500, { error: "internal_error" });
+  }
+}
+
 // --- Shopee (pengganti Edge Function) ---
 async function handleShopeeAction(req, res, action) {
   const { data } = await readJsonBody(req, 64 * 1024);
@@ -790,6 +919,21 @@ const server = http.createServer(async (req, res) => {
     if (!user) return;
     if (!requireOwner(req, res)) return;
     return handleEmployeesPost(req, res);
+  }
+  if (req.method === "POST" && pathname === "/api/attendance/checkin") {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    return handleAttendanceCheck(req, res, "in");
+  }
+  if (req.method === "POST" && pathname === "/api/attendance/checkout") {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    return handleAttendanceCheck(req, res, "out");
+  }
+  if (req.method === "GET" && pathname === "/api/attendance/me") {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    return handleAttendanceMe(req, res);
   }
   if (req.method === "PATCH" && pathname.startsWith("/api/orders/")) {
     const user = await requireAuth(req, res);

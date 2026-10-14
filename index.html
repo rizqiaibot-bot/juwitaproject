@@ -2176,6 +2176,9 @@
                     </ul>
                 </li>
 
+                <!-- KEHADIRAN (absen kamera) — tersedia untuk semua user login -->
+                <li class="nav-item" data-page="absensi"><a href="#"><i class="fas fa-camera"></i> Kehadiran</a></li>
+
                 <!-- HR -->
                 <li class="dropdown" data-menu-group="hr">
                     <a href="#"><i class="fas fa-users"></i> HR <i class="fas fa-chevron-down"></i></a>
@@ -3018,8 +3021,44 @@
         </div>
 
         <div id="page-absensi" class="page-content">
-            <div class="page-header"><h1>Kehadiran Karyawan</h1></div>
-            <div class="table-wrapper"><table><thead><tr><th>NAMA</th><th>TANGGAL</th><th>JAM MASUK</th><th>STATUS</th></tr></thead><tbody><tr><td>Ahmad Hidayat</td><td>2026-06-15</td><td>07:55</td><td><span class="badge-status badge-lunas">Tepat Waktu</span></td></tr><tr><td>Siti Aminah</td><td>2026-06-15</td><td>08:15</td><td><span class="badge-status badge-belum">Terlambat</span></td></tr></tbody></table></div>
+            <div class="page-header">
+                <div>
+                    <h1>Kehadiran</h1>
+                    <div class="page-header-desc">Absen masuk &amp; pulang dengan selfie langsung dari kamera</div>
+                </div>
+                <span id="attendanceClockText" style="font-size:0.78rem;color:var(--text-muted);"></span>
+            </div>
+
+            <div class="form-card" style="max-width:640px;">
+                <h3 style="margin:0 0 14px;"><i class="fas fa-camera" style="color:var(--primary);"></i> Absen Hari Ini</h3>
+
+                <div style="position:relative;background:#0f172a;border-radius:var(--radius-md);overflow:hidden;aspect-ratio:4/3;max-width:420px;margin:0 auto;">
+                    <video id="attendanceVideo" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1);"></video>
+                    <canvas id="attendanceCanvas" style="display:none;"></canvas>
+                    <div id="attendanceCamMsg" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;color:#cbd5e1;font-size:0.8rem;">Menyalakan kamera…</div>
+                </div>
+
+                <div id="attendanceToday" style="margin:14px 0;font-size:0.82rem;color:var(--text-primary);min-height:20px;"></div>
+
+                <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+                    <button class="checkout-btn" id="btnAbsenMasuk" style="width:auto;padding:10px 22px;" onclick="attendanceSubmit('in')"><i class="fas fa-right-to-bracket"></i> Absen Masuk</button>
+                    <button class="checkout-btn" id="btnAbsenPulang" style="width:auto;padding:10px 22px;background:var(--danger);" onclick="attendanceSubmit('out')"><i class="fas fa-right-from-bracket"></i> Absen Pulang</button>
+                </div>
+                <div style="font-size:0.7rem;color:var(--text-muted);margin-top:10px;text-align:center;">
+                    <i class="fas fa-shield-halved"></i> Waktu absen dicatat oleh server (WIB). Tidak ada GPS &amp; tidak ada unggah dari galeri.
+                </div>
+            </div>
+
+            <div id="attendanceMonitor" style="display:none;margin-top:20px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+                    <h3 style="margin:0;font-size:1rem;"><i class="fas fa-clipboard-list" style="color:var(--primary);"></i> Data Kehadiran</h3>
+                    <input type="date" id="attendanceDate" class="filter-control" style="max-width:200px;" onchange="renderAttendanceMonitor()" />
+                </div>
+                <div class="table-wrapper"><table>
+                    <thead><tr><th>NAMA</th><th>FOTO MASUK</th><th>JAM MASUK</th><th>FOTO PULANG</th><th>JAM PULANG</th></tr></thead>
+                    <tbody id="attendanceMonitorBody"><tr><td colspan="5" style="text-align:center;padding:18px;color:var(--text-muted);">Pilih tanggal.</td></tr></tbody>
+                </table></div>
+            </div>
         </div>
 
         <div id="page-cuti" class="page-content">
@@ -8511,6 +8550,212 @@
         }
 
         // ============================================================
+        // KEHADIRAN (ABSEN KAMERA)
+        // Absen masuk/pulang dengan selfie langsung dari kamera.
+        // Identitas & waktu dari server; foto disimpan sebagai data URL.
+        // ============================================================
+        let attendanceStream = null;
+        let attendanceToday = null;
+        let attendanceClockTimer = null;
+
+        function attendanceCanViewAll() {
+            if (!currentUser) return false;
+            if (String(currentUser.role || "").toLowerCase() === "owner") return true;
+            return Array.isArray(currentUser.menus) && currentUser.menus.includes("hr");
+        }
+
+        // Tanggal hari ini menurut zona Asia/Jakarta (YYYY-MM-DD).
+        function attendanceWibDate() {
+            try {
+                return new Intl.DateTimeFormat("en-CA", {
+                    timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit"
+                }).format(new Date());
+            } catch (e) {
+                return new Date().toISOString().slice(0, 10);
+            }
+        }
+
+        function attendanceTickClock() {
+            const el = document.getElementById("attendanceClockText");
+            if (!el) return;
+            try {
+                el.textContent = new Intl.DateTimeFormat("id-ID", {
+                    timeZone: "Asia/Jakarta", dateStyle: "medium", timeStyle: "short"
+                }).format(new Date()) + " WIB";
+            } catch (e) { el.textContent = ""; }
+        }
+
+        async function attendanceStartCamera() {
+            const video = document.getElementById("attendanceVideo");
+            const msg = document.getElementById("attendanceCamMsg");
+            if (!video) return;
+            if (attendanceStream) return;
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                if (msg) { msg.textContent = "Kamera tidak didukung di perangkat ini."; msg.style.display = "flex"; }
+                return;
+            }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+                attendanceStream = stream;
+                video.srcObject = stream;
+                try { await video.play(); } catch (e) {}
+                if (msg) msg.style.display = "none";
+            } catch (e) {
+                if (msg) { msg.textContent = "Tidak bisa mengakses kamera. Izinkan akses kamera lalu buka ulang halaman."; msg.style.display = "flex"; }
+            }
+        }
+
+        function attendanceStopCamera() {
+            if (attendanceStream) {
+                attendanceStream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+                attendanceStream = null;
+            }
+            const video = document.getElementById("attendanceVideo");
+            if (video) video.srcObject = null;
+            const msg = document.getElementById("attendanceCamMsg");
+            if (msg) { msg.textContent = "Menyalakan kamera…"; msg.style.display = "flex"; }
+        }
+
+        function attendanceCaptureDataUrl() {
+            const video = document.getElementById("attendanceVideo");
+            const canvas = document.getElementById("attendanceCanvas");
+            if (!video || !canvas || !video.videoWidth || !video.videoHeight) return null;
+            const maxW = 480;
+            const scale = Math.min(1, maxW / video.videoWidth);
+            canvas.width = Math.round(video.videoWidth * scale);
+            canvas.height = Math.round(video.videoHeight * scale);
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            return canvas.toDataURL("image/jpeg", 0.7);
+        }
+
+        async function attendanceLoadToday() {
+            const el = document.getElementById("attendanceToday");
+            try {
+                const res = await apiFetch("/api/attendance/me");
+                attendanceToday = (res.ok && res.data && res.data.data) ? res.data.data : null;
+            } catch (e) { attendanceToday = null; }
+            if (!el) return;
+            if (!attendanceToday) {
+                el.innerHTML = '<i class="fas fa-circle-info" style="color:var(--text-muted);"></i> Belum ada absen hari ini.';
+                return;
+            }
+            const inT = attendanceToday.check_in_at ? fmtWIB(attendanceToday.check_in_at) : "-";
+            const outT = attendanceToday.check_out_at ? fmtWIB(attendanceToday.check_out_at) : "-";
+            el.innerHTML = 'Masuk: <strong>' + inT + '</strong> &nbsp;·&nbsp; Pulang: <strong>' + outT + '</strong>';
+        }
+
+        async function attendanceSubmit(kind) {
+            const dataUrl = attendanceCaptureDataUrl();
+            if (!dataUrl) { showToast("Kamera belum siap. Tunggu sebentar lalu coba lagi."); return; }
+            const path = kind === "in" ? "/api/attendance/checkin" : "/api/attendance/checkout";
+            const btn = document.getElementById(kind === "in" ? "btnAbsenMasuk" : "btnAbsenPulang");
+            if (btn) btn.disabled = true;
+            try {
+                const res = await apiFetch(path, { method: "POST", body: { photo: dataUrl } });
+                if (!res.ok) {
+                    const code = res.data && res.data.error;
+                    if (code === "already_checked_in") showToast("Sudah absen masuk hari ini");
+                    else if (code === "already_checked_out") showToast("Sudah absen pulang hari ini");
+                    else if (code === "not_checked_in") showToast("Belum absen masuk");
+                    else if (code === "photo_too_large") showToast("Foto terlalu besar, coba lagi");
+                    else if (code === "invalid_photo") showToast("Foto tidak valid, coba lagi");
+                    else showToast("Gagal menyimpan absen");
+                } else {
+                    showToast(kind === "in" ? "Absen masuk tersimpan" : "Absen pulang tersimpan");
+                }
+                await attendanceLoadToday();
+                if (attendanceCanViewAll()) renderAttendanceMonitor();
+            } catch (e) {
+                showToast("Gagal terhubung ke server");
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        // Pertahanan berlapis: hanya terima data URL gambar base64 murni.
+        function attendanceSafePhoto(v) {
+            return (typeof v === "string" && /^data:image\/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(v)) ? v : null;
+        }
+
+        // Sel teks biasa (textContent → tidak dieksekusi sebagai HTML).
+        function attendanceTextCell(text) {
+            const td = document.createElement("td");
+            td.textContent = text == null ? "" : String(text);
+            return td;
+        }
+
+        // Sel foto: src di-set lewat PROPERTI DOM (bukan innerHTML) → aman dari Stored XSS.
+        function attendancePhotoCell(src, alt) {
+            const td = document.createElement("td");
+            const safe = attendanceSafePhoto(src);
+            if (!safe) {
+                td.textContent = "-";
+                td.style.color = "var(--text-muted)";
+                return td;
+            }
+            const img = document.createElement("img");
+            img.alt = alt;
+            img.style.cssText = "width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--border-color);";
+            img.addEventListener("error", function () {
+                td.textContent = "-";
+                td.style.color = "var(--text-muted)";
+            });
+            img.src = safe;
+            td.appendChild(img);
+            return td;
+        }
+
+        async function renderAttendanceMonitor() {
+            const wrap = document.getElementById("attendanceMonitor");
+            const body = document.getElementById("attendanceMonitorBody");
+            const dateEl = document.getElementById("attendanceDate");
+            if (!wrap || !body) return;
+            if (!attendanceCanViewAll()) { wrap.style.display = "none"; return; }
+            wrap.style.display = "";
+            if (dateEl && !dateEl.value) dateEl.value = attendanceWibDate();
+            const dateStr = (dateEl && dateEl.value) ? dateEl.value : attendanceWibDate();
+            body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--text-muted);"><i class="fas fa-spinner fa-spin"></i> Memuat…</td></tr>';
+            try {
+                const res = await sb.from("attendance_clock").select("*").eq("work_date", dateStr);
+                if (res.error) throw new Error(res.error.message);
+                const list = Array.isArray(res.data) ? res.data.slice() : [];
+                list.sort((a, b) => String(a.check_in_at || "").localeCompare(String(b.check_in_at || "")));
+                if (!list.length) {
+                    body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--text-muted);">Belum ada absensi pada tanggal ini.</td></tr>';
+                    return;
+                }
+                body.innerHTML = "";
+                list.forEach(r => {
+                    const tr = document.createElement("tr");
+                    tr.appendChild(attendanceTextCell(r.employee_name || "-"));
+                    tr.appendChild(attendancePhotoCell(r.check_in_photo, "selfie masuk"));
+                    tr.appendChild(attendanceTextCell(r.check_in_at ? fmtWIB(r.check_in_at) : "-"));
+                    tr.appendChild(attendancePhotoCell(r.check_out_photo, "selfie pulang"));
+                    tr.appendChild(attendanceTextCell(r.check_out_at ? fmtWIB(r.check_out_at) : "-"));
+                    body.appendChild(tr);
+                });
+            } catch (e) {
+                body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--danger);">Gagal memuat data kehadiran.</td></tr>';
+            }
+        }
+
+        function attendanceInit() {
+            attendanceStartCamera();
+            attendanceLoadToday();
+            attendanceTickClock();
+            if (attendanceClockTimer) clearInterval(attendanceClockTimer);
+            attendanceClockTimer = setInterval(attendanceTickClock, 1000);
+            if (attendanceCanViewAll()) renderAttendanceMonitor();
+            else { const w = document.getElementById("attendanceMonitor"); if (w) w.style.display = "none"; }
+        }
+
+        function attendanceLeave() {
+            attendanceStopCamera();
+            if (attendanceClockTimer) { clearInterval(attendanceClockTimer); attendanceClockTimer = null; }
+        }
+
+        // ============================================================
         // NAVIGATION
         // ============================================================
         function pageMenuGroup(pageId) {
@@ -8523,7 +8768,7 @@
                 penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "opname-gudang": "gudang", "riwayat-gudang": "gudang",
                 "harga-belanja": "pricing", "harga-jual": "pricing", "ubah-harga": "pricing", "diskon-promo": "pricing", "margin-keuntungan": "pricing", "pricing": "pricing",
                 akuntansi: "akuntansi",
-                karyawan: "hr", absensi: "hr", "rekap-kehadiran": "hr", cuti: "hr", "jadwal-kerja": "hr", penggajian: "hr", "slip-gaji": "hr",
+                karyawan: "hr", "rekap-kehadiran": "hr", cuti: "hr", "jadwal-kerja": "hr", penggajian: "hr", "slip-gaji": "hr",
 
                 pengaturan: "pengaturan"
             };
@@ -8565,6 +8810,8 @@
             if (pageId === "penerimaan") setTimeout(async () => { if (!suppliersData.length) await loadPembelian(); renderPenerimaan(); }, 10);
             if (pageId === "karyawan") setTimeout(() => renderEmployees(), 10);
             if (pageId === "rekap-kehadiran") setTimeout(() => syncKaryawanRealtime().then(() => renderRekapKehadiran()), 10);
+            if (pageId === "absensi") setTimeout(() => attendanceInit(), 10);
+            else attendanceLeave();
             if (pageId === "mutasi-stok") setTimeout(() => populateMutasiStokProducts(), 10);
             // Harga per channel: muat ulang product_prices (RLS authenticated)
             // saat halaman Harga Jual dibuka, lalu render ulang tabel.
