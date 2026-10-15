@@ -3094,8 +3094,19 @@
         </div>
 
         <div id="page-jadwal-kerja" class="page-content">
-            <div class="page-header"><h1>Jadwal Shift</h1></div>
-            <div class="table-wrapper"><table><thead><tr><th>SHIFT</th><th>PAGI</th><th>SORE</th></tr></thead><tbody><tr><td>Senin, 15 Juni</td><td>Siti Aminah (Kasir)</td><td>Ahmad Hidayat (Admin)</td></tr></tbody></table></div>
+            <div class="page-header">
+                <div>
+                    <h1>Jadwal Kerja</h1>
+                    <div class="page-header-desc">Atur jam masuk, istirahat, pulang, dan hari libur per karyawan — cukup diisi sekali</div>
+                </div>
+            </div>
+            <input id="jadwalSearch" class="filter-control" style="margin-bottom:12px;max-width:360px;width:100%;" placeholder="Cari nama karyawan..." oninput="renderJadwalKerja()" />
+            <div class="table-wrapper" style="overflow-x:auto;">
+                <table id="jadwalKerjaTable">
+                    <thead><tr><th>KARYAWAN</th><th>MASUK</th><th>ISTIRAHAT</th><th>PULANG</th><th>TOTAL</th><th>LIBUR</th><th>AKSI</th></tr></thead>
+                    <tbody id="jadwalKerjaBody"><tr><td colspan="7" style="text-align:center;padding:18px;color:var(--text-muted);">Memuat…</td></tr></tbody>
+                </table>
+            </div>
         </div>
 
         <div id="page-slip-gaji" class="page-content">
@@ -3256,6 +3267,37 @@
                 transition: var(--transition);
             }
             #editAbsensiModal.active .edit-absensi-card {
+                transform: translate(-50%, -50%) scale(1);
+            }
+
+            /* ===== JADWAL KERJA (HR) ===== */
+            #jadwalKerjaModal {
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+            }
+            #jadwalKerjaModal .jadwal-card {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%) scale(0.95);
+                background: var(--bg-card);
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-xl);
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+                box-sizing: border-box;
+                width: calc(100% - 24px);
+                max-width: 480px;
+                max-height: calc(100vh - 24px);
+                max-height: calc(100dvh - 24px);
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                overscroll-behavior: contain;
+                padding: 20px 24px;
+                text-align: left;
+                transition: var(--transition);
+            }
+            #jadwalKerjaModal.active .jadwal-card {
                 transform: translate(-50%, -50%) scale(1);
             }
             #editAbsensiModal .eab-head {
@@ -3509,6 +3551,38 @@
                         <button class="btn-secondary" onclick="closeEditAbsensi()">Batal</button>
                         <button class="checkout-btn" onclick="saveEditAbsensi()"><i class="fas fa-save"></i> Simpan</button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== MODAL JADWAL KERJA ===== -->
+        <div class="modal-overlay" id="jadwalKerjaModal" onclick="if(event.target===this)closeJadwalForm()">
+            <div class="jadwal-card">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">
+                    <div>
+                        <h3 style="margin:0;font-size:1.02rem;"><i class="fas fa-calendar-week" style="color:var(--primary);"></i> Jadwal Kerja</h3>
+                        <div id="jadwalModalNama" style="font-size:0.78rem;color:var(--text-muted);margin-top:3px;">-</div>
+                    </div>
+                    <button type="button" onclick="closeJadwalForm()" style="background:var(--bg-primary);border:1px solid var(--border-color);border-radius:50%;width:32px;height:32px;color:var(--text-secondary);cursor:pointer;flex-shrink:0;"><i class="fas fa-times"></i></button>
+                </div>
+
+                <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:12px;">
+                    <div class="form-group"><label>Jam Masuk</label><input type="time" class="form-control" id="jadwalMasuk" value="08:00" oninput="hitungTotalJadwal()"></div>
+                    <div class="form-group"><label>Jam Pulang</label><input type="time" class="form-control" id="jadwalPulang" value="17:00" oninput="hitungTotalJadwal()"></div>
+                    <div class="form-group"><label>Mulai Istirahat</label><input type="time" class="form-control" id="jadwalIstirahatMulai" value="12:00" oninput="hitungTotalJadwal()"></div>
+                    <div class="form-group"><label>Selesai Istirahat</label><input type="time" class="form-control" id="jadwalIstirahatSelesai" value="13:00" oninput="hitungTotalJadwal()"></div>
+                </div>
+
+                <div class="form-group" style="margin-top:12px;">
+                    <label>Hari Libur</label>
+                    <div id="jadwalLiburBox" style="display:flex;flex-wrap:wrap;gap:10px 14px;margin-top:4px;"></div>
+                </div>
+
+                <div style="font-size:0.84rem;margin:14px 0 6px;">Total Jam Kerja: <strong id="jadwalTotalV" style="color:var(--primary);">8 jam 0 menit</strong></div>
+
+                <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+                    <button type="button" class="btn-secondary" onclick="closeJadwalForm()">Batal</button>
+                    <button type="button" class="checkout-btn" style="width:auto;padding:10px 24px;" onclick="saveJadwal()"><i class="fas fa-save"></i> Simpan</button>
                 </div>
             </div>
         </div>
@@ -9028,6 +9102,158 @@
         });
 
         // ============================================================
+        // JADWAL KERJA (HR)
+        // Karyawan: app_users AKTIF (karyawanData). Simpan: tabel work_schedules
+        // via data API (menu hr / owner). Tidak ada data jadwal palsu.
+        // ============================================================
+        let jadwalKerjaList = {};   // { [employee_id]: row work_schedules }
+        let jadwalEditingId = null;
+        const JADWAL_DAYS = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+
+        function jadwalHm(t) { return t ? String(t).slice(0, 5) : ""; }
+
+        function jadwalTotalMinutes(s) {
+            if (!s || !s.check_in || !s.check_out) return null;
+            const toMin = (v) => { if (!v) return null; const p = String(v).split(":"); return parseInt(p[0], 10) * 60 + parseInt(p[1], 10); };
+            let total = toMin(s.check_out) - toMin(s.check_in);
+            const bs = toMin(s.break_start), be = toMin(s.break_end);
+            if (bs != null && be != null && be >= bs) total -= (be - bs);
+            return total < 0 ? 0 : total;
+        }
+        function jadwalTotalLabel(mins) { return mins == null ? "—" : (Math.floor(mins / 60) + " jam " + (mins % 60) + " menit"); }
+        function jadwalOffDaysLabel(csv) {
+            const ns = String(csv || "").split(",").map(s => s.trim()).filter(s => s !== "");
+            if (!ns.length) return "—";
+            return ns.map(n => JADWAL_DAYS[parseInt(n, 10)] || "").filter(Boolean).join(", ");
+        }
+
+        async function loadJadwalKerja() {
+            const map = {};
+            try {
+                const res = await sb.from("work_schedules").select("*");
+                if (res && res.data && res.data.length) {
+                    res.data.forEach(r => { map[String(r.employee_id)] = r; });
+                }
+            } catch (e) {
+                console.warn("load work_schedules error:", e && e.message);
+            }
+            jadwalKerjaList = map;
+            return map;
+        }
+
+        function renderJadwalKerja() {
+            const body = document.getElementById("jadwalKerjaBody");
+            if (!body) return;
+            const search = (document.getElementById("jadwalSearch")?.value || "").toLowerCase();
+            const list = (karyawanData || []).filter(k => !search || String(k.name).toLowerCase().includes(search));
+            if (!list.length) {
+                body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:18px;color:var(--text-muted);">' +
+                    ((karyawanData || []).length ? "Karyawan tidak ditemukan." : "Belum ada karyawan aktif.") + '</td></tr>';
+                return;
+            }
+            body.innerHTML = list.map(k => {
+                const s = jadwalKerjaList[String(k.id)];
+                const masuk = s && s.check_in ? jadwalHm(s.check_in) : "—";
+                const pulang = s && s.check_out ? jadwalHm(s.check_out) : "—";
+                const ist = s && s.break_start && s.break_end ? (jadwalHm(s.break_start) + "–" + jadwalHm(s.break_end)) : "—";
+                const total = jadwalTotalLabel(jadwalTotalMinutes(s));
+                const libur = s ? jadwalOffDaysLabel(s.off_days) : "—";
+                return '<tr>' +
+                    '<td style="font-weight:600;white-space:nowrap;">' + escEmp(k.name) + '</td>' +
+                    '<td>' + masuk + '</td>' +
+                    '<td>' + ist + '</td>' +
+                    '<td>' + pulang + '</td>' +
+                    '<td>' + total + '</td>' +
+                    '<td>' + libur + '</td>' +
+                    '<td><button class="aksi-btn" title="' + (s ? "Ubah jadwal" : "Isi jadwal") + '" onclick="openJadwalForm(\'' + k.id + '\')"><i class="fas fa-pencil"></i></button></td>' +
+                    '</tr>';
+            }).join("");
+        }
+
+        function renderJadwalLiburOptions(csv) {
+            const box = document.getElementById("jadwalLiburBox");
+            if (!box) return;
+            const sel = String(csv || "").split(",").map(s => s.trim());
+            box.innerHTML = JADWAL_DAYS.map((n, i) =>
+                '<label style="display:inline-flex;align-items:center;gap:5px;font-size:0.78rem;color:var(--text-secondary);">' +
+                '<input type="checkbox" class="jadwal-libur-cb" value="' + i + '"' + (sel.includes(String(i)) ? " checked" : "") + '> ' + n +
+                '</label>'
+            ).join("");
+        }
+        function getJadwalLiburSelected() {
+            return [...document.querySelectorAll(".jadwal-libur-cb:checked")].map(c => c.value).join(",");
+        }
+
+        function hitungTotalJadwal() {
+            const inEl = document.getElementById("jadwalMasuk");
+            const outEl = document.getElementById("jadwalPulang");
+            const b1 = document.getElementById("jadwalIstirahatMulai");
+            const b2 = document.getElementById("jadwalIstirahatSelesai");
+            const mins = jadwalTotalMinutes({
+                check_in: inEl ? inEl.value : null,
+                check_out: outEl ? outEl.value : null,
+                break_start: b1 ? b1.value : null,
+                break_end: b2 ? b2.value : null
+            });
+            const label = jadwalTotalLabel(mins);
+            const el = document.getElementById("jadwalTotalV");
+            if (el) el.textContent = label;
+            return label;
+        }
+
+        function openJadwalForm(empId) {
+            if (!currentUser) { showToast("Silakan login ulang"); return; }
+            const k = (karyawanData || []).find(x => String(x.id) === String(empId));
+            jadwalEditingId = empId;
+            const nm = document.getElementById("jadwalModalNama");
+            if (nm) nm.textContent = k ? k.name : "-";
+            const s = jadwalKerjaList[String(empId)] || {};
+            const set = (id, v, def) => { const el = document.getElementById(id); if (el) el.value = v || def; };
+            set("jadwalMasuk", s.check_in ? jadwalHm(s.check_in) : "", "08:00");
+            set("jadwalPulang", s.check_out ? jadwalHm(s.check_out) : "", "17:00");
+            set("jadwalIstirahatMulai", s.break_start ? jadwalHm(s.break_start) : "", "12:00");
+            set("jadwalIstirahatSelesai", s.break_end ? jadwalHm(s.break_end) : "", "13:00");
+            renderJadwalLiburOptions(s.off_days);
+            hitungTotalJadwal();
+            document.getElementById("jadwalKerjaModal").classList.add("active");
+        }
+
+        function closeJadwalForm() {
+            jadwalEditingId = null;
+            const m = document.getElementById("jadwalKerjaModal");
+            if (m) m.classList.remove("active");
+        }
+
+        async function saveJadwal() {
+            if (!jadwalEditingId) return;
+            const payload = {
+                employee_id: jadwalEditingId,
+                check_in: document.getElementById("jadwalMasuk").value || null,
+                check_out: document.getElementById("jadwalPulang").value || null,
+                break_start: document.getElementById("jadwalIstirahatMulai").value || null,
+                break_end: document.getElementById("jadwalIstirahatSelesai").value || null,
+                off_days: getJadwalLiburSelected()
+            };
+            const existing = jadwalKerjaList[String(jadwalEditingId)];
+            try {
+                let res;
+                if (existing && existing.id) {
+                    res = await sb.from("work_schedules").update(payload).eq("employee_id", jadwalEditingId);
+                } else {
+                    res = await sb.from("work_schedules").insert(payload);
+                }
+                if (res && res.error) throw new Error(res.error.message);
+                await loadJadwalKerja();
+                closeJadwalForm();
+                renderJadwalKerja();
+                showToast("Jadwal kerja disimpan");
+            } catch (e) {
+                console.warn("save work_schedules error:", e && e.message);
+                showToast("Gagal menyimpan jadwal");
+            }
+        }
+
+        // ============================================================
         // NAVIGATION
         // ============================================================
         function pageMenuGroup(pageId) {
@@ -9082,6 +9308,7 @@
             if (pageId === "penerimaan") setTimeout(async () => { if (!suppliersData.length) await loadPembelian(); renderPenerimaan(); }, 10);
             if (pageId === "karyawan") setTimeout(() => renderEmployees(), 10);
             if (pageId === "rekap-kehadiran") setTimeout(() => syncKaryawanRealtime().then(() => renderRekapKehadiran()), 10);
+            if (pageId === "jadwal-kerja") setTimeout(() => syncKaryawanRealtime().then(() => loadJadwalKerja()).then(() => renderJadwalKerja()), 10);
             if (pageId === "absensi") setTimeout(() => attendanceInit(), 10);
             else attendanceLeave();
             if (pageId === "mutasi-stok") setTimeout(() => populateMutasiStokProducts(), 10);

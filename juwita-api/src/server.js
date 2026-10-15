@@ -285,7 +285,7 @@ async function handleProductPricesPut(req, res) {
 const DATA_TABLES = new Set([
   "products", "orders", "order_items", "karyawan",
   "warehouse_receiving", "warehouse_racks", "warehouse_opname",
-  "stock_mutations", "attendance_records", "attendance_clock",
+  "stock_mutations", "attendance_records", "attendance_clock", "work_schedules",
   "app_users", "accounting_accounts", "accounting_transactions",
   "v_account_balance", "marketplace_config", "activity_log",
   "suppliers", "purchases", "purchase_items",
@@ -314,6 +314,8 @@ const DATA_TABLE_ACCESS = {
   // Kehadiran (absen kamera): baca untuk HR/owner. Tulis HANYA lewat
   // endpoint /api/attendance/* (identitas & waktu dari server).
   attendance_clock:        { read: ["hr"], create: null, update: null, delete: null },
+  // Jadwal kerja (HR): HR (menu "hr") / owner dapat baca & ubah.
+  work_schedules:          { read: ["hr"], create: ["hr"], update: ["hr"], delete: ["hr"] },
   warehouse_receiving:     { read: ["gudang"], create: ["gudang"], update: ["gudang"], delete: ["gudang"] },
   warehouse_racks:         { read: ["gudang"], create: ["gudang"], update: ["gudang"], delete: ["gudang"] },
   warehouse_opname:        { read: ["gudang"], create: ["gudang"], update: ["gudang"], delete: ["gudang"] },
