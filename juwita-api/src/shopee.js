@@ -201,6 +201,183 @@ export async function pullOrders(shopId) {
   return { inserted };
 }
 
+// --- Product pull: cocokkan listing Shopee ke produk PUSAT via SKU, tulis mapping ---
+async function getItemListPage(acc, accessToken, offset) {
+  const ts = Math.floor(Date.now() / 1000);
+  const path = "/api/v2/product/get_item_list";
+  const sign = await signShopee(acc.partner_id, acc.partner_key, path, ts, accessToken, acc.shop_id);
+  const p = new URLSearchParams({
+    partner_id: acc.partner_id, timestamp: String(ts), sign,
+    shop_id: acc.shop_id, access_token: accessToken,
+    offset: String(offset), page_size: "100", item_status: "NORMAL",
+  });
+  const { body } = await fetchJson(`${SHOPEE_API_URL}${path}?${p}`, { method: "GET" });
+  if (body.error) return { error: String(body.error), message: body.message || "", item: [], hasMore: false, nextOffset: null };
+  const resp = body.response || {};
+  return { error: null, message: null, item: resp.item || [], hasMore: !!resp.has_next_page, nextOffset: resp.next_offset };
+}
+
+async function getItemBaseInfoTeam(acc, accessToken, itemIds) {
+  const ts = Math.floor(Date.now() / 1000);
+  const path = "/api/v2/product/get_item_base_info";
+  const sign = await signShopee(acc.partner_id, acc.partner_key, path, ts, accessToken, acc.shop_id);
+  const p = new URLSearchParams({
+    partner_id: acc.partner_id, timestamp: String(ts), sign,
+    shop_id: acc.shop_id, access_token: accessToken,
+    item_id_list: itemIds.join(","),
+  });
+  const { body } = await fetchJson(`${SHOPEE_API_URL}${path}?${p}`, { method: "GET" });
+  if (body.error) return { error: String(body.error), message: body.message || "", item_list: [] };
+  return { error: null, message: null, item_list: (body.response && body.response.item_list) || [] };
+}
+
+// Kumpulkan semua item_id (paginasi).
+async function collectItemIds(acc, accessToken) {
+  const ids = [];
+  let offset = 0;
+  for (let guard = 0; guard < 500; guard++) {
+    const resp = await getItemListPage(acc, accessToken, offset);
+    if (resp.error) return { error: resp.error, message: resp.message, ids };
+    for (const it of resp.item) {
+      if (it && it.item_id != null) ids.push(Number(it.item_id));
+    }
+    if (!resp.hasMore || resp.item.length === 0) return { error: null, ids };
+    offset = resp.nextOffset != null ? Number(resp.nextOffset) : offset + resp.item.length;
+  }
+  return { error: null, ids };
+}
+
+// Pull produk: cocokkan listing Shopee → produk PUSAT (by SKU pusat), lalu upsert
+// product_shopee_mapping. TIDAK membuat produk baru, TIDAK menyentuh stok/harga/order.
+// Mapping yang sudah ada TIDAK diubah/dihapus (hanya menambah mapping baru).
+export async function pullProducts(shopId) {
+  const accounts = await loadAccounts();
+  const targets = shopId ? accounts.filter((a) => a.shop_id === String(shopId)) : accounts;
+  const norm = (v) => String(v == null ? "" : v).trim().toLowerCase();
+
+  let fetched = 0, matched = 0, unmatched = 0, skipped = 0, inserted = 0, failed = 0;
+  const unmatchedItems = [];
+  const accountResults = [];
+
+  for (const acc of targets) {
+    if (!acc.partner_id) {
+      accountResults.push({ shop_id: acc.shop_id, error: "kredensial partner Shopee belum di-set" });
+      failed++;
+      continue;
+    }
+    const { access_token, refresh_token } = await ensureToken(acc);
+    if (!access_token) {
+      accountResults.push({ shop_id: acc.shop_id, error: "access_token Shopee tidak tersedia" });
+      failed++;
+      continue;
+    }
+    let token = access_token;
+
+    // 1. Kumpulkan item_id (paginasi), refresh token bila error auth.
+    let collected = await collectItemIds(acc, token);
+    if (collected.error && refresh_token && isAuthError(collected.error + " " + (collected.message || ""))) {
+      const r = await refreshToken(acc, acc.shop_id, refresh_token);
+      if (r.access_token) { token = r.access_token; collected = await collectItemIds(acc, token); }
+    }
+    if (collected.error) {
+      accountResults.push({ shop_id: acc.shop_id, error: collected.error + (collected.message ? ": " + collected.message : "") });
+      failed++;
+      continue;
+    }
+
+    // 2. Ambil base info per batch (maks 50).
+    const allItems = [];
+    let baseFailed = null;
+    for (let i = 0; i < collected.ids.length; i += 50) {
+      const batch = collected.ids.slice(i, i + 50);
+      let baseResp = await getItemBaseInfoTeam(acc, token, batch);
+      if (baseResp.error && refresh_token && isAuthError(baseResp.error + " " + (baseResp.message || ""))) {
+        const r = await refreshToken(acc, acc.shop_id, refresh_token);
+        if (r.access_token) { token = r.access_token; baseResp = await getItemBaseInfoTeam(acc, token, batch); }
+      }
+      if (baseResp.error) { baseFailed = baseResp.error + (baseResp.message ? ": " + baseResp.message : ""); break; }
+      for (const it of baseResp.item_list) allItems.push(it);
+    }
+    if (baseFailed) {
+      accountResults.push({ shop_id: acc.shop_id, error: baseFailed });
+      failed++;
+      continue;
+    }
+
+    // 3. Indeks produk pusat (sku / shopee_sku) + mapping shop ini.
+    const { rows: prodRows } = await pool.query("SELECT id, sku, shopee_sku FROM products");
+    const bySku = new Map();
+    for (const p of prodRows) {
+      if (p.sku) bySku.set(norm(p.sku), p);
+      if (p.shopee_sku) bySku.set(norm(p.shopee_sku), p);
+    }
+    const { rows: mapRows } = await pool.query(
+      "SELECT id, product_id, shopee_item_id FROM product_shopee_mapping WHERE shop_id = $1",
+      [acc.shop_id]
+    );
+    const mapByItemId = new Set();
+    const mapByProductId = new Set();
+    for (const m of mapRows) {
+      if (m.shopee_item_id != null) mapByItemId.add(String(m.shopee_item_id));
+      if (m.product_id != null) mapByProductId.add(String(m.product_id));
+    }
+
+    // 4. Cocokkan & tambahkan mapping baru (tanpa mengubah mapping lama).
+    for (const item of allItems) {
+      fetched++;
+      const itemId = item && item.item_id != null ? Number(item.item_id) : null;
+      if (itemId == null) continue;
+      const itemSku = String((item && item.item_sku) || "").trim();
+      const nsku = norm(itemSku);
+
+      if (mapByItemId.has(String(itemId))) { matched++; continue; }        // sudah ter-map
+      const product = nsku ? (bySku.get(nsku) || null) : null;
+      if (!product) {
+        unmatched++;
+        if (unmatchedItems.length < 50) unmatchedItems.push({ shop_id: acc.shop_id, shopee_item_id: itemId, item_sku: itemSku || null, item_name: (item && item.item_name) || "" });
+        continue;
+      }
+      const productId = Number(product.id);
+      if (mapByProductId.has(String(productId))) { skipped++; continue; }   // produk sudah punya listing di shop ini
+
+      try {
+        const { rowCount } = await pool.query(
+          `INSERT INTO product_shopee_mapping (product_id, shop_id, shopee_item_id, shopee_sku)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (shop_id, shopee_item_id) DO NOTHING`,
+          [productId, acc.shop_id, itemId, itemSku || null]
+        );
+        if (rowCount) {
+          inserted++;
+          mapByItemId.add(String(itemId));
+          mapByProductId.add(String(productId));
+          matched++;
+        } else {
+          skipped++;
+        }
+      } catch (e) {
+        failed++;
+      }
+    }
+
+    accountResults.push({ shop_id: acc.shop_id, shop_name: acc.shop_name || null, listings: allItems.length });
+  }
+
+  return {
+    success: failed === 0,
+    shop_id: shopId || "all",
+    fetched,
+    matched,
+    unmatched,
+    skipped,
+    failed,
+    inserted,
+    updated: 0,
+    unmatched_items: unmatchedItems,
+    accountResults,
+  };
+}
+
 // Stock sync: kirim products.stock (single source of truth) ke SEMUA Shopee
 // yang ter-mapping untuk product_id tersebut. shopee_account TIDAK menentukan
 // target — target ditentukan dari product_shopee_mapping (bisa Shopee 1 & 2).

@@ -3,7 +3,7 @@ import { pool } from "./db.js";
 import { verifyPassword, hashPassword } from "./auth.js";
 import { signAccessToken, verifyAccessToken } from "./jwt.js";
 import { requireAuth, requireOwner } from "./middleware.js";
-import { connectShop, pullOrders, syncStock, syncPrice, syncPriceOne } from "./shopee.js";
+import { connectShop, pullOrders, pullProducts, syncStock, syncPrice, syncPriceOne } from "./shopee.js";
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -806,6 +806,10 @@ async function handleShopeeAction(req, res, action) {
     }
     if (action === "pull-orders") {
       const r = await pullOrders(shopId);
+      return sendJson(res, 200, { data: r });
+    }
+    if (action === "pull-products") {
+      const r = await pullProducts(shopId);
       return sendJson(res, 200, { data: r });
     }
     if (action === "stock-sync") {
