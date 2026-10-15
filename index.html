@@ -3300,6 +3300,45 @@
             #jadwalKerjaModal.active .jadwal-card {
                 transform: translate(-50%, -50%) scale(1);
             }
+
+            /* ===== PHOTO LIGHTBOX (lihat foto presensi ukuran besar) ===== */
+            #photoLightbox {
+                align-items: center;
+                justify-content: center;
+                padding: 16px;
+                z-index: 10050;
+                background: rgba(2, 6, 23, 0.88);
+            }
+            #photoLightbox .plb-close {
+                position: absolute;
+                top: 14px;
+                right: 14px;
+                width: 42px;
+                height: 42px;
+                border-radius: 50%;
+                border: none;
+                background: rgba(255, 255, 255, 0.16);
+                color: #fff;
+                font-size: 1.15rem;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 2;
+            }
+            #photoLightbox .plb-close:hover {
+                background: rgba(255, 255, 255, 0.3);
+            }
+            #photoLightbox img#photoLightboxImg {
+                max-width: 92vw;
+                max-height: 86vh;
+                width: auto;
+                height: auto;
+                border-radius: 10px;
+                box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+                object-fit: contain;
+                background: #0f172a;
+            }
             #editAbsensiModal .eab-head {
                 display: flex;
                 align-items: flex-start;
@@ -3478,8 +3517,8 @@
                     <span id="rekapDetailPeriode"></span>
                 </div>
                 <div class="table-wrapper" style="overflow-x:auto;"><table>
-                    <thead><tr><th>NAMA</th><th>TANGGAL</th><th>JAM MASUK</th><th>JAM PULANG</th><th>FOTO</th><th>STATUS</th></tr></thead>
-                    <tbody id="rekapKehadiranDetailBody"><tr><td colspan="6" style="text-align:center;padding:16px;color:var(--text-muted);">Belum ada data.</td></tr></tbody>
+                    <thead><tr><th>NAMA</th><th>TANGGAL</th><th>JAM MASUK</th><th>JAM PULANG</th><th>FOTO MASUK</th><th>FOTO PULANG</th><th>STATUS</th></tr></thead>
+                    <tbody id="rekapKehadiranDetailBody"><tr><td colspan="7" style="text-align:center;padding:16px;color:var(--text-muted);">Belum ada data.</td></tr></tbody>
                 </table></div>
             </div>
         </div>
@@ -3585,6 +3624,12 @@
                     <button type="button" class="checkout-btn" style="width:auto;padding:10px 24px;" onclick="saveJadwal()"><i class="fas fa-save"></i> Simpan</button>
                 </div>
             </div>
+        </div>
+
+        <!-- ===== PHOTO LIGHTBOX (lihat foto presensi ukuran besar) ===== -->
+        <div class="modal-overlay" id="photoLightbox" onclick="if(event.target===this)closePhotoLightbox()">
+            <button type="button" class="plb-close" aria-label="Tutup" onclick="closePhotoLightbox()"><i class="fas fa-times"></i></button>
+            <img id="photoLightboxImg" alt="Foto presensi" />
         </div>
 
         <!-- ===== AKUNTANSI V1 ===== -->
@@ -7392,7 +7437,8 @@
         }
 
         // Sel foto Detail Rekap: thumbnail presensi bila ada (via properti DOM, aman),
-        // atau "Tanpa Foto". Klik thumbnail → buka gambar.
+        // atau "Tanpa Foto". Klik thumbnail → buka lightbox ukuran besar.
+        // "Tanpa Foto" (tidak valid/kosong) TIDAK bisa diklik.
         function rekapFotoTd(photoUrl) {
             const td = document.createElement("td");
             const safe = attendanceSafePhoto(photoUrl);
@@ -7405,7 +7451,7 @@
             const img = document.createElement("img");
             img.alt = "selfie presensi";
             img.style.cssText = "width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--border-color);cursor:pointer;";
-            img.addEventListener("click", function () { try { window.open(safe, "_blank"); } catch (e) {} });
+            img.addEventListener("click", function () { openPhotoLightbox(safe); });
             img.addEventListener("error", function () {
                 td.textContent = "Tanpa Foto";
                 td.style.color = "var(--text-muted)";
@@ -7415,6 +7461,30 @@
             td.appendChild(img);
             return td;
         }
+
+        // Lightbox foto presensi (foto masuk & pulang): ukuran besar di tengah layar.
+        // Tutup: klik tombol, klik area luar, atau tombol Escape.
+        function openPhotoLightbox(src) {
+            const safe = attendanceSafePhoto(src);   // hanya data URL gambar valid
+            if (!safe) return;                        // "Tanpa Foto"/tidak valid → tidak dibuka
+            const m = document.getElementById("photoLightbox");
+            const img = document.getElementById("photoLightboxImg");
+            if (!m || !img) return;
+            img.src = safe;                           // properti DOM → aman dari XSS
+            m.classList.add("active");
+        }
+        function closePhotoLightbox() {
+            const m = document.getElementById("photoLightbox");
+            const img = document.getElementById("photoLightboxImg");
+            if (m) m.classList.remove("active");
+            if (img) img.removeAttribute("src");
+        }
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape" || e.keyCode === 27) {
+                const m = document.getElementById("photoLightbox");
+                if (m && m.classList.contains("active")) closePhotoLightbox();
+            }
+        });
 
         async function renderRekapKehadiran() {
             const search = (document.getElementById("rekapSearch")?.value || "").toLowerCase();
@@ -7540,7 +7610,7 @@
                     .filter(x => !search || String(x.name).toLowerCase().includes(search));
                 detailBody.innerHTML = "";
                 if (!drows.length) {
-                    detailBody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:16px;color:var(--text-muted);">Belum ada data presensi pada bulan ini.</td></tr>';
+                    detailBody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:16px;color:var(--text-muted);">Belum ada data presensi pada bulan ini.</td></tr>';
                 } else {
                     const wibTime = (ts) => { const s = fmtWIB(ts); return s ? s.slice(11, 16) : "-"; };
                     drows.forEach(x => {
@@ -7550,7 +7620,8 @@
                         tr.appendChild(rekapTextTd(String(r.work_date || "").slice(0, 10)));
                         tr.appendChild(rekapTextTd(r.check_in_at ? wibTime(r.check_in_at) : "-"));
                         tr.appendChild(rekapTextTd(r.check_out_at ? wibTime(r.check_out_at) : "-"));
-                        tr.appendChild(rekapFotoTd(r.check_in_photo || r.check_out_photo));
+                        tr.appendChild(rekapFotoTd(r.check_in_photo));
+                        tr.appendChild(rekapFotoTd(r.check_out_photo));
                         tr.appendChild(rekapTextTd(r.check_in_at ? (r.check_out_at ? "Hadir (lengkap)" : "Hadir") : "-"));
                         detailBody.appendChild(tr);
                     });
@@ -9027,7 +9098,8 @@
             }
             const img = document.createElement("img");
             img.alt = alt;
-            img.style.cssText = "width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--border-color);";
+            img.style.cssText = "width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--border-color);cursor:pointer;";
+            img.addEventListener("click", function () { openPhotoLightbox(safe); });
             img.addEventListener("error", function () {
                 td.textContent = "Tanpa Foto";
                 td.style.color = "var(--text-muted)";
