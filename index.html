@@ -2369,12 +2369,15 @@
             <div class="page-header">
                 <div>
                     <h1>Rekap Penjualan</h1>
-                    <div class="page-header-desc">Ringkasan penjualan harian (POS &amp; Shopee)</div>
+                    <div class="page-header-desc">Ringkasan penjualan bulanan (POS &amp; Shopee)</div>
                 </div>
             </div>
             <div class="form-card" style="margin-bottom:16px;">
                 <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
-                    <div class="form-group" style="min-width:180px;"><label>Tanggal</label><input type="date" id="rekapTanggal" class="form-control" onchange="renderRekapPenjualan()" /></div>
+                    <div class="form-group" style="min-width:140px;"><label>Periode</label><select id="rekapPeriodeMode" class="form-control" onchange="rekapPeriodeModeChange()"><option value="bulan">Bulanan</option><option value="hari">Harian</option></select></div>
+                    <div class="form-group" id="rekapBulanWrap" style="min-width:160px;"><label>Bulan</label><select id="rekapPenjualanBulan" class="form-control" onchange="renderRekapPenjualan()"></select></div>
+                    <div class="form-group" id="rekapTahunWrap" style="min-width:110px;"><label>Tahun</label><select id="rekapPenjualanTahun" class="form-control" onchange="renderRekapPenjualan()"></select></div>
+                    <div class="form-group" id="rekapTanggalWrap" style="min-width:180px;display:none;"><label>Tanggal</label><input type="date" id="rekapTanggal" class="form-control" onchange="renderRekapPenjualan()" /></div>
                     <button class="btn-secondary" onclick="printRekapPenjualan()" style="padding:10px 20px;margin-bottom:2px;"><i class="fas fa-print"></i> Print</button>
                 </div>
             </div>
@@ -3954,21 +3957,8 @@
         let productsLoaded = false;
         let dataLoading = false;
 
-        let ordersData = [
-            { orderId: "ORD-20260615-01", date: "2026-06-15 11:20", channel: "Juwita App", customer: "Budi Santoso",
-                total: 48000, payStatus: "Lunas", wmsStatus: "Selesai", courier: "Self-Pickup", resi: "-" },
-            { orderId: "ORD-20260615-02", date: "2026-06-15 10:45", channel: "Tokopedia", customer: "Siti Rahma",
-                total: 110000, payStatus: "Lunas", wmsStatus: "Siap Kirim", courier: "J&T Express",
-            resi: "JP882910293" },
-            { orderId: "ORD-20260615-03", date: "2026-06-15 09:15", channel: "Shopee", customer: "Andi Wijaya",
-                total: 72000, payStatus: "Lunas", wmsStatus: "Packing", courier: "SiCepat", resi: "SIS-992019" },
-            { orderId: "ORD-20260615-04", date: "2026-06-15 08:30", channel: "WhatsApp", customer: "Dewi Lestari",
-                total: 24000, payStatus: "Belum", wmsStatus: "Perlu Verifikasi", courier: "-", resi: "-" },
-            { orderId: "ORD-20260614-05", date: "2026-06-14 17:40", channel: "Lazada", customer: "Rian Hidayat",
-                total: 145000, payStatus: "Lunas", wmsStatus: "Dikirim", courier: "JNE Reg", resi: "JNE9928102" },
-            { orderId: "ORD-20260614-06", date: "2026-06-14 15:10", channel: "POS2", customer: "Eko Prasetyo",
-                total: 35000, payStatus: "Batal", wmsStatus: "Batal", courier: "-", resi: "-" }
-        ];
+        // Sumber order nyata = API/DB (fetchAllOrders). Tidak ada seed order dummy.
+        let ordersData = [];
 
         // Sumber karyawan nyata = app_users (diisi oleh syncKaryawanRealtime).
         // Tidak ada lagi seed karyawan dummy.
@@ -7895,12 +7885,7 @@
         function printRekapPenjualan() {
             const area = document.getElementById("rekapPrintArea");
             if (!area) return;
-            const dateEl = document.getElementById("rekapTanggal");
-            let period = "-";
-            if (dateEl && dateEl.value) {
-                const parts = String(dateEl.value).split("-");
-                if (parts.length === 3) period = parts[2] + "/" + parts[1] + "/" + parts[0];
-            }
+            const period = rekapPenjualanPeriodLabel();
             const txt = function (id) { const el = document.getElementById(id); return el ? el.textContent : "-"; };
             const rowsHtml = function (id) { const el = document.getElementById(id); return el && el.innerHTML ? el.innerHTML : ""; };
             const esc = function (s) { return String(s == null ? "" : s); };
@@ -7998,9 +7983,111 @@
             if (rekapDetailPage < totalPages) { rekapDetailPage++; renderRekapDetailPage(); }
         }
 
+        // ============================================================
+        // REKAP PENJUALAN — periode Bulanan (default) / Harian.
+        // Sumber: ordersData (API/DB, bukan dummy). Filter memakai tanggal TAMPIL WIB
+        // (fmtOrderDate) sehingga batas bulan & pergantian tahun benar (POS & Shopee).
+        // ============================================================
+        let rekapPenjualanMode = "bulan";
+        const REKAP_BULAN_NAMES = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+
+        function rekapPenjualanNowYM() {
+            const wib = (typeof attendanceWibDate === "function") ? attendanceWibDate() : new Date().toISOString().slice(0, 10);
+            const s = String(wib);
+            return { y: s.slice(0, 4), m: parseInt(s.slice(5, 7), 10) - 1, date: s.slice(0, 10) };
+        }
+
+        function rekapPeriodeToggleWrap() {
+            const isBulan = rekapPenjualanMode === "bulan";
+            const bw = document.getElementById("rekapBulanWrap");
+            const yw = document.getElementById("rekapTahunWrap");
+            const tw = document.getElementById("rekapTanggalWrap");
+            if (bw) bw.style.display = isBulan ? "" : "none";
+            if (yw) yw.style.display = isBulan ? "" : "none";
+            if (tw) tw.style.display = isBulan ? "none" : "";
+        }
+
+        function initRekapPenjualanControls() {
+            const now = rekapPenjualanNowYM();
+            const bulanSel = document.getElementById("rekapPenjualanBulan");
+            if (bulanSel && !bulanSel.dataset.init) {
+                bulanSel.dataset.init = "1";
+                bulanSel.innerHTML = REKAP_BULAN_NAMES.map((n, i) => '<option value="' + i + '">' + n + '</option>').join("");
+            }
+            const tahunSel = document.getElementById("rekapPenjualanTahun");
+            if (tahunSel) {
+                // Bangun ulang tiap render agar tahun dari data yang baru dimuat ikut muncul.
+                const years = new Set();
+                ordersData.forEach(function (o) {
+                    const y = String(fmtOrderDate(o) || o.date || "").slice(0, 4);
+                    if (/^\d{4}$/.test(y)) years.add(y);
+                });
+                years.add(now.y);
+                const arr = [...years].sort().reverse();
+                const prev = tahunSel.value;
+                tahunSel.innerHTML = arr.map(y => '<option value="' + y + '">' + y + '</option>').join("");
+                if (prev && arr.indexOf(prev) !== -1) tahunSel.value = prev;
+                else if (arr.indexOf(now.y) !== -1) tahunSel.value = now.y;
+                else tahunSel.value = arr[0];
+            }
+            const modeSel = document.getElementById("rekapPeriodeMode");
+            if (modeSel) modeSel.value = rekapPenjualanMode;
+            const tglEl = document.getElementById("rekapTanggal");
+            if (tglEl && !tglEl.value) tglEl.value = now.date;
+            if (bulanSel && !bulanSel.value) bulanSel.value = String(now.m);
+            if (tahunSel && !tahunSel.value && [...tahunSel.options].some(op => op.value === now.y)) tahunSel.value = now.y;
+            rekapPeriodeToggleWrap();
+        }
+
+        function rekapPeriodeModeChange() {
+            const modeSel = document.getElementById("rekapPeriodeMode");
+            rekapPenjualanMode = (modeSel && modeSel.value === "hari") ? "hari" : "bulan";
+            rekapPeriodeToggleWrap();
+            renderRekapPenjualan();
+        }
+
+        // Order dalam periode terpilih. Bulanan = rentang bulan WIB (YYYY-MM);
+        // Harian = satu tanggal WIB (dengan tutup buku 23:00 seperti sebelumnya).
+        function rekapPenjualanPeriodOrders() {
+            const now = rekapPenjualanNowYM();
+            if (rekapPenjualanMode === "hari") {
+                const dateEl = document.getElementById("rekapTanggal");
+                const date = (dateEl && dateEl.value) ? dateEl.value : now.date;
+                return ordersData.filter(function (o) {
+                    const shown = fmtOrderDate(o) || o.date || "";
+                    if (shown.slice(0, 10) !== date) return false;
+                    const hh = parseInt(shown.slice(11, 13), 10);
+                    return !isNaN(hh) && hh < 23;
+                });
+            }
+            const bEl = document.getElementById("rekapPenjualanBulan");
+            const yEl = document.getElementById("rekapPenjualanTahun");
+            const b = parseInt(bEl && bEl.value, 10);
+            const y = (yEl && yEl.value) || now.y;
+            const ym = y + "-" + String((Number.isInteger(b) ? b : now.m) + 1).padStart(2, "0");
+            return ordersData.filter(function (o) {
+                const shown = fmtOrderDate(o) || o.date || "";
+                return shown.slice(0, 7) === ym;   // rentang bulan WIB; pergantian tahun otomatis
+            });
+        }
+
+        function rekapPenjualanPeriodLabel() {
+            const now = rekapPenjualanNowYM();
+            if (rekapPenjualanMode === "hari") {
+                const dateEl = document.getElementById("rekapTanggal");
+                const d = (dateEl && dateEl.value) ? dateEl.value : now.date;
+                const parts = String(d).split("-");
+                return parts.length === 3 ? (parts[2] + "/" + parts[1] + "/" + parts[0]) : d;
+            }
+            const bEl = document.getElementById("rekapPenjualanBulan");
+            const yEl = document.getElementById("rekapPenjualanTahun");
+            const b = parseInt(bEl && bEl.value, 10);
+            const y = (yEl && yEl.value) || now.y;
+            return REKAP_BULAN_NAMES[Number.isInteger(b) ? b : now.m] + " " + y;
+        }
+
         function renderRekapPenjualan() {
-            const dateEl = document.getElementById("rekapTanggal");
-            const date = (dateEl && dateEl.value) ? dateEl.value : new Date().toISOString().slice(0, 10);
+            initRekapPenjualanControls();
 
             // Label toko Shopee yang jelas (sesuai identitas toko).
             const SHOPEE_LABELS = {
@@ -8015,17 +8102,11 @@
                 return null;
             };
 
-            // Filter berdasarkan TANGGAL TAMPIL (WIB), bukan kolom date mentah (UTC Shopee).
-            const dayOrders = ordersData.filter(function (o) {
-                const shown = fmtOrderDate(o) || o.date || "";
-                if (shown.slice(0, 10) !== date) return false;
-                // Tutup buku harian 23:00 WIB: transaksi 23:00+ tidak masuk rekap tanggal ini.
-                const hh = parseInt(shown.slice(11, 13), 10);
-                return !isNaN(hh) && hh < 23;
-            });
+            // Order dalam periode terpilih (bulan/tanggal WIB).
+            const periodOrders = rekapPenjualanPeriodOrders();
 
             // Item Terjual = SUM qty dari order_items (bukan jumlah order).
-            const orderIds = new Set(dayOrders.map(o => o.orderId));
+            const orderIds = new Set(periodOrders.map(o => o.orderId));
             const itemQtyByOrder = {};
             orderItemsData.forEach(i => {
                 if (orderIds.has(i.orderid)) itemQtyByOrder[i.orderid] = (itemQtyByOrder[i.orderid] || 0) + (Number(i.qty) || 0);
@@ -8033,7 +8114,7 @@
 
             const groupOrder = ["POS", "Shopee 1 — Juwita Fresh and Frozen", "Shopee 2 — Juwita Frozen Food"];
             const channelAgg = {};
-            dayOrders.forEach(function (o) {
+            periodOrders.forEach(function (o) {
                 const label = channelKeyOf(o);
                 if (!label) return;
                 const r = channelAgg[label] || (channelAgg[label] = { omzet: 0, transaksi: 0, item: 0 });
@@ -8064,8 +8145,8 @@
             // Transaksi pertama & terakhir (berdasarkan waktu transaksi asli, WIB).
             const rangeEl = document.getElementById("rekapRangeInfo");
             if (rangeEl) {
-                if (dayOrders.length) {
-                    const byTime = dayOrders.slice().sort(function (a, b) {
+                if (periodOrders.length) {
+                    const byTime = periodOrders.slice().sort(function (a, b) {
                         return (fmtOrderDate(a) || "").localeCompare(fmtOrderDate(b) || "");
                     });
                     rangeEl.innerHTML = "Transaksi pertama: " + fmtRekapWib(byTime[0]) +
@@ -8077,8 +8158,8 @@
 
             const tbody = document.getElementById("rekapTableBody");
             if (tbody) {
-                if (!dayOrders.length) {
-                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Tidak ada transaksi pada tanggal ini</td></tr>';
+                if (!periodOrders.length) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Tidak ada transaksi pada periode ini</td></tr>';
                 } else {
                     tbody.innerHTML = rows.map(r => `<tr>
                         <td><strong>${r.label}</strong></td>
@@ -8095,12 +8176,12 @@
             }
 
             // Detail khusus POS: breakdown pembayaran + per kasir (mengikuti periode yang sama).
-            const posOrders = dayOrders.filter(x => x.channel === "POS1" || x.channel === "POS2");
+            const posOrders = periodOrders.filter(x => x.channel === "POS1" || x.channel === "POS2");
             renderRekapPosBreakdown(posOrders);
             renderRekapPosKasir(posOrders);
 
             // Rincian detail transaksi — paginasi (20/halaman), urut waktu transaksi asli terbaru→terlama.
-            rekapDetailSorted = dayOrders.slice().sort(function (a, b) {
+            rekapDetailSorted = periodOrders.slice().sort(function (a, b) {
                 return (fmtOrderDate(b) || "").localeCompare(fmtOrderDate(a) || "");
             });
             rekapDetailPage = 1;
