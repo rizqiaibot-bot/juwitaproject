@@ -3910,7 +3910,7 @@
                 else if (state.mode === "update") res = await apiFetch("/api/data/" + table + qsOf(state), { method: "PATCH", body: state.data });
                 else if (state.mode === "delete") res = await apiFetch("/api/data/" + table + qsOf(state), { method: "DELETE", body: {} });
                 else res = await apiFetch("/api/data/" + table + qsOf(state));
-                if (!res.ok) return { data: null, error: { message: (res.data && res.data.error) ? res.data.error : ("HTTP " + res.status) } };
+                if (!res.ok) return { data: null, error: { message: (res.data && (res.data.message || res.data.error)) ? (res.data.message || res.data.error) : ("HTTP " + res.status) } };
                 let data = (res.data && res.data.data) ? res.data.data : null;
                 if (state.single === "maybe") data = (Array.isArray(data) && data.length) ? data[0] : null;
                 else if (state.single === "single") data = (Array.isArray(data) && data.length) ? data[0] : (data || null);
@@ -5988,16 +5988,27 @@
 
         async function deleteProduct(id) {
             const idx = products.findIndex(p => p.id === id);
-            if (idx > -1) {
-                const deleted = products.splice(idx, 1)[0];
-                const r = await sb.from('products').delete().eq('id', id);
-                if (r.error) console.warn("Supabase delete product error:", r.error.message);
-                renderCatalogTable();
-                renderProducts();
-                renderPricingTables();
-                renderMonitorStok();
-                showToast("Produk dihapus");
+            if (idx === -1) return;
+            const r = await sb.from('products').delete().eq('id', id);
+            if (r.error) {
+                const msg = r.error.message === "forbidden"
+                    ? "Tidak punya izin menghapus produk"
+                    : r.error.message;
+                showToast("Gagal hapus produk: " + msg);
+                return;
             }
+            const deleted = Array.isArray(r.data) ? r.data : (r.data ? [r.data] : []);
+            if (deleted.length === 0) {
+                showToast("Produk tidak ditemukan atau sudah dihapus");
+                await initSupabaseData(true);
+                return;
+            }
+            products = products.filter(p => p.id !== id);
+            renderCatalogTable();
+            renderProducts();
+            renderPricingTables();
+            renderMonitorStok();
+            showToast("Produk dihapus");
         }
 
         let editingProductId = null;

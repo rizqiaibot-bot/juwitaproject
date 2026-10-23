@@ -411,6 +411,83 @@ async function handleDataGet(req, res, table) {
   }
 }
 
+// Tabel yang merujuk product_id. Produk yang masih dirujuk TIDAK boleh
+// dihapus agar mapping Shopee, stok, harga, dan transaksi historis tetap utuh.
+const PRODUCT_DELETE_REFERENCES = [
+  ["order_items", "riwayat transaksi"],
+  ["purchase_items", "data pembelian"],
+  ["stock_mutations", "mutasi stok"],
+  ["warehouse_receiving", "penerimaan gudang"],
+  ["warehouse_racks", "data rak"],
+  ["activity_log", "log marketplace"],
+  ["product_shopee_mapping", "mapping Shopee"],
+  ["product_prices", "harga produk"],
+  ["product_price_sync_queue", "antrean sinkron harga"],
+];
+
+async function productDeleteReferences(client, productId) {
+  const refs = [];
+  for (const [table, label] of PRODUCT_DELETE_REFERENCES) {
+    // Nama tanpa schema agar mengikuti search_path yang sama dengan DELETE.
+    const { rows } = await client.query("SELECT to_regclass($1) AS t", [table]);
+    if (!rows[0] || !rows[0].t) continue;
+    const found = await client.query(
+      `SELECT 1 FROM ${table} WHERE product_id = $1 LIMIT 1`,
+      [productId]
+    );
+    if (found.rows.length > 0) refs.push(label);
+  }
+  return refs;
+}
+
+async function deleteProductTransactional(req, res, u) {
+  const id = u.searchParams.get("id");
+  if (!/^[1-9]\d*$/.test(id || "")) {
+    return sendJson(res, 400, { error: "invalid_product_id" });
+  }
+  let client = null;
+  try {
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const { rows: existing } = await client.query(
+      "SELECT id FROM products WHERE id = $1 FOR UPDATE",
+      [id]
+    );
+    if (existing.length === 0) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 404, { error: "product_not_found" });
+    }
+    const refs = await productDeleteReferences(client, id);
+    if (refs.length > 0) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 409, {
+        error: "product_in_use",
+        message: "Produk tidak dapat dihapus karena masih terhubung dengan: " + refs.join(", ") + ".",
+      });
+    }
+    const { rows: deleted } = await client.query(
+      "DELETE FROM products WHERE id = $1 RETURNING *",
+      [id]
+    );
+    await client.query("COMMIT");
+    return sendJson(res, 200, { data: deleted });
+  } catch (err) {
+    if (client) {
+      try { await client.query("ROLLBACK"); } catch {}
+    }
+    if (err.code === "23503") {
+      return sendJson(res, 409, {
+        error: "product_in_use",
+        message: "Produk tidak dapat dihapus karena masih terhubung dengan data lain.",
+      });
+    }
+    console.error("data DELETE products failed:", err.message);
+    return sendJson(res, 500, { error: "internal_error" });
+  } finally {
+    if (client) client.release();
+  }
+}
+
 // Catat mutation stok (pending) agar worker sync mengirim ke SEMUA mapping Shopee.
 // TIDAK boleh ada jalur ubah products.stock yang melewati fungsi ini.
 async function recordProductStockMutation(productId, productName, qtyBefore, qtyAfter, source) {
@@ -483,6 +560,9 @@ async function handleDataWrite(req, res, table, method) {
   const where = ` WHERE ${filters.join(" AND ")}`;
 
   if (method === "DELETE") {
+    if (table === "products") {
+      return deleteProductTransactional(req, res, u);
+    }
     // Transaksi akuntansi POS_SALE tidak boleh dihapus (read-only dari POS).
     if (table === "accounting_transactions") {
       try {
