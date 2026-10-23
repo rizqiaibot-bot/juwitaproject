@@ -488,6 +488,26 @@ async function deleteProductTransactional(req, res, u) {
   }
 }
 
+// Produk baru: pastikan channel POS punya baris harga eksplisit.
+// Hanya memakai products.price yang diisi pengguna saat membuat produk.
+// Channel Shopee TIDAK dibuat/diubah di sini.
+async function ensureProductPosPrice(row) {
+  const price = Number(row && row.price);
+  if (!Number.isInteger(price) || price < 0) return;
+  try {
+    const { rows } = await pool.query("SELECT to_regclass('product_prices') AS t");
+    if (!rows[0] || !rows[0].t) return;
+    await pool.query(
+      `INSERT INTO product_prices (product_id, channel, price)
+       VALUES ($1, 'pos', $2)
+       ON CONFLICT (product_id, channel) DO NOTHING`,
+      [row.id, price]
+    );
+  } catch (err) {
+    console.error("ensure product POS price failed:", err.message);
+  }
+}
+
 // Catat mutation stok (pending) agar worker sync mengirim ke SEMUA mapping Shopee.
 // TIDAK boleh ada jalur ubah products.stock yang melewati fungsi ini.
 async function recordProductStockMutation(productId, productName, qtyBefore, qtyAfter, source) {
@@ -532,6 +552,7 @@ async function handleDataWrite(req, res, table, method) {
       // Produk baru: stok awal > 0 → catat mutation agar sinkron ke Shopee.
       if (table === "products") {
         for (const row of inserted) {
+          await ensureProductPosPrice(row);
           const initialStock = Number(row.stock) || 0;
           if (initialStock > 0) {
             await recordProductStockMutation(row.id, row.name, 0, initialStock, "Produk Baru");

@@ -2448,6 +2448,8 @@
                 <button id="posLogoutBtn" onclick="doLogout()" style="display:none;align-items:center;gap:6px;background:var(--danger-light);border:1px solid var(--danger);border-radius:var(--radius-lg);padding:8px 14px;cursor:pointer;color:var(--danger);font-size:0.72rem;font-weight:700;transition:var(--transition);white-space:nowrap;flex-shrink:0;"><i class="fas fa-sign-out-alt" style="font-size:0.75rem;"></i> Logout</button>
             </div>
 
+            <div id="posPriceWarning" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:var(--radius-md);background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.4);color:#fca5a5;font-size:0.78rem;line-height:1.5;"></div>
+
             <div class="stats-row" id="posTodayStats" style="margin-bottom:16px;">
                 <div class="stat-card" style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px 18px;border:1px solid var(--border-color);box-shadow:var(--card-shadow);display:flex;align-items:center;gap:12px;">
                     <i class="fas fa-receipt" style="color:var(--primary);font-size:1.2rem;"></i>
@@ -2777,7 +2779,7 @@
                                     <i class="fas fa-upload"></i> Pilih Foto
                                 </label>
                                 <input type="file" id="newProdPhoto" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;" onchange="previewPhoto(event)" />
-                                <p style="font-size:0.65rem;color:var(--text-muted);margin-top:8px;font-weight:600;">Format: JPG, PNG, WebP, GIF · Maks 2MB</p>
+                                <p style="font-size:0.65rem;color:var(--text-muted);margin-top:8px;font-weight:600;">Format: JPG, PNG, WebP, GIF · Maks 8MB (dikompres otomatis)</p>
                             </div>
                         </div>
                     </div>
@@ -3003,8 +3005,8 @@
 
         <div id="page-ubah-harga" class="page-content">
             <div class="page-header"><h1>Ubah Harga Jual Cepat</h1></div>
-            <div class="form-card"><h3 style="margin-bottom:16px;">Penyesuaian Massal</h3><div class="form-grid"><div class="form-group"><label>Kategori</label><select id="markupCategory" class="filter-control"></select></div><div class="form-group"><label>Markup (%)</label><input id="markupPercent" type="number" class="form-control" value="15" min="0" /></div></div><button class="checkout-btn" onclick="applyMarkup()"><i class="fas fa-calculator"></i> Terapkan Markup</button></div>
-            <div style="margin-top:20px;"><div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>HARGA BELI</th><th>HARGA JUAL LAMA</th><th>HARGA JUAL BARU</th><th>MARKUP</th></tr></thead><tbody id="markupPreviewBody"></tbody></table></div></div>
+            <div class="form-card"><h3 style="margin-bottom:16px;">Penyesuaian Massal Harga POS</h3><div class="form-grid"><div class="form-group"><label>Kategori</label><select id="markupCategory" class="filter-control"></select></div><div class="form-group"><label>Markup (%)</label><input id="markupPercent" type="number" class="form-control" value="15" min="0" /></div></div><button class="checkout-btn" onclick="applyMarkup()"><i class="fas fa-calculator"></i> Terapkan ke Harga POS</button><p style="font-size:0.68rem;color:var(--text-muted);margin:10px 0 0;">Hanya mengubah channel POS. Harga Shopee 1 dan Shopee 2 tidak berubah.</p></div>
+            <div style="margin-top:20px;"><div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>HARGA BELI</th><th>HARGA POS LAMA</th><th>HARGA POS BARU</th><th>MARKUP</th></tr></thead><tbody id="markupPreviewBody"></tbody></table></div></div>
         </div>
 
         <div id="page-diskon-promo" class="page-content">
@@ -5094,9 +5096,36 @@
             if (posProductPage < totalPages) { posProductPage++; renderProducts(currentSearch, posCategory); }
         }
 
+        // Foto produk dapat berupa URL HTTP(S) atau data URL base64.
+        // Nilai selain itu (mis. kelas ikon / kosong) tidak boleh dipakai sebagai src.
+        function productPhotoSrc(p) {
+            if (!p) return "";
+            const candidates = [p.imageicon, p.photo];
+            for (const raw of candidates) {
+                if (typeof raw === "string" && /^(?:https?:\/\/|data:image\/)/i.test(raw.trim())) {
+                    return raw.trim();
+                }
+            }
+            return "";
+        }
+
+        function productIconClass(p) {
+            const raw = p && typeof p.imageicon === "string" ? p.imageicon.trim() : "";
+            return /^fa-[a-z0-9-]+$/i.test(raw) ? raw : "fa-box";
+        }
+
+        function photoSrcAttr(value) {
+            return String(value == null ? "" : value)
+                .replace(/&/g, "&amp;")
+                .replace(/"/g, "&quot;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+        }
+
         function renderProducts(search, category) {
             const grid = document.getElementById("productGrid");
             if (!grid) return;
+            renderPosPriceNotice();
             if (!productsLoaded) {
                 grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);"><i class="fas fa-spinner fa-spin" style="margin-right:8px;"></i>Memuat produk...</div>';
                 const info = document.getElementById("posPageInfo");
@@ -5114,12 +5143,10 @@
             const start = (posProductPage - 1) * POS_PAGE_SIZE;
             const pageItems = filtered.slice(start, start + POS_PAGE_SIZE);
             grid.innerHTML = pageItems.map(p => {
-                const imgUrl = (p.photo && /^https?:/.test(p.photo))
-                    ? p.photo
-                    : ((p.imageicon && /^https?:/.test(p.imageicon)) ? p.imageicon : null);
+                const imgUrl = productPhotoSrc(p);
                 const imgHtml = imgUrl
-                    ? `<img src="${imgUrl}" alt="${p.name}" loading="lazy" onerror="this.onerror=null;this.outerHTML='<i class=fas fa-box></i>';" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm);" />`
-                    : `<i class="fas ${p.imageIcon || 'fa-box'}"></i>`;
+                    ? `<img src="${photoSrcAttr(imgUrl)}" alt="${p.name}" loading="lazy" onerror="this.onerror=null;this.style.display='none';" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm);" />`
+                    : `<i class="fas ${productIconClass(p)}"></i>`;
                 const skuLabel = p.sku ? `<span style="font-size:0.55rem;color:var(--text-muted);font-weight:600;">${p.sku}</span>` : '';
                 const sizeInfo = (p.weight || p.length)
                     ? `<span style="font-size:0.55rem;color:var(--text-muted);font-weight:500;">${p.weight ? p.weight+'g' : ''}${p.weight&&p.length?' · ':''}${p.length?p.length+'x'+p.width+'x'+p.height+'cm' : ''}</span>`
@@ -5929,8 +5956,9 @@
                 tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">' + (q ? 'Tidak ada produk ditemukan' : 'Belum ada produk') + '</td></tr>';
             } else {
                 tbody.innerHTML = page.map(p => {
-                    const thumbHtml = (p.photo || p.imageicon)
-                        ? `<img src="${p.photo || p.imageicon}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:6px;" onerror="this.style.display='none';" />`
+                    const thumbUrl = productPhotoSrc(p);
+                    const thumbHtml = thumbUrl
+                        ? `<img src="${photoSrcAttr(thumbUrl)}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:6px;" onerror="this.style.display='none';" />`
                         : '';
                     return `<tr>
                                 <td><strong>#${String(p.id).padStart(3,'0')}</strong></td>
@@ -6066,7 +6094,7 @@
             if (sg) sg.style.display = "none";
             // Pre-fill foto bila sudah ada.
             pendingPhotoData = null;
-            const existingPhoto = p.photo || p.imageicon || "";
+            const existingPhoto = productPhotoSrc(p);
             const ph = document.getElementById("photoPreviewPlaceholder");
             const img = document.getElementById("photoPreviewImg");
             if (existingPhoto) {
@@ -6474,6 +6502,7 @@
                 if (!productPrices[key]) productPrices[key] = {};
                 productPrices[key][ch.key] = n;
                 renderPriceChannelTable();
+                renderProducts(currentSearch, posCategory);
                 const syncList = (res.data && res.data.sync) || [];
                 const syncItem = syncList.find(x => x.channel === ch.key);
                 let msg;
@@ -6562,6 +6591,7 @@
             if (productPricesLoaded) {
                 el.style.display = "none";
                 el.textContent = "";
+                renderPosPriceNotice();
                 return;
             }
             el.style.display = "block";
@@ -6569,6 +6599,21 @@
                 'Harga per channel tidak dapat ditampilkan maupun disimpan. Jalankan migration <code>002_product_prices.sql</code>. ' +
                 'Sistem TIDAK akan menulis ke <code>products.price</code>.' +
                 (productPricesError ? ' <span style="opacity:0.7;">(' + ppEscapeHtml(productPricesError) + ')</span>' : '');
+            renderPosPriceNotice();
+        }
+
+        function renderPosPriceNotice() {
+            const el = document.getElementById("posPriceWarning");
+            if (!el) return;
+            const show = productsLoaded && !productPricesLoaded && !!productPricesError;
+            el.style.display = show ? "block" : "none";
+            if (!show) {
+                el.textContent = "";
+                return;
+            }
+            el.innerHTML = '<i class="fas fa-triangle-exclamation"></i> Harga POS belum dapat dimuat dari <code>product_prices</code>. ' +
+                'Harga sementara memakai <code>products.price</code> dan bisa tidak akurat. Muat ulang halaman atau hubungi admin. ' +
+                '<span style="opacity:0.75;">(' + ppEscapeHtml(productPricesError) + ')</span>';
         }
 
         // ============================================================
@@ -6753,6 +6798,7 @@
                 if (!productPrices[key]) productPrices[key] = {};
                 PRODUCT_PRICE_CHANNELS.forEach(ch => { productPrices[key][ch.key] = newVals[ch.key]; });
                 renderPricingTables();
+                renderProducts(currentSearch, posCategory);
                 const syncList = (res.data && res.data.sync) || [];
                 const failed = syncList.filter(x => !x.ok);
                 let msg;
@@ -6781,22 +6827,36 @@
 
         async function editSellPrice(idx) {
             const p = products[idx];
-            const newPrice = prompt(`Ubah harga jual ${p.name}:\n(Harga saat ini: Rp ${p.price.toLocaleString('id-ID')})`, p
-                .price);
-            if (newPrice && !isNaN(newPrice) && parseInt(newPrice) > 0) {
-                p.price = parseInt(newPrice);
-                sb.from('products').update({ price: p.price }).eq('id', p.id).then(r => {
-                    if (r.error) console.warn("Supabase update price error:", r.error.message);
+            if (!p) return;
+            if (!productPricesLoaded) { showToast("Harga POS belum termuat. Muat ulang halaman."); return; }
+            const current = posPriceOf(p);
+            const newPrice = prompt(`Ubah harga POS ${p.name}:\n(Harga saat ini: Rp ${current.toLocaleString('id-ID')})`, current);
+            if (newPrice === null) return;
+            const n = Number(newPrice);
+            if (!isFinite(n) || n < 0 || Math.floor(n) !== n) {
+                showToast("Harga POS harus angka bulat >= 0");
+                return;
+            }
+            try {
+                const res = await apiFetch("/api/product-prices", {
+                    method: "PUT",
+                    body: { product_id: p.id, channel: "pos", price: n }
                 });
-                renderProducts();
+                if (!res.ok) throw new Error((res.data && res.data.error) ? res.data.error : ("HTTP " + res.status));
+                const key = String(p.id);
+                if (!productPrices[key]) productPrices[key] = {};
+                productPrices[key].pos = n;
+                renderProducts(currentSearch, posCategory);
                 renderPricingTables();
                 renderCatalogTable();
-                showToast(`Harga ${p.name} diubah`);
+                showToast(`Harga POS ${p.name} diubah`);
+            } catch (err) {
+                showToast("Gagal menyimpan harga POS: " + (err && err.message ? err.message : "gagal"));
             }
         }
 
         // ============================================================
-        // MARKUP
+        // MARKUP HARGA POS (channel POS saja; Shopee tidak diubah)
         // ============================================================
         function renderMarkupPreview() {
             const sel = document.getElementById("markupCategory");
@@ -6806,11 +6866,11 @@
             const pct = parseInt(document.getElementById("markupPercent").value) || 0;
             const filtered = cat === "Semua" ? products : products.filter(p => p.category === cat);
             preview.innerHTML = filtered.map(p => {
-                const oldPrice = p.price;
+                const oldPrice = posPriceOf(p);
                 const newPrice = Math.round(oldPrice * (1 + pct / 100));
                 return `<tr>
                             <td>${p.name}</td>
-                            <td>Rp ${p.modal.toLocaleString('id-ID')}</td>
+                            <td>Rp ${(p.modal || 0).toLocaleString('id-ID')}</td>
                             <td>Rp ${oldPrice.toLocaleString('id-ID')}</td>
                             <td><strong>Rp ${newPrice.toLocaleString('id-ID')}</strong></td>
                             <td>${pct}%</td>
@@ -6819,20 +6879,35 @@
         }
 
         async function applyMarkup() {
+            if (!appUserIsOwner()) { showToast("Hanya owner yang dapat mengubah harga"); return; }
+            if (!productPricesLoaded) { showToast("Harga POS belum termuat. Muat ulang halaman."); return; }
             const sel = document.getElementById("markupCategory");
             const pct = parseInt(document.getElementById("markupPercent").value) || 0;
             if (!sel || !pct) { showToast("Isi persentase markup"); return; }
             const cat = sel.value;
             const filtered = cat === "Semua" ? products : products.filter(p => p.category === cat);
-            filtered.forEach(p => { p.price = Math.round(p.price * (1 + pct / 100)); });
-            await Promise.all(filtered.map(p =>
-                sb.from('products').update({ price: p.price }).eq('id', p.id)
-            ));
-            renderProducts();
-            renderPricingTables();
-            renderMarkupPreview();
-            renderCatalogTable();
-            showToast(`Harga ${cat} naik ${pct}%`);
+            if (!filtered.length) { showToast("Tidak ada produk untuk diubah"); return; }
+            const rows = filtered.map(p => ({
+                product_id: p.id,
+                channel: "pos",
+                price: Math.round(posPriceOf(p) * (1 + pct / 100))
+            }));
+            try {
+                const res = await apiFetch("/api/product-prices", { method: "PUT", body: rows });
+                if (!res.ok) throw new Error((res.data && res.data.error) ? res.data.error : ("HTTP " + res.status));
+                rows.forEach(r => {
+                    const key = String(r.product_id);
+                    if (!productPrices[key]) productPrices[key] = {};
+                    productPrices[key].pos = r.price;
+                });
+                renderProducts(currentSearch, posCategory);
+                renderPricingTables();
+                renderMarkupPreview();
+                renderCatalogTable();
+                showToast(`Harga POS ${cat} naik ${pct}%`);
+            } catch (err) {
+                showToast("Gagal menyesuaikan harga POS: " + (err && err.message ? err.message : "gagal"));
+            }
         }
 
         // ============================================================
@@ -9602,19 +9677,79 @@
         }
             window.generateSKU = generateSKU;
 
-        function previewPhoto(event) {
-            const file = event.target.files[0];
+        const PRODUCT_PHOTO_MAX_INPUT = 8 * 1024 * 1024;
+        const PRODUCT_PHOTO_MAX_DATA_URL = 1_500_000;
+
+        function loadProductPhotoImage(url) {
+            return new Promise(function(resolve, reject) {
+                const img = new Image();
+                img.onload = function() { resolve(img); };
+                img.onerror = function() { reject(new Error("Gambar tidak valid")); };
+                img.src = url;
+            });
+        }
+
+        function compressProductPhoto(img) {
+            let maxDim = 1200;
+            let quality = 0.82;
+            let dataUrl = "";
+            for (let attempt = 0; attempt < 6; attempt++) {
+                const srcW = img.naturalWidth || img.width;
+                const srcH = img.naturalHeight || img.height;
+                const scale = Math.min(1, maxDim / Math.max(srcW, srcH));
+                const w = Math.max(1, Math.round(srcW * scale));
+                const h = Math.max(1, Math.round(srcH * scale));
+                const canvas = document.createElement("canvas");
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext("2d");
+                if (!ctx) throw new Error("Canvas tidak didukung");
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, w, h);
+                ctx.drawImage(img, 0, 0, w, h);
+                dataUrl = canvas.toDataURL("image/jpeg", quality);
+                if (dataUrl.length <= PRODUCT_PHOTO_MAX_DATA_URL) break;
+                if (quality > 0.62) quality = Math.max(0.6, quality - 0.08);
+                else maxDim = Math.max(320, Math.round(maxDim * 0.8));
+            }
+            return dataUrl;
+        }
+
+        async function previewPhoto(event) {
+            const input = event.target;
+            const file = input.files[0];
             if (!file) return;
-            if (file.size > 2 * 1024 * 1024) { showToast("Foto maksimal 2MB"); return; }
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                pendingPhotoData = e.target.result;
-                document.getElementById("photoPreviewPlaceholder").style.display = "none";
-                const img = document.getElementById("photoPreviewImg");
-                img.src = e.target.result;
-                img.style.display = "block";
-            };
-            reader.readAsDataURL(file);
+            if (!/^image\//.test(file.type || "")) {
+                showToast("File harus berupa gambar");
+                input.value = "";
+                return;
+            }
+            if (file.size > PRODUCT_PHOTO_MAX_INPUT) {
+                showToast("Foto maksimal 8MB");
+                input.value = "";
+                return;
+            }
+            const objectUrl = URL.createObjectURL(file);
+            try {
+                const img = await loadProductPhotoImage(objectUrl);
+                const dataUrl = compressProductPhoto(img);
+                if (!dataUrl || dataUrl.length > PRODUCT_PHOTO_MAX_DATA_URL) {
+                    throw new Error("Ukuran foto masih terlalu besar");
+                }
+                pendingPhotoData = dataUrl;
+                const ph = document.getElementById("photoPreviewPlaceholder");
+                const preview = document.getElementById("photoPreviewImg");
+                if (ph) ph.style.display = "none";
+                if (preview) {
+                    preview.src = dataUrl;
+                    preview.style.display = "block";
+                }
+            } catch (err) {
+                showToast("Gagal memproses foto: " + (err && err.message ? err.message : "gagal"));
+            } finally {
+                URL.revokeObjectURL(objectUrl);
+                input.value = "";
+            }
         }
             window.previewPhoto = previewPhoto;
 
@@ -9660,6 +9795,9 @@
                         return;
                     }
                     const updates = { name, sku: finalSku, category: cat, modal, supplier, barcode: barcode || null, plu, shopee_item_id, shopee_sku };
+                    // Hanya kirim foto bila pengguna memilih foto baru; jika tidak,
+                    // field imageicon tidak disentuh agar foto lama tetap tersimpan.
+                    if (pendingPhotoData !== null) updates.imageicon = pendingPhotoData;
                     const { error: upErr } = await sb.from('products').update(updates).eq('id', editingProductId);
                     if (upErr) {
                         console.error("Supabase update product error:", upErr.message);
