@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#4f46e5" />
+    <meta name="robots" content="noindex" />
+    <title>Juwita One — Offline</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --text-primary: #0f172a;
+            --text-muted: #64748b;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --border: #e2e8f0;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: var(--bg);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .card {
+            width: 100%;
+            max-width: 420px;
+            padding: 28px 24px;
+            text-align: center;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+        }
+        .icon {
+            width: 88px;
+            height: 88px;
+            border-radius: 22px;
+            margin-bottom: 16px;
+            object-fit: cover;
+        }
+        h1 { margin: 0 0 10px; font-size: 1.25rem; }
+        p { margin: 0 0 12px; color: var(--text-muted); font-size: 0.9rem; line-height: 1.6; }
+        .warning {
+            margin: 16px 0;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: #fef3c7;
+            color: #92400e;
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+        button {
+            width: 100%;
+            margin-top: 8px;
+            padding: 12px 16px;
+            border: 0;
+            border-radius: 12px;
+            background: var(--primary);
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <main class="card">
+        <img class="icon" src="/icons/icon-192.png" alt="Juwita One" />
+        <h1>Anda sedang offline</h1>
+        <p>Juwita One memerlukan koneksi internet untuk memuat data POS, harga, stok, transaksi, Shopee, dan presensi terbaru.</p>
+        <div class="warning">
+            Transaksi atau perubahan yang belum dikonfirmasi server tidak dianggap berhasil. Sambungkan internet lalu buka kembali aplikasi.
+        </div>
+        <p>Jika ada transaksi offline yang tersimpan di perangkat, transaksi tersebut tetap menunggu koneksi dan akan diproses sesuai mekanisme yang sudah ada.</p>
+        <button type="button" onclick="location.reload()">Coba Lagi</button>
+    </main>
+</body>
+</html>

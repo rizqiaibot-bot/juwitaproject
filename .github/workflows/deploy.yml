@@ -33,6 +33,11 @@ jobs:
               - 'juwitalogo.png'
               - 'logoshopee.png'
               - 'logowa.png'
+              - 'manifest.webmanifest'
+              - 'manifest.json'
+              - 'sw.js'
+              - 'offline.html'
+              - 'icons/**'
             backend:
               - 'juwita-api/src/**'
               - 'juwita-api/package.json'
@@ -61,6 +66,7 @@ jobs:
           rsync -avzc --rsync-path="sudo rsync" \
             index.html config.js offline-db.js marketplace.html \
             juwitalogo.png logoshopee.png logowa.png \
+            manifest.webmanifest manifest.json sw.js offline.html icons \
             juwita:/var/www/html/
 
       - name: Deploy backend ke /var/www/juwita-api
