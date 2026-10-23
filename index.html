@@ -3751,7 +3751,7 @@
                 <label>Harga Shopee 2 &mdash; juwita frozen food</label>
                 <input type="number" id="ppShopee2" class="form-control" min="0" step="1" inputmode="numeric" />
             </div>
-            <div style="color:var(--text-muted);font-size:0.72rem;line-height:1.5;margin-bottom:4px;">Harga POS di sini TIDAK mengubah <code>products.price</code>. Hanya owner yang dapat menyimpan.</div>
+            <div style="color:var(--text-muted);font-size:0.72rem;line-height:1.5;margin-bottom:4px;">Harga POS di sini TIDAK mengubah <code>products.price</code>. Hanya owner atau pengguna dengan izin Edit Harga Pricing yang dapat menyimpan.</div>
             <div style="display:flex;gap:10px;margin-top:16px;">
                 <button id="ppSave" class="close-modal-btn" style="flex:2;background:var(--primary-gradient);" onclick="saveProductPrices()">Simpan</button>
                 <button class="close-modal-btn" style="flex:1;background:var(--text-muted);" onclick="closeProductPriceModal()">Tutup</button>
@@ -4717,6 +4717,8 @@
         // MANAJEMEN KARYAWAN (app_users) — HANYA OWNER/Super Admin
         // ============================================================
         const APP_MENU_KEYS = ["pos", "penjualan", "katalog", "persediaan", "pembelian", "gudang", "pricing", "akuntansi", "hr", "pengaturan"];
+        // Izin aksi tambahan, disimpan di kolom menus yang sudah ada (bukan menu halaman).
+        const PRICING_EDIT_PERMISSION = "pricing.edit";
         const APP_MENU_LABELS = { pos: "POS", penjualan: "Penjualan", katalog: "Katalog", persediaan: "Persediaan", pembelian: "Pembelian", gudang: "Gudang", pricing: "Pricing", akuntansi: "Akuntansi", hr: "HR", pengaturan: "Pengaturan" };
         const APP_ROLES = [
             { value: "kasir", label: "Kasir" },
@@ -4781,7 +4783,9 @@
                     const chips = APP_MENU_KEYS.map(function (m) {
                         const on = Array.isArray(emp.menus) && emp.menus.indexOf(m) !== -1;
                         return '<span class="menu-chip-edit' + (on ? " active" : "") + '" style="cursor:default;">' + APP_MENU_LABELS[m] + "</span>";
-                    }).join("");
+                    }).join("") + ((Array.isArray(emp.menus) && emp.menus.indexOf(PRICING_EDIT_PERMISSION) !== -1)
+                        ? '<span class="menu-chip-edit active" style="cursor:default;">Edit Harga Pricing</span>'
+                        : "");
                     const roleTag = emp.role_label || emp.role || "";
                     return '<div class="account-card">' +
                         '<div class="account-header">' +
@@ -4944,6 +4948,10 @@
             if (!name) { if (errEl) errEl.textContent = "Nama lengkap wajib diisi"; return; }
             if (!role) { if (errEl) errEl.textContent = "Role/Jabatan wajib dipilih"; return; }
             if (!menus.length) { if (errEl) errEl.textContent = "Pilih minimal satu hak akses menu"; return; }
+            if (menus.includes(PRICING_EDIT_PERMISSION) && !menus.includes("pricing")) {
+                if (errEl) errEl.textContent = "Izin Edit Harga Pricing memerlukan akses menu Pricing";
+                return;
+            }
             if (!empEditingId) {
                 if (!/^\d{10,13}$/.test(phone)) { if (errEl) errEl.textContent = "Nomor HP tidak valid"; return; }
                 if (pass.length < 6) { if (errEl) errEl.textContent = "Password login awal minimal 6 karakter"; return; }
@@ -6389,9 +6397,20 @@
                 String(currentUser.status || "").toUpperCase() === "ACTIVE");
         }
 
-        // Harga hanya bisa diedit owner DAN saat product_prices tersedia.
+        // Izin edit Pricing: owner aktif ATAU karyawan aktif dengan izin
+        // "pricing.edit" yang tersimpan di menus (dibaca dari /api/auth/me).
+        function canEditPricing() {
+            if (!currentUser) return false;
+            if (String(currentUser.status || "").toUpperCase() !== "ACTIVE") return false;
+            if (String(currentUser.role || "").toLowerCase() === "owner") return true;
+            return Array.isArray(currentUser.menus) &&
+                currentUser.menus.includes("pricing") &&
+                currentUser.menus.includes(PRICING_EDIT_PERMISSION);
+        }
+
+        // Harga hanya bisa diedit jika punya izin edit Pricing DAN harga termuat.
         function priceEditEnabled() {
-            return appUserIsOwner() && productPricesLoaded;
+            return canEditPricing() && productPricesLoaded;
         }
 
         // Escape teks sebelum dimasukkan ke innerHTML (pesan error DB tidak dipercaya).
@@ -6467,7 +6486,7 @@
                         : `<strong>Rp ${cur.toLocaleString('id-ID')}</strong>`);
                 const btnHtml = canEdit
                     ? `<button class="aksi-btn" onclick="savePriceChannelRow('${p.id}', this)" title="Simpan ${ch.label}"><i class="fas fa-save"></i></button>`
-                    : '<span style="color:var(--text-muted);font-size:0.72rem;" title="Hanya owner">&#8212;</span>';
+                    : '<span style="color:var(--text-muted);font-size:0.72rem;" title="Hanya owner atau pengguna dengan izin Edit Harga Pricing">&#8212;</span>';
                 return `<tr>
                             <td><strong>${ppEscapeHtml(p.name)}</strong>${p.sku ? ` <span style="color:var(--text-muted);font-size:0.7rem;">· ${ppEscapeHtml(p.sku)}</span>` : ""}</td>
                             <td>Rp ${(p.modal || 0).toLocaleString('id-ID')}</td>
@@ -6478,7 +6497,7 @@
         }
 
         async function savePriceChannelRow(productId, btn) {
-            if (!appUserIsOwner()) { showToast("Hanya owner yang dapat mengubah harga"); return; }
+            if (!canEditPricing()) { showToast("Anda tidak punya izin edit Pricing"); return; }
             if (!productPricesLoaded) { showToast("product_prices belum tersedia"); return; }
             const p = products.find(x => ppSameId(x.id, productId));
             if (!p) { showToast("Produk tidak ditemukan"); return; }
@@ -6710,7 +6729,7 @@
                     <td>${pricingPriceCell(p, 'pos')}</td>
                     <td>${pricingPriceCell(p, 'shopee:724153261')}</td>
                     <td>${pricingPriceCell(p, 'shopee:1214362884')}</td>
-                    <td>${canEdit ? `<button class="aksi-btn" onclick="openProductPriceModal('${p.id}')"><i class="fas fa-pen"></i> Edit</button>` : '<span style="color:var(--text-muted);font-size:0.7rem;">Read-only</span>'}</td>
+                    <td>${canEdit ? `<button class="aksi-btn" onclick="openProductPriceModal('${p.id}')"><i class="fas fa-pen"></i> Edit</button>` : '<span style="color:var(--text-muted);font-size:0.7rem;" title="Hanya owner atau pengguna dengan izin Edit Harga Pricing">Read-only</span>'}</td>
                 </tr>`).join('');
             } else {
                 body.innerHTML = page.map(p => `<tr>
@@ -6736,7 +6755,7 @@
         function openProductPriceModal(productId) {
             const p = products.find(x => ppSameId(x.id, productId));
             if (!p) return;
-            if (!appUserIsOwner()) { showToast("Hanya owner yang dapat mengubah harga"); return; }
+            if (!canEditPricing()) { showToast("Anda tidak punya izin edit Pricing"); return; }
             if (!productPricesLoaded) { showToast("product_prices belum tersedia"); return; }
             ppEditingProductId = productId;
             const nameEl = document.getElementById("ppProductName");
@@ -6762,7 +6781,7 @@
         }
 
         async function saveProductPrices() {
-            if (!appUserIsOwner()) { showToast("Hanya owner yang dapat mengubah harga"); return; }
+            if (!canEditPricing()) { showToast("Anda tidak punya izin edit Pricing"); return; }
             if (!productPricesLoaded) { showToast("product_prices belum tersedia"); return; }
             const productId = ppEditingProductId;
             const p = products.find(x => ppSameId(x.id, productId));
@@ -6828,6 +6847,7 @@
         async function editSellPrice(idx) {
             const p = products[idx];
             if (!p) return;
+            if (!canEditPricing()) { showToast("Anda tidak punya izin edit Pricing"); return; }
             if (!productPricesLoaded) { showToast("Harga POS belum termuat. Muat ulang halaman."); return; }
             const current = posPriceOf(p);
             const newPrice = prompt(`Ubah harga POS ${p.name}:\n(Harga saat ini: Rp ${current.toLocaleString('id-ID')})`, current);
@@ -6879,7 +6899,7 @@
         }
 
         async function applyMarkup() {
-            if (!appUserIsOwner()) { showToast("Hanya owner yang dapat mengubah harga"); return; }
+            if (!canEditPricing()) { showToast("Anda tidak punya izin edit Pricing"); return; }
             if (!productPricesLoaded) { showToast("Harga POS belum termuat. Muat ulang halaman."); return; }
             const sel = document.getElementById("markupCategory");
             const pct = parseInt(document.getElementById("markupPercent").value) || 0;
@@ -11173,6 +11193,13 @@
                         <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="hr" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />HR</label>
                         <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="pengaturan" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />Pengaturan</label>
                     </div>
+                </div>
+                <div>
+                    <label style="font-weight:700;font-size:0.78rem;color:var(--text-primary);">Izin Aksi</label>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+                        <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="pricing.edit" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />Edit Harga Pricing</label>
+                    </div>
+                    <div style="font-size:0.62rem;color:var(--text-muted);margin-top:5px;">Memerlukan akses menu Pricing. Tidak memberikan role Owner atau akses menu lain.</div>
                 </div>
                 <div id="empError" style="color:var(--danger);font-size:0.74rem;min-height:14px;"></div>
             </div>

@@ -336,8 +336,17 @@ const PRODUCT_STOCK_COLUMNS = new Set(["stock", "maxstock", "minstock"]);
 const PRODUCT_PRICE_COLUMNS = new Set(["price"]);
 const PRODUCT_MODAL_COLUMNS = new Set(["modal"]);
 
+// Izin aksi tambahan, disimpan di app_users.menus (bukan menu halaman).
+const PRICING_EDIT_PERMISSION = "pricing.edit";
+
 function isOwnerUser(user) {
   return !!user && String(user.role || "").toLowerCase() === "owner";
+}
+
+function canEditPricing(user) {
+  if (!user || user.status !== "ACTIVE") return false;
+  if (isOwnerUser(user)) return true;
+  return userHasMenu(user, ["pricing"]) && userHasMenu(user, [PRICING_EDIT_PERMISSION]);
 }
 
 function userHasMenu(user, menus) {
@@ -618,6 +627,10 @@ async function handleDataWrite(req, res, table, method) {
     if (FORBIDDEN_COLUMNS.has(c)) return sendJson(res, 400, { error: "forbidden_column" });
   }
   if (table === "products" && !checkProductColumns(req.user, cols)) {
+    return sendJson(res, 403, { error: "forbidden" });
+  }
+  // Harga jual legacy (products.price) mengikuti izin edit Pricing.
+  if (table === "products" && cols.includes("price") && !canEditPricing(req.user)) {
     return sendJson(res, 403, { error: "forbidden" });
   }
   const setList = cols.map((c, i) => `${c} = $${idx + i}`).join(", ");
@@ -1059,7 +1072,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "PUT" && pathname === "/api/product-prices") {
     const user = await requireAuth(req, res);
     if (!user) return;
-    if (!requireOwner(req, res)) return;
+    if (!canEditPricing(user)) return sendJson(res, 403, { error: "forbidden" });
     return handleProductPricesPut(req, res);
   }
   if (req.method === "POST" && pathname === "/api/orders") {
