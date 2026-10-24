@@ -39,6 +39,15 @@ const USERS = {
 };
 
 const captured = {};
+const fakeRefs = {
+  order_items: 0,
+  purchase_items: 0,
+  stock_mutations: 0,
+  warehouse_receiving: 0,
+  warehouse_racks: 0,
+  activity_log: 0,
+  product_shopee_mapping: 0,
+};
 
 const PRODUCT_ROW = {
   id: 1, name: "Produk Test", category: "Test", price: 1000, modal: 500,
@@ -100,8 +109,27 @@ class FakePool {
         if (sql.includes("SELECT id FROM products WHERE id = $1 FOR UPDATE")) {
           return { rows: [{ id: 1 }] };
         }
+        if (sql.includes("SELECT id, name FROM products WHERE id = $1 FOR UPDATE")) {
+          return { rows: [{ id: 1, name: "Produk Test" }] };
+        }
         if (sql.includes("SELECT to_regclass($1) AS t")) {
-          return { rows: [{ t: null }] };
+          return { rows: [{ t: params[0] }] };
+        }
+        if (sql.includes("SELECT to_regclass('product_shopee_mapping') AS t")) {
+          return { rows: [{ t: "product_shopee_mapping" }] };
+        }
+        const countMatch = sql.match(/SELECT count\(\*\)::int AS count FROM (\w+) WHERE product_id = \$1/);
+        if (countMatch) {
+          return { rows: [{ count: fakeRefs[countMatch[1]] || 0 }] };
+        }
+        if (sql.includes("DELETE FROM product_shopee_mapping WHERE product_id = $1")) {
+          const removed = fakeRefs.product_shopee_mapping || 0;
+          fakeRefs.product_shopee_mapping = 0;
+          captured.removedMappings = removed;
+          return { rowCount: removed, rows: [] };
+        }
+        if (sql.includes("UPDATE products SET shopee_item_id = NULL, shopee_sku = NULL WHERE id = $1")) {
+          return { rows: [] };
         }
         if (sql.includes("DELETE FROM products WHERE id = $1 RETURNING *")) {
           return { rows: [PRODUCT_ROW] };
@@ -237,6 +265,52 @@ test("Katalog boleh DELETE produk; Pricing tidak", async () => {
   assert.equal(denied.status, 403);
   const allowed = await call("/api/data/products?id=1", "DELETE", "katalog-id", {});
   assert.equal(allowed.status, 200);
+});
+
+test("Delete produk mengembalikan alasan referensi yang spesifik", async () => {
+  fakeRefs.order_items = 2;
+  fakeRefs.stock_mutations = 1;
+  const r = await call("/api/data/products?id=1", "DELETE", "katalog-id", {});
+  assert.equal(r.status, 409);
+  assert.equal(r.data.error, "product_in_use");
+  assert.equal(r.data.can_detach_shopee_mapping, false);
+  assert.deepEqual(
+    r.data.references.map((x) => ({ table: x.table, count: x.count })),
+    [{ table: "order_items", count: 2 }, { table: "stock_mutations", count: 1 }]
+  );
+  assert.match(r.data.message, /riwayat transaksi \(2\)/);
+  fakeRefs.order_items = 0;
+  fakeRefs.stock_mutations = 0;
+});
+
+test("Mapping Shopee dilepas hanya jika tidak ada referensi lain", async () => {
+  fakeRefs.product_shopee_mapping = 2;
+  const blocked = await call("/api/products/1/shopee-mapping", "DELETE", "pricing-id", {});
+  assert.equal(blocked.status, 403);
+
+  const mappingOnly = await call("/api/data/products?id=1", "DELETE", "katalog-id", {});
+  assert.equal(mappingOnly.status, 409);
+  assert.equal(mappingOnly.data.can_detach_shopee_mapping, true);
+
+  const detached = await call("/api/products/1/shopee-mapping", "DELETE", "katalog-id", {});
+  assert.equal(detached.status, 200);
+  assert.equal(detached.data.data.removed_mappings, 2);
+  assert.equal(captured.removedMappings, 2);
+
+  const afterDetach = await call("/api/data/products?id=1", "DELETE", "katalog-id", {});
+  assert.equal(afterDetach.status, 200);
+});
+
+test("Detach mapping ditolak jika masih ada riwayat transaksi", async () => {
+  fakeRefs.product_shopee_mapping = 1;
+  fakeRefs.order_items = 1;
+  const r = await call("/api/products/1/shopee-mapping", "DELETE", "katalog-id", {});
+  assert.equal(r.status, 409);
+  assert.equal(r.data.error, "product_in_use");
+  assert.equal(r.data.references.length, 1);
+  assert.equal(r.data.references[0].table, "order_items");
+  fakeRefs.product_shopee_mapping = 0;
+  fakeRefs.order_items = 0;
 });
 
 test("Gudang boleh membuka endpoint opname, Katalog tidak", async () => {

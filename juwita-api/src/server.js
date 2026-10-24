@@ -376,12 +376,17 @@ async function productDeleteReferences(client, productId) {
     const { rows } = await client.query("SELECT to_regclass($1) AS t", [table]);
     if (!rows[0] || !rows[0].t) continue;
     const found = await client.query(
-      `SELECT 1 FROM ${table} WHERE product_id = $1 LIMIT 1`,
+      `SELECT count(*)::int AS count FROM ${table} WHERE product_id = $1`,
       [productId]
     );
-    if (found.rows.length > 0) refs.push(label);
+    const count = Number(found.rows[0] && found.rows[0].count) || 0;
+    if (count > 0) refs.push({ table, label, count });
   }
   return refs;
+}
+
+function productDeleteBlockMessage(refs) {
+  return refs.map((r) => `${r.label} (${r.count})`).join(", ");
 }
 
 async function deleteProductTransactional(req, res, u) {
@@ -404,9 +409,12 @@ async function deleteProductTransactional(req, res, u) {
     const refs = await productDeleteReferences(client, id);
     if (refs.length > 0) {
       await client.query("ROLLBACK");
+      const mappingOnly = refs.every((r) => r.table === "product_shopee_mapping");
       return sendJson(res, 409, {
         error: "product_in_use",
-        message: "Produk tidak dapat dihapus karena masih terhubung dengan: " + refs.join(", ") + ".",
+        message: "Produk tidak dapat dihapus karena masih terhubung dengan: " + productDeleteBlockMessage(refs) + ".",
+        references: refs,
+        can_detach_shopee_mapping: mappingOnly,
       });
     }
     const { rows: deleted } = await client.query(
@@ -423,9 +431,93 @@ async function deleteProductTransactional(req, res, u) {
       return sendJson(res, 409, {
         error: "product_in_use",
         message: "Produk tidak dapat dihapus karena masih terhubung dengan data lain.",
+        references: [],
+        can_detach_shopee_mapping: false,
       });
     }
     console.error("data DELETE products failed:", err.message);
+    return sendJson(res, 500, { error: "internal_error" });
+  } finally {
+    if (client) client.release();
+  }
+}
+
+// Lepas mapping Shopee secara eksplisit (tanpa memanggil API Shopee).
+// Hanya diizinkan jika SATU-SATUNYA referensi produk adalah mapping Shopee.
+async function detachProductShopeeMapping(req, res, productId) {
+  if (!/^[1-9]\d*$/.test(String(productId || ""))) {
+    return sendJson(res, 400, { error: "invalid_product_id" });
+  }
+  let client = null;
+  try {
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const { rows: existing } = await client.query(
+      "SELECT id, name FROM products WHERE id = $1 FOR UPDATE",
+      [productId]
+    );
+    if (!existing.length) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 404, { error: "product_not_found" });
+    }
+
+    const mappingTable = await client.query("SELECT to_regclass('product_shopee_mapping') AS t");
+    if (!mappingTable.rows[0] || !mappingTable.rows[0].t) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 404, { error: "shopee_mapping_not_found" });
+    }
+
+    const refs = await productDeleteReferences(client, productId);
+    const blocking = refs.filter((r) => r.table !== "product_shopee_mapping");
+    if (blocking.length > 0) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 409, {
+        error: "product_in_use",
+        message: "Mapping Shopee tidak dilepas karena produk masih terhubung dengan: " + productDeleteBlockMessage(blocking) + ".",
+        references: blocking,
+      });
+    }
+
+    const mappingRows = refs.find((r) => r.table === "product_shopee_mapping");
+    if (!mappingRows || mappingRows.count <= 0) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 404, { error: "shopee_mapping_not_found" });
+    }
+
+    const deleted = await client.query(
+      "DELETE FROM product_shopee_mapping WHERE product_id = $1",
+      [productId]
+    );
+    // Ulangi validasi setelah mapping dihapus: jika ada referensi baru yang
+    // masuk selama transaksi, rollback agar mapping tidak hilang.
+    const afterDelete = await productDeleteReferences(client, productId);
+    const newBlocking = afterDelete.filter((r) => r.table !== "product_shopee_mapping");
+    if (newBlocking.length > 0) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 409, {
+        error: "product_in_use",
+        message: "Mapping Shopee tidak dilepas karena produk masih terhubung dengan: " + productDeleteBlockMessage(newBlocking) + ".",
+        references: newBlocking,
+      });
+    }
+    // Bersihkan kolom legacy yang menyimpan listing Shopee di produk.
+    await client.query(
+      "UPDATE products SET shopee_item_id = NULL, shopee_sku = NULL WHERE id = $1",
+      [productId]
+    );
+    await client.query("COMMIT");
+    return sendJson(res, 200, {
+      data: {
+        ok: true,
+        product_id: Number(productId),
+        removed_mappings: Number(deleted.rowCount) || 0,
+      },
+    });
+  } catch (err) {
+    if (client) {
+      try { await client.query("ROLLBACK"); } catch {}
+    }
+    console.error("detach product Shopee mapping failed:", err.message);
     return sendJson(res, 500, { error: "internal_error" });
   } finally {
     if (client) client.release();
@@ -1265,6 +1357,13 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 403, { error: "forbidden" });
     }
     return handleProducts(req, res);
+  }
+  if (req.method === "DELETE" && pathname.startsWith("/api/products/") && pathname.endsWith("/shopee-mapping")) {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    if (!checkMenuAccess(user, "katalog")) return sendJson(res, 403, { error: "forbidden" });
+    const productId = pathname.slice("/api/products/".length, -"/shopee-mapping".length);
+    return detachProductShopeeMapping(req, res, decodeURIComponent(productId));
   }
   if (req.method === "GET" && pathname === "/api/product-prices") {
     const user = await requireAuth(req, res);

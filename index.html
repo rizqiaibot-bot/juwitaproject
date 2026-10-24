@@ -6079,18 +6079,64 @@
             renderCatalogPage();
         }
 
+        function productDeleteRefsText(refs) {
+            return refs.map(function (r) {
+                return r.label + " (" + (r.count != null ? r.count : "?") + ")";
+            }).join(", ");
+        }
+
         async function deleteProduct(id) {
-            const idx = products.findIndex(p => p.id === id);
-            if (idx === -1) return;
-            const r = await sb.from('products').delete().eq('id', id);
-            if (r.error) {
-                const msg = r.error.message === "forbidden"
-                    ? "Tidak punya izin menghapus produk"
-                    : r.error.message;
-                showToast("Gagal hapus produk: " + msg);
-                return;
+            const product = products.find(p => p.id === id);
+            if (!product) return;
+            const deleteUrl = "/api/data/products?id=" + encodeURIComponent(id);
+            let res = await apiFetch(deleteUrl, { method: "DELETE", body: {} });
+
+            if (!res.ok) {
+                const data = (res.data && typeof res.data === "object") ? res.data : {};
+                if (res.status === 409 && data.error === "product_in_use") {
+                    const refs = Array.isArray(data.references) ? data.references : [];
+                    const mappingOnly = data.can_detach_shopee_mapping === true;
+                    if (mappingOnly) {
+                        const mappingCount = (refs.find(function (r) { return r.table === "product_shopee_mapping"; }) || {}).count || 0;
+                        const ok = confirm(
+                            'Produk "' + product.name + '" masih memiliki mapping Shopee (' + mappingCount + ' listing).\n\n' +
+                            "Lepas mapping Shopee sekarang?\n" +
+                            "Tindakan ini tidak memanggil API Shopee, tidak mengubah stok, dan tidak menghapus histori."
+                        );
+                        if (!ok) return;
+                        const detach = await apiFetch(
+                            "/api/products/" + encodeURIComponent(id) + "/shopee-mapping",
+                            { method: "DELETE", body: {} }
+                        );
+                        if (!detach.ok) {
+                            const d = (detach.data && (detach.data.message || detach.data.error)) ? (detach.data.message || detach.data.error) : ("HTTP " + detach.status);
+                            showToast("Gagal melepas mapping Shopee: " + d);
+                            return;
+                        }
+                        res = await apiFetch(deleteUrl, { method: "DELETE", body: {} });
+                        if (!res.ok) {
+                            const d = (res.data && (res.data.message || res.data.error)) ? (res.data.message || res.data.error) : ("HTTP " + res.status);
+                            showToast("Mapping Shopee dilepas, tetapi produk tetap tidak dapat dihapus: " + d);
+                            return;
+                        }
+                    } else {
+                        const detail = refs.length
+                            ? productDeleteRefsText(refs)
+                            : (data.message || "data referensi lain");
+                        showToast("Produk tidak dapat dihapus. Masih terhubung dengan: " + detail + ". Histori tidak dihapus.");
+                        return;
+                    }
+                } else {
+                    const msg = res.status === 403
+                        ? "Tidak punya izin menghapus produk"
+                        : ((data.message || data.error) ? (data.message || data.error) : ("HTTP " + res.status));
+                    showToast("Gagal hapus produk: " + msg);
+                    return;
+                }
             }
-            const deleted = Array.isArray(r.data) ? r.data : (r.data ? [r.data] : []);
+
+            const deletedPayload = res.data && res.data.data;
+            const deleted = Array.isArray(deletedPayload) ? deletedPayload : (deletedPayload ? [deletedPayload] : []);
             if (deleted.length === 0) {
                 showToast("Produk tidak ditemukan atau sudah dihapus");
                 await initSupabaseData(true);
