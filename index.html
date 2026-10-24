@@ -4089,7 +4089,7 @@
             ensureOrdersPolling();
             // Pastikan data (produk POS, dll.) di-load SETELAH auth tersedia,
             // agar tidak bergantung pada fetch sebelum login yang gagal (401).
-            initSupabaseData();
+            initSupabaseData(true);
         }
 
         function hasPrivilege(priv) {
@@ -4352,6 +4352,7 @@
 
         async function initSupabaseData(force) {
             if (dataLoading) return;
+            if (!currentUser) return;
             if (productsLoaded && !force) return;
             // Jangan fetch sebelum auth (token belum ada) → tunggu login/restore.
             if (JUWITA_AUTH_MODE === "auth" && !localStorage.getItem(JUWITA_TOKEN_KEY)) return;
