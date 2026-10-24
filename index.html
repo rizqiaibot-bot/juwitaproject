@@ -2220,7 +2220,7 @@
 
 
 
-                <li class="nav-item"><a href="marketplace.html"><i class="fas fa-store"></i> Marketplace</a></li>
+                <li class="nav-item" data-marketplace-nav="1"><a href="marketplace.html"><i class="fas fa-store"></i> Marketplace</a></li>
                 <li class="nav-item" data-page="pengaturan" data-menu-group="pengaturan"><a href="#"><i class="fas fa-cog"></i> Pengaturan</a></li>
             </ul>
 
@@ -3759,7 +3759,7 @@
                 <label>Harga Shopee 2 &mdash; juwita frozen food</label>
                 <input type="number" id="ppShopee2" class="form-control" min="0" step="1" inputmode="numeric" />
             </div>
-            <div style="color:var(--text-muted);font-size:0.72rem;line-height:1.5;margin-bottom:4px;">Harga POS di sini TIDAK mengubah <code>products.price</code>. Hanya owner atau pengguna dengan izin Edit Harga Pricing yang dapat menyimpan.</div>
+            <div style="color:var(--text-muted);font-size:0.72rem;line-height:1.5;margin-bottom:4px;">Harga POS di sini TIDAK mengubah <code>products.price</code>. Pengguna dengan akses menu Pricing dapat menyimpan.</div>
             <div style="display:flex;gap:10px;margin-top:16px;">
                 <button id="ppSave" class="close-modal-btn" style="flex:2;background:var(--primary-gradient);" onclick="saveProductPrices()">Simpan</button>
                 <button class="close-modal-btn" style="flex:1;background:var(--text-muted);" onclick="closeProductPriceModal()">Tutup</button>
@@ -4082,7 +4082,7 @@
             renderUserUI();
             filterMenuByRole();
             const deepGroup = pageMenuGroup(JUWITA_DEEP_PAGE);
-            const avail = (JUWITA_DEEP_PAGE && deepGroup && currentUser.menus.includes(deepGroup))
+            const avail = (JUWITA_DEEP_PAGE && deepGroup && getMenuPermissions(deepGroup))
                 ? JUWITA_DEEP_PAGE
                 : (currentUser.menus[0] || "pos");
             showPage(avail);
@@ -4207,7 +4207,7 @@
             renderUserUI();
             filterMenuByRole();
             const deepGroup = pageMenuGroup(JUWITA_DEEP_PAGE);
-            const avail = (JUWITA_DEEP_PAGE && deepGroup && currentUser.menus && currentUser.menus.includes(deepGroup))
+            const avail = (JUWITA_DEEP_PAGE && deepGroup && getMenuPermissions(deepGroup))
                 ? JUWITA_DEEP_PAGE
                 : ((currentUser.menus && currentUser.menus[0]) || "pos");
             showPage(avail);
@@ -4357,48 +4357,63 @@
             if (JUWITA_AUTH_MODE === "auth" && !localStorage.getItem(JUWITA_TOKEN_KEY)) return;
             dataLoading = true;
             renderProducts(currentSearch, posCategory);
+            const empty = { data: [], error: null };
             try {
                 const [pRes, oRes, kRes, wRecRes, wRackRes, wOpRes, oiRes] = await Promise.all([
-                    fetchAllProducts(),
-                    fetchAllOrders(),
-                    sb.from('karyawan').select('*'),
-                    sb.from('warehouse_receiving').select('*').order('received_date', { ascending: false }),
-                    sb.from('warehouse_racks').select('*'),
-                    sb.from('warehouse_opname').select('*').order('session_date', { ascending: false }),
-                    fetchAllOrderItems()
+                    canReadProducts() ? fetchAllProducts() : Promise.resolve(empty),
+                    canReadOrders() ? fetchAllOrders() : Promise.resolve(empty),
+                    canReadAppUsers() ? sb.from('karyawan').select('*') : Promise.resolve(empty),
+                    canReadWarehouse() ? sb.from('warehouse_receiving').select('*').order('received_date', { ascending: false }) : Promise.resolve(empty),
+                    canReadWarehouse() ? sb.from('warehouse_racks').select('*') : Promise.resolve(empty),
+                    canReadWarehouse() ? sb.from('warehouse_opname').select('*').order('session_date', { ascending: false }) : Promise.resolve(empty),
+                    canReadOrders() ? fetchAllOrderItems() : Promise.resolve(empty)
                 ]);
-                if (pRes.data != null) { products = pRes.data; productsLoaded = true; }
-                if (oRes.data && oRes.data.length > 0) ordersData = oRes.data.map(mapOrderRowToView);
-                if (kRes.data && kRes.data.length > 0) karyawanData = kRes.data;
-                if (wRecRes.data && wRecRes.data.length > 0) warehouseReceiving = wRecRes.data;
-                if (wRackRes.data && wRackRes.data.length > 0) warehouseRacks = wRackRes.data;
-                if (wOpRes.data && wOpRes.data.length > 0) warehouseOpname = wOpRes.data;
-                if (oiRes.data && oiRes.data.length > 0) orderItemsData = oiRes.data;
-                // Muat edit absensi (jika tabel sudah dibuat via migration)
-                try {
-                    const attRes = await sb.from('attendance_records').select('*');
-                    if (attRes.data && attRes.data.length > 0) {
-                        attRes.data.forEach(r => {
-                            const p = String(r.tanggal || "").split("-");
-                            if (p.length !== 3) return;
-                            const y = parseInt(p[0], 10), m = parseInt(p[1], 10) - 1, d = parseInt(p[2], 10);
-                            attendanceEdits[`${y}|${m}|${d}|${r.karyawan}`] = { status: r.status || "H", jenis: r.jenis || null };
-                        });
-                    }
-                } catch (attErr) {
-                    console.warn("Supabase: attendance_records belum tersedia (jalankan migration)", attErr.message);
+                if (canReadProducts()) {
+                    if (pRes.data != null) { products = pRes.data; productsLoaded = true; }
+                } else {
+                    products = [];
+                    productsLoaded = true;
                 }
-                if (pRes.error || oRes.error || wRecRes.error || wRackRes.error || wOpRes.error) {
+                ordersData = (canReadOrders() && oRes.data && oRes.data.length > 0) ? oRes.data.map(mapOrderRowToView) : [];
+                orderItemsData = (canReadOrders() && oiRes.data && oiRes.data.length > 0) ? oiRes.data : [];
+                karyawanData = (canReadAppUsers() && kRes.data && kRes.data.length > 0) ? kRes.data : [];
+                warehouseReceiving = (canReadWarehouse() && wRecRes.data && wRecRes.data.length > 0) ? wRecRes.data : [];
+                warehouseRacks = (canReadWarehouse() && wRackRes.data && wRackRes.data.length > 0) ? wRackRes.data : [];
+                warehouseOpname = (canReadWarehouse() && wOpRes.data && wOpRes.data.length > 0) ? wOpRes.data : [];
+                // Muat edit absensi hanya untuk HR/owner.
+                if (canReadHrData()) {
+                    try {
+                        const attRes = await sb.from('attendance_records').select('*');
+                        if (attRes.data && attRes.data.length > 0) {
+                            attRes.data.forEach(r => {
+                                const p = String(r.tanggal || "").split("-");
+                                if (p.length !== 3) return;
+                                const y = parseInt(p[0], 10), m = parseInt(p[1], 10) - 1, d = parseInt(p[2], 10);
+                                attendanceEdits[`${y}|${m}|${d}|${r.karyawan}`] = { status: r.status || "H", jenis: r.jenis || null };
+                            });
+                        }
+                    } catch (attErr) {
+                        console.warn("Supabase: attendance_records belum tersedia (jalankan migration)", attErr.message);
+                    }
+                }
+                if (canReadWarehouse() && (wRecRes.error || wRackRes.error || wOpRes.error)) {
                     seedWarehouseData();
                 }
                 console.log("Supabase: data loaded");
             } catch (err) {
                 console.warn("Supabase: using local data fallback", err.message);
-                seedWarehouseData();
             }
             dataLoading = false;
-            // Harga per channel (product_prices) — gagal baca tidak menghentikan UI.
-            await ensureProductPricesLoaded(true);
+            // Harga per channel hanya untuk menu yang berhak.
+            if (canReadProductPrices()) {
+                await ensureProductPricesLoaded(true);
+            } else {
+                productPrices = {};
+                productPricesLoaded = false;
+                productPricesError = "";
+                renderJualChannelNotice();
+                renderPricingTables();
+            }
             populateMutasiStokProducts();
             refreshAllUI();
         }
@@ -4499,14 +4514,14 @@
         // Tidak mulai jika belum ada user login (session gate).
         function ensureOrdersPolling() {
             if (ordersRefreshTimer !== null) return;
-            if (!currentUser) return;
+            if (!currentUser || !canReadOrders()) return;
             ordersRefreshTimer = setInterval(refreshOrdersLight, 30000);
         }
 
         // Polling hanya boleh jalan setelah sesi authenticated. Auth memakai
         // session Supabase aktif (client sb) — tanpa service-role key/secret.
         async function isOrdersPollAllowed() {
-            return !!currentUser;
+            return !!currentUser && canReadOrders();
         }
 
         async function refreshOrdersLight() {
@@ -4572,7 +4587,47 @@
         // ============================================================
         function getMenuPermissions(menuGroup) {
             if (!currentUser) return false;
+            if (isActiveOwner()) return true;
             return currentUser.menus.includes(menuGroup);
+        }
+
+        function hasAnyMenu(menus) {
+            if (!currentUser || !Array.isArray(currentUser.menus)) return false;
+            return menus.some(function (m) { return currentUser.menus.includes(m); });
+        }
+
+        function isActiveOwner() {
+            return !!(currentUser &&
+                String(currentUser.role || "").toLowerCase() === "owner" &&
+                String(currentUser.status || "").toUpperCase() === "ACTIVE");
+        }
+
+        function canReadProducts() {
+            return isActiveOwner() || hasAnyMenu(["pos", "penjualan", "katalog", "persediaan", "pembelian", "gudang", "pricing"]);
+        }
+
+        function canReadOrders() {
+            return isActiveOwner() || hasAnyMenu(["pos", "penjualan", "gudang"]);
+        }
+
+        function canReadProductPrices() {
+            return isActiveOwner() || hasAnyMenu(["pos", "pricing"]);
+        }
+
+        function canReadWarehouse() {
+            return isActiveOwner() || getMenuPermissions("gudang");
+        }
+
+        function canReadAppUsers() {
+            return isActiveOwner() || hasAnyMenu(["hr", "pengaturan"]);
+        }
+
+        function canReadHrData() {
+            return isActiveOwner() || getMenuPermissions("hr");
+        }
+
+        function canReadMarketplace() {
+            return isActiveOwner() || hasAnyMenu(["pengaturan", "penjualan", "katalog", "gudang", "persediaan", "pricing"]);
         }
 
         function filterMenuByRole() {
@@ -4599,6 +4654,11 @@
                 els.forEach(el => {
                     el.style.display = hasAccess ? "" : "none";
                 });
+            });
+
+            const marketplaceNav = document.querySelectorAll("[data-marketplace-nav]");
+            marketplaceNav.forEach(el => {
+                el.style.display = canReadMarketplace() ? "" : "none";
             });
         }
 
@@ -4725,8 +4785,6 @@
         // MANAJEMEN KARYAWAN (app_users) — HANYA OWNER/Super Admin
         // ============================================================
         const APP_MENU_KEYS = ["pos", "penjualan", "katalog", "persediaan", "pembelian", "gudang", "pricing", "akuntansi", "hr", "pengaturan"];
-        // Izin aksi tambahan, disimpan di kolom menus yang sudah ada (bukan menu halaman).
-        const PRICING_EDIT_PERMISSION = "pricing.edit";
         const APP_MENU_LABELS = { pos: "POS", penjualan: "Penjualan", katalog: "Katalog", persediaan: "Persediaan", pembelian: "Pembelian", gudang: "Gudang", pricing: "Pricing", akuntansi: "Akuntansi", hr: "HR", pengaturan: "Pengaturan" };
         const APP_ROLES = [
             { value: "kasir", label: "Kasir" },
@@ -4791,9 +4849,7 @@
                     const chips = APP_MENU_KEYS.map(function (m) {
                         const on = Array.isArray(emp.menus) && emp.menus.indexOf(m) !== -1;
                         return '<span class="menu-chip-edit' + (on ? " active" : "") + '" style="cursor:default;">' + APP_MENU_LABELS[m] + "</span>";
-                    }).join("") + ((Array.isArray(emp.menus) && emp.menus.indexOf(PRICING_EDIT_PERMISSION) !== -1)
-                        ? '<span class="menu-chip-edit active" style="cursor:default;">Edit Harga Pricing</span>'
-                        : "");
+                    }).join("");
                     const roleTag = emp.role_label || emp.role || "";
                     return '<div class="account-card">' +
                         '<div class="account-header">' +
@@ -4956,10 +5012,6 @@
             if (!name) { if (errEl) errEl.textContent = "Nama lengkap wajib diisi"; return; }
             if (!role) { if (errEl) errEl.textContent = "Role/Jabatan wajib dipilih"; return; }
             if (!menus.length) { if (errEl) errEl.textContent = "Pilih minimal satu hak akses menu"; return; }
-            if (menus.includes(PRICING_EDIT_PERMISSION) && !menus.includes("pricing")) {
-                if (errEl) errEl.textContent = "Izin Edit Harga Pricing memerlukan akses menu Pricing";
-                return;
-            }
             if (!empEditingId) {
                 if (!/^\d{10,13}$/.test(phone)) { if (errEl) errEl.textContent = "Nomor HP tidak valid"; return; }
                 if (pass.length < 6) { if (errEl) errEl.textContent = "Password login awal minimal 6 karakter"; return; }
@@ -4991,13 +5043,10 @@
                 if (appEmployees.some(function (e) { return String(e.id) !== String(empEditingId) && String(e.phone || "") === String(phone || ""); })) {
                     if (errEl) errEl.textContent = "Nomor HP sudah digunakan karyawan lain"; return;
                 }
-                const payload = { full_name: name, phone: phone, role: role, role_label: roleLabel, menus: menus, status: status };
+                let payload = { full_name: name, phone: phone, role: role, role_label: roleLabel, menus: menus, status: status };
                 if (editing && String(editing.role || "").toLowerCase() === "owner") {
-                    // Owner tidak bisa diubah status/role/menus/phone lewat UI → cegah lockout.
-                    payload.role = editing.role;
-                    payload.status = editing.status;
-                    payload.menus = editing.menus;
-                    payload.phone = editing.phone;
+                    // Owner hanya boleh diubah namanya lewat UI; field sensitif tidak dikirim.
+                    payload = { full_name: name };
                 }
                 const { error } = await sb.from("app_users").update(payload).eq("id", empEditingId);
                 if (error) { if (errEl) errEl.textContent = "Gagal simpan: " + error.message; return; }
@@ -6072,7 +6121,7 @@
             if (sg) sg.style.display = "";
             ["newProdName","newProdSKU","newProdModal","newProdPrice","newProdStock","newProdLength","newProdWidth","newProdHeight","newProdWeight","newProdBarcode","newProdPLU","newProdShopeeId","newProdShopeeSku"].forEach(id => {
                 const el = document.getElementById(id);
-                if (el) el.value = "";
+                if (el) { el.value = ""; el.disabled = false; }
             });
             const catEl = document.getElementById("newProdCat");
             if (catEl) catEl.value = "Frozen Food";
@@ -6092,7 +6141,10 @@
             document.getElementById("newProdName").value = p.name || "";
             document.getElementById("newProdSKU").value = p.sku || "";
             document.getElementById("newProdCat").value = p.category || "Frozen Food";
-            document.getElementById("newProdModal").value = p.modal || 0;
+            const modalEl = document.getElementById("newProdModal");
+            modalEl.value = p.modal || 0;
+            modalEl.disabled = true;
+            modalEl.title = "Modal hanya dapat diubah melalui Pembelian/Penerimaan";
             const supEl = document.getElementById("newProdSupplier");
             if (supEl) supEl.value = p.supplier || "";
             document.getElementById("newProdBarcode").value = p.barcode || "";
@@ -6176,7 +6228,7 @@
         }
 
         async function syncKaryawanRealtime() {
-            if (JUWITA_AUTH_MODE !== "auth") return false;
+            if (JUWITA_AUTH_MODE !== "auth" || !canReadAppUsers()) return false;
             try {
                 const { data, error } = await sb.from("app_users").select("*").order("created_at", { ascending: true });
                 if (!error && data && data.length) {
@@ -6405,15 +6457,12 @@
                 String(currentUser.status || "").toUpperCase() === "ACTIVE");
         }
 
-        // Izin edit Pricing: owner aktif ATAU karyawan aktif dengan izin
-        // "pricing.edit" yang tersimpan di menus (dibaca dari /api/auth/me).
+        // Izin edit Pricing: owner aktif ATAU karyawan aktif dengan menu "pricing".
         function canEditPricing() {
             if (!currentUser) return false;
             if (String(currentUser.status || "").toUpperCase() !== "ACTIVE") return false;
             if (String(currentUser.role || "").toLowerCase() === "owner") return true;
-            return Array.isArray(currentUser.menus) &&
-                currentUser.menus.includes("pricing") &&
-                currentUser.menus.includes(PRICING_EDIT_PERMISSION);
+            return Array.isArray(currentUser.menus) && currentUser.menus.includes("pricing");
         }
 
         // Harga hanya bisa diedit jika punya izin edit Pricing DAN harga termuat.
@@ -6494,7 +6543,7 @@
                         : `<strong>Rp ${cur.toLocaleString('id-ID')}</strong>`);
                 const btnHtml = canEdit
                     ? `<button class="aksi-btn" onclick="savePriceChannelRow('${p.id}', this)" title="Simpan ${ch.label}"><i class="fas fa-save"></i></button>`
-                    : '<span style="color:var(--text-muted);font-size:0.72rem;" title="Hanya owner atau pengguna dengan izin Edit Harga Pricing">&#8212;</span>';
+                    : '<span style="color:var(--text-muted);font-size:0.72rem;" title="Perlu akses menu Pricing">&#8212;</span>';
                 return `<tr>
                             <td><strong>${ppEscapeHtml(p.name)}</strong>${p.sku ? ` <span style="color:var(--text-muted);font-size:0.7rem;">· ${ppEscapeHtml(p.sku)}</span>` : ""}</td>
                             <td>Rp ${(p.modal || 0).toLocaleString('id-ID')}</td>
@@ -6594,6 +6643,14 @@
                 if (!force) return; // hasil fetch yang sedang jalan sudah dipakai
             }
             if (productPricesLoaded && !force) return;
+            if (!canReadProductPrices()) {
+                productPrices = {};
+                productPricesLoaded = false;
+                productPricesError = "";
+                renderJualChannelNotice();
+                renderPricingTables();
+                return;
+            }
             if (!localStorage.getItem(JUWITA_TOKEN_KEY)) {
                 productPricesError = "Belum login.";
                 productPricesLoaded = false;
@@ -6737,7 +6794,7 @@
                     <td>${pricingPriceCell(p, 'pos')}</td>
                     <td>${pricingPriceCell(p, 'shopee:724153261')}</td>
                     <td>${pricingPriceCell(p, 'shopee:1214362884')}</td>
-                    <td>${canEdit ? `<button class="aksi-btn" onclick="openProductPriceModal('${p.id}')"><i class="fas fa-pen"></i> Edit</button>` : '<span style="color:var(--text-muted);font-size:0.7rem;" title="Hanya owner atau pengguna dengan izin Edit Harga Pricing">Read-only</span>'}</td>
+                    <td>${canEdit ? `<button class="aksi-btn" onclick="openProductPriceModal('${p.id}')"><i class="fas fa-pen"></i> Edit</button>` : '<span style="color:var(--text-muted);font-size:0.7rem;" title="Perlu akses menu Pricing">Read-only</span>'}</td>
                 </tr>`).join('');
             } else {
                 body.innerHTML = page.map(p => `<tr>
@@ -6959,35 +7016,8 @@
         }
 
         async function submitReceiving() {
-            const po = document.getElementById("recPO").value.trim();
-            const pid = parseInt(document.getElementById("recProduct").value);
-            const prod = products.find(p => p.id === pid);
-            const supplier = document.getElementById("recSupplier").value;
-            const qty = parseInt(document.getElementById("recQty").value) || 0;
-            const date = document.getElementById("recDate").value || new Date().toISOString().slice(0, 10);
-            const notes = document.getElementById("recNotes").value.trim();
-            if (!pid || !qty) { showToast("Isi produk dan jumlah"); return; }
-
-            const record = {
-                id: warehouseReceiving.length ? Math.max(...warehouseReceiving.map(r => r.id)) + 1 : 1,
-                po_number: po || ("PO-" + Date.now().toString(36).toUpperCase()),
-                product_id: pid, product_name: prod ? prod.name : '', supplier, quantity: qty,
-                received_date: date, notes
-            };
-            warehouseReceiving.unshift(record);
-
-            if (prod) {
-                prod.stock += qty;
-                prod.maxStock = Math.max(prod.maxStock || 0, prod.stock * 2);
-                // Backend /api/data/products PATCH mencatat stock_mutation otomatis.
-                sb.from('products').update({ stock: prod.stock, maxStock: prod.maxStock }).eq('id', pid);
-            }
-            sb.from('warehouse_receiving').insert(record).then(r => { if (r.error) console.warn(r.error.message); });
-
-            renderWarehouseReceiving();
-            renderProducts(); renderCatalogTable(); renderMonitorStok();
-            document.getElementById("recPO").value = ""; document.getElementById("recQty").value = "";
-            showToast(`Penerimaan ${prod?prod.name:''} +${qty} dicatat`);
+            // Penerimaan stok harus melalui PO agar tervalidasi dan tercatat di mutasi stok.
+            showToast("Gunakan Gudang → Penerimaan PO untuk mencatat penerimaan");
         }
 
         function populateRecForm() {
@@ -7147,15 +7177,14 @@
         async function markPicked(orderId) {
             const o = ordersData.find(x => x.orderId === orderId);
             if (!o) return;
-            const pickedAt = new Date().toISOString();
-            const pickedBy = currentUserName();
-            const { error } = await sb.from('orders')
-                .update({ wmsstatus: 'Dipick', picked_at: pickedAt, picked_by: pickedBy })
-                .eq('orderid', orderId);
+            const { data, error } = await sb.rpc('record_warehouse_action', {
+                p_order_id: orderId, p_action: 'pick'
+            });
             if (error) { showToast("Gagal menandai dipick: " + error.message); return; }
-            o.wmsStatus = 'Dipick';
-            o.picked_at = pickedAt;
-            o.picked_by = pickedBy;
+            if (data && data.status !== 'ok') { showToast(data.message || "Gagal menandai dipick"); return; }
+            o.wmsStatus = (data && data.wmsstatus) ? data.wmsstatus : 'Dipick';
+            o.picked_at = (data && data.picked_at) ? data.picked_at : new Date().toISOString();
+            o.picked_by = (data && data.picked_by) ? data.picked_by : currentUserName();
             renderWarehousePicking();
             renderWarehousePacking();
             showToast(`${orderId} ditandai sudah dipick`);
@@ -7199,9 +7228,12 @@
         async function markPacking(orderId) {
             const o = ordersData.find(x => x.orderId === orderId);
             if (!o) return;
-            const { error } = await sb.from('orders').update({ wmsstatus: 'Packing' }).eq('orderid', orderId);
+            const { data, error } = await sb.rpc('record_warehouse_action', {
+                p_order_id: orderId, p_action: 'packing'
+            });
             if (error) { showToast("Gagal mulai packing: " + error.message); return; }
-            o.wmsStatus = 'Packing';
+            if (data && data.status !== 'ok') { showToast(data.message || "Gagal mulai packing"); return; }
+            o.wmsStatus = (data && data.wmsstatus) ? data.wmsstatus : 'Packing';
             renderWarehousePacking();
             showToast(`${orderId} mulai dipacking`);
         }
@@ -7399,17 +7431,24 @@
             const zone = document.getElementById("opnameZone").value;
             const officer = document.getElementById("opnameOfficer").value.trim();
             if (!officer) { showToast("Isi nama petugas"); return; }
-            const session = {
-                id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36),
-                zone, officer, status: 'open'
-            };
-            warehouseOpname.push(session);
-            const { error } = await sb.from('warehouse_opname').insert(session);
-            if (error) { showToast("Gagal mulai opname: " + error.message); return; }
-            session.created_at = new Date().toISOString();
-            renderWarehouseOpnameList();
-            document.getElementById("opnameOfficer").value = "";
-            showToast(`Sesi opname ${zone} dimulai`);
+            if (!zone) { showToast("Pilih zona opname"); return; }
+            try {
+                const res = await apiFetch("/api/gudang/opname", {
+                    method: "POST",
+                    body: { zone: zone }
+                });
+                if (!res.ok) {
+                    const msg = (res.data && (res.data.message || res.data.error)) ? (res.data.message || res.data.error) : ("HTTP " + res.status);
+                    throw new Error(msg);
+                }
+                const session = (res.data && res.data.data) || {};
+                warehouseOpname.push(session);
+                renderWarehouseOpnameList();
+                document.getElementById("opnameOfficer").value = "";
+                showToast(`Sesi opname ${zone} dimulai`);
+            } catch (err) {
+                showToast("Gagal mulai opname: " + (err && err.message ? err.message : "gagal"));
+            }
         }
 
         async function finishOpname(id) {
@@ -9544,7 +9583,7 @@
             // Permission check
             if (currentUser) {
                 const group = pageMenuGroup(pageId);
-                if (group && !currentUser.menus.includes(group)) {
+                if (group && !getMenuPermissions(group)) {
                     showToast("Akses ditolak untuk menu ini");
                     return;
                 }
@@ -9814,7 +9853,7 @@
 
                 // EDIT MODE — Katalog hanya ubah master data/spesifikasi (tanpa harga jual & stok).
                 if (editingProductId != null) {
-                    if (!name || isNaN(modal)) { showToast("Isi semua field wajib"); return; }
+                    if (!name) { showToast("Isi nama produk"); return; }
                     const finalSku = sku || ("SKU" + String(editingProductId).padStart(4, "0"));
                     // Kecualikan produk yang sedang diedit (bandingkan sebagai string agar
                     // aman dari selisih tipe number/string).
@@ -9822,7 +9861,7 @@
                         showToast(`SKU "${finalSku}" sudah digunakan`);
                         return;
                     }
-                    const updates = { name, sku: finalSku, category: cat, modal, supplier, barcode: barcode || null, plu, shopee_item_id, shopee_sku };
+                    const updates = { name, sku: finalSku, category: cat, supplier, barcode: barcode || null, plu, shopee_item_id, shopee_sku };
                     // Hanya kirim foto bila pengguna memilih foto baru; jika tidak,
                     // field imageicon tidak disentuh agar foto lama tetap tersimpan.
                     if (pendingPhotoData !== null) updates.imageicon = pendingPhotoData;
@@ -10090,7 +10129,7 @@
                 // --- DEFAULT PAGE ---
                 if (currentUser) {
                     const deepGroup = pageMenuGroup(JUWITA_DEEP_PAGE);
-                    const available = (JUWITA_DEEP_PAGE && deepGroup && currentUser.menus.includes(deepGroup))
+                    const available = (JUWITA_DEEP_PAGE && deepGroup && getMenuPermissions(deepGroup))
                         ? JUWITA_DEEP_PAGE
                         : (currentUser.menus[0] || "pos");
                     showPage(available);
@@ -10969,42 +11008,49 @@
             const p = purchasesData.find(x => Number(x.id) === Number(purchaseId));
             if (!p) return;
             const items = purchaseItemsData.filter(i => Number(i.purchase_id) === Number(purchaseId));
-            let receivedAny = false;
+            const payload = [];
 
             for (const it of items) {
                 const el = document.getElementById("penerimaanQty_" + it.id);
                 const q = parseInt(el ? el.value : "0") || 0;
                 const remaining = (Number(it.qty) || 0) - (Number(it.qty_received) || 0);
-                if (q <= 0 || q > remaining) continue;
-
-                const prod = products.find(pr => Number(pr.id) === Number(it.product_id));
-                if (prod) {
-                    const after = (Number(prod.stock) || 0) + q;
-                    // Backend /api/data/products PATCH mencatat stock_mutation otomatis.
-                    await sb.from('products').update({ stock: after, modal: Number(it.harga_beli) || 0 }).eq('id', it.product_id);
-                    prod.stock = after;
-                    prod.modal = Number(it.harga_beli) || 0;
+                if (q <= 0) continue;
+                if (q > remaining) {
+                    showToast("Jumlah terima melebihi sisa untuk " + (it.product_name || "item"));
+                    return;
                 }
-                await sb.from('purchase_items').update({ qty_received: (Number(it.qty_received) || 0) + q }).eq('id', it.id);
-                it.qty_received = (Number(it.qty_received) || 0) + q;
-                receivedAny = true;
+                payload.push({ purchase_item_id: it.id, qty: q });
             }
-            if (!receivedAny) { showToast("Isi jumlah terima yang valid"); return; }
+            if (!payload.length) { showToast("Isi jumlah terima yang valid"); return; }
 
-            const allReceived = items.every(i => (Number(i.qty_received) || 0) >= (Number(i.qty) || 0));
-            const someReceived = items.some(i => (Number(i.qty_received) || 0) > 0);
-            let newRecvStatus = "Belum";
-            if (allReceived) newRecvStatus = "Diterima";
-            else if (someReceived) newRecvStatus = "Sebagian";
-            await sb.from('purchases').update({ receiving_status: newRecvStatus }).eq('id', purchaseId);
-            p.receiving_status = newRecvStatus;
-
-            showToast("Penerimaan dicatat");
-            renderMonitorStok();
-            renderCatalogTable();
-            closePenerimaanDetail();
-            renderPenerimaan();
-            await loadPembelian();
+            try {
+                const res = await apiFetch("/api/gudang/purchases/" + encodeURIComponent(purchaseId) + "/receive", {
+                    method: "POST",
+                    body: { items: payload }
+                });
+                if (!res.ok) {
+                    const msg = (res.data && (res.data.message || res.data.error)) ? (res.data.message || res.data.error) : ("HTTP " + res.status);
+                    throw new Error(msg);
+                }
+                const result = (res.data && res.data.data) || {};
+                for (const row of (result.received || [])) {
+                    const it = purchaseItemsData.find(x => Number(x.id) === Number(row.purchase_item_id));
+                    if (it) {
+                        it.qty_received = (Number(it.qty_received) || 0) + Number(row.qty || 0);
+                        const prod = products.find(pr => Number(pr.id) === Number(row.product_id));
+                        if (prod) prod.stock = Number(row.qty_after);
+                    }
+                }
+                p.receiving_status = result.receiving_status || p.receiving_status;
+                showToast("Penerimaan dicatat");
+                renderMonitorStok();
+                renderCatalogTable();
+                closePenerimaanDetail();
+                renderPenerimaan();
+                await loadPembelian();
+            } catch (err) {
+                showToast("Gagal mencatat penerimaan: " + (err && err.message ? err.message : "gagal"));
+            }
         }
 
         // ============================================================
@@ -11201,13 +11247,6 @@
                         <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="hr" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />HR</label>
                         <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="pengaturan" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />Pengaturan</label>
                     </div>
-                </div>
-                <div>
-                    <label style="font-weight:700;font-size:0.78rem;color:var(--text-primary);">Izin Aksi</label>
-                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
-                        <label class="menu-chip-edit"><input type="checkbox" name="empMenu" value="pricing.edit" style="margin-right:4px;" onchange="this.parentElement.classList.toggle('active',this.checked)" />Edit Harga Pricing</label>
-                    </div>
-                    <div style="font-size:0.62rem;color:var(--text-muted);margin-top:5px;">Memerlukan akses menu Pricing. Tidak memberikan role Owner atau akses menu lain.</div>
                 </div>
                 <div id="empError" style="color:var(--danger);font-size:0.74rem;min-height:14px;"></div>
             </div>

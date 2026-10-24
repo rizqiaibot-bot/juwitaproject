@@ -463,9 +463,9 @@
     </div>
 
     <ul class="nav-menu-horizontal" id="navMenu">
-      <li class="nav-item" data-page="pos"><a href="index.html?page=pos"><i class="fas fa-cash-register"></i> POS</a></li>
+      <li class="nav-item" data-page="pos" data-menu-group="pos"><a href="index.html?page=pos"><i class="fas fa-cash-register"></i> POS</a></li>
       <!-- PENJUALAN -->
-      <li class="dropdown">
+      <li class="dropdown" data-menu-group="penjualan">
         <a href="#"><i class="fas fa-chart-line"></i> Penjualan <i class="fas fa-chevron-down"></i></a>
         <ul class="dropdown-menu">
           <li data-page="daftar-penjualan"><a href="index.html?page=daftar-penjualan"><i class="fas fa-list"></i> Daftar Penjualan</a></li>
@@ -474,7 +474,7 @@
         </ul>
       </li>
       <!-- KATALOG -->
-      <li class="dropdown">
+      <li class="dropdown" data-menu-group="katalog">
         <a href="#"><i class="fas fa-book"></i> Katalog <i class="fas fa-chevron-down"></i></a>
         <ul class="dropdown-menu">
           <li data-page="daftar-produk"><a href="index.html?page=daftar-produk"><i class="fas fa-list"></i> Daftar Produk</a></li>
@@ -482,7 +482,7 @@
         </ul>
       </li>
       <!-- PERSEDIAAN -->
-      <li class="dropdown">
+      <li class="dropdown" data-menu-group="persediaan">
         <a href="#"><i class="fas fa-boxes-stacked"></i> Persediaan <i class="fas fa-chevron-down"></i></a>
         <ul class="dropdown-menu">
           <li data-page="monitor-stok"><a href="index.html?page=monitor-stok"><i class="fas fa-chart-simple"></i> Monitor Stok</a></li>
@@ -490,14 +490,14 @@
         </ul>
       </li>
       <!-- PEMBELIAN -->
-      <li class="dropdown">
+      <li class="dropdown" data-menu-group="pembelian">
         <a href="#"><i class="fas fa-shopping-cart"></i> Pembelian <i class="fas fa-chevron-down"></i></a>
         <ul class="dropdown-menu">
           <li data-page="data-pembelian"><a href="index.html?page=data-pembelian"><i class="fas fa-database"></i> Data Pembelian</a></li>
         </ul>
       </li>
       <!-- GUDANG -->
-      <li class="dropdown">
+      <li class="dropdown" data-menu-group="gudang">
         <a href="#"><i class="fas fa-warehouse"></i> Gudang <i class="fas fa-chevron-down"></i></a>
         <ul class="dropdown-menu">
           <li data-page="picking"><a href="index.html?page=picking"><i class="fas fa-clipboard-list"></i> Picking</a></li>
@@ -508,7 +508,7 @@
         </ul>
       </li>
       <!-- PRICING -->
-      <li class="dropdown">
+      <li class="dropdown" data-menu-group="pricing">
         <a href="#"><i class="fas fa-tag"></i> Pricing <i class="fas fa-chevron-down"></i></a>
         <ul class="dropdown-menu">
           <li data-page="harga-belanja"><a href="index.html?page=harga-belanja"><i class="fas fa-shopping-bag"></i> Harga Belanja</a></li>
@@ -518,7 +518,7 @@
         </ul>
       </li>
       <!-- HR -->
-      <li class="dropdown">
+      <li class="dropdown" data-menu-group="hr">
         <a href="#"><i class="fas fa-users"></i> HR <i class="fas fa-chevron-down"></i></a>
         <ul class="dropdown-menu">
           <li data-page="karyawan"><a href="index.html?page=karyawan"><i class="fas fa-user-tie"></i> Karyawan</a></li>
@@ -529,8 +529,8 @@
       </li>
 
       <!-- MARKETPLACE (aktif di halaman ini) -->
-      <li class="nav-item active"><a href="marketplace.html"><i class="fas fa-store"></i> Marketplace</a></li>
-      <li class="nav-item" data-page="pengaturan"><a href="index.html?page=pengaturan"><i class="fas fa-cog"></i> Pengaturan</a></li>
+      <li class="nav-item active" data-marketplace-nav="1"><a href="marketplace.html"><i class="fas fa-store"></i> Marketplace</a></li>
+      <li class="nav-item" data-page="pengaturan" data-menu-group="pengaturan"><a href="index.html?page=pengaturan"><i class="fas fa-cog"></i> Pengaturan</a></li>
     </ul>
 
     <div class="nav-actions">
@@ -675,6 +675,72 @@ function makeLocalSb() {
 const SB = makeLocalSb();
 
 // ============================================================
+// IZIN MENU (backend tetap penentu; ini hanya UX)
+// ============================================================
+let currentUser = null;
+
+function hasMenu(menu) {
+  if (!currentUser) return false;
+  if (isActiveOwner()) return true;
+  return Array.isArray(currentUser.menus) && currentUser.menus.includes(menu);
+}
+function hasAnyMenu(menus) {
+  if (!currentUser) return false;
+  if (isActiveOwner()) return true;
+  return Array.isArray(currentUser.menus) && menus.some(function (m) { return currentUser.menus.includes(m); });
+}
+function isActiveOwner() {
+  return !!(currentUser &&
+    String(currentUser.role || "").toLowerCase() === "owner" &&
+    String(currentUser.status || "").toUpperCase() === "ACTIVE");
+}
+function canShopeeAction(action) {
+  if (isActiveOwner()) return true;
+  var map = {
+    "pull-orders": ["penjualan"],
+    "pull-products": ["katalog"],
+    "stock-sync": ["gudang", "persediaan"],
+    "price-sync": ["pricing"],
+    "publish": ["katalog"]
+  };
+  var menus = map[action];
+  return Array.isArray(menus) && hasAnyMenu(menus);
+}
+function canReadStockMutations() {
+  return isActiveOwner() || hasAnyMenu(["gudang", "persediaan", "katalog"]);
+}
+function canReadMarketplace() {
+  return isActiveOwner() || hasAnyMenu(["pengaturan", "penjualan", "katalog", "gudang", "persediaan", "pricing"]);
+}
+
+function applyMarketplacePermissions() {
+  document.querySelectorAll("#navMenu [data-menu-group]").forEach(function (el) {
+    var menu = el.getAttribute("data-menu-group");
+    el.style.display = hasMenu(menu) ? "" : "none";
+  });
+  document.querySelectorAll("[data-marketplace-nav]").forEach(function (el) {
+    el.style.display = canReadMarketplace() ? "" : "none";
+  });
+  var syncBtn = document.getElementById("syncShopeeBtn");
+  if (syncBtn) {
+    var canSync = canShopeeAction("pull-products") || canShopeeAction("pull-orders") || canShopeeAction("stock-sync");
+    syncBtn.style.display = canSync ? "" : "none";
+  }
+  if (!canReadStockMutations()) {
+    ["pendingTableBody", "failedTableBody"].forEach(function (id) {
+      var body = document.getElementById(id);
+      var section = body ? body.closest(".section") : null;
+      if (section) section.style.display = "none";
+    });
+    var summaryCards = document.getElementById("summaryCards");
+    if (summaryCards) {
+      if (summaryCards.children[1]) summaryCards.children[1].style.display = "none";
+      if (summaryCards.children[2]) summaryCards.children[2].style.display = "none";
+    }
+  }
+}
+
+// ============================================================
 // CUTOFF STOCK MUTATIONS — backlog/bug lama (sebelum perbaikan multi-channel
 // 30 Sep 2026 15:55 WIB) TIDAK ditampilkan sebagai pending/failed actionable.
 // Data tetap utuh di DB; hanya tampilan dashboard yang dibatasi.
@@ -746,14 +812,19 @@ async function callEdgeFunction(name, body) {
 // ============================================================
 async function loadSummary() {
   try {
-    var results = await Promise.all([
-      SB.from("marketplace_config").select("id", { count: "exact", head: true }).eq("connection_status", "connected"),
-      SB.from("stock_mutations").select("*").eq("sync_status", "pending"),
-      SB.from("stock_mutations").select("*").eq("sync_status", "failed")
-    ]);
+    var jobs = [
+      SB.from("marketplace_config").select("id", { count: "exact", head: true }).eq("connection_status", "connected")
+    ];
+    if (canReadStockMutations()) {
+      jobs.push(SB.from("stock_mutations").select("*").eq("sync_status", "pending"));
+      jobs.push(SB.from("stock_mutations").select("*").eq("sync_status", "failed"));
+    }
+    var results = await Promise.all(jobs);
     document.getElementById("cardConnected").textContent = results[0].count || 0;
-    document.getElementById("cardPending").textContent = (results[1].data || []).filter(isAfterMutationCutoff).length;
-    document.getElementById("cardFailed").textContent = (results[2].data || []).filter(isAfterMutationCutoff).length;
+    if (canReadStockMutations()) {
+      document.getElementById("cardPending").textContent = (results[1].data || []).filter(isAfterMutationCutoff).length;
+      document.getElementById("cardFailed").textContent = (results[2].data || []).filter(isAfterMutationCutoff).length;
+    }
   } catch (err) {
     console.error("loadSummary:", err);
   }
@@ -784,7 +855,9 @@ async function loadAccounts() {
         '<td>' + statusBadge(r.connection_status) + '</td>' +
         '<td>' + (r.last_sync_at ? formatTime(r.last_sync_at) : "-") + '</td>' +
         '<td><div class="action-group">' +
-          '<button class="btn btn-primary btn-sm" onclick="openConnectModal()"><i class="fas fa-plug"></i> Connect</button>' +
+          (isActiveOwner()
+            ? '<button class="btn btn-primary btn-sm" onclick="openConnectModal()"><i class="fas fa-plug"></i> Connect</button>'
+            : '<span style="color:var(--text-muted);">-</span>') +
         '</div></td>' +
         '</tr>';
     }).join("");
@@ -829,6 +902,7 @@ async function loadActivity() {
 // ============================================================
 async function loadPendingMutations() {
   var tbody = document.getElementById("pendingTableBody");
+  if (!canReadStockMutations()) return;
   try {
     var res = await SB.from("stock_mutations").select("*").eq("sync_status", "pending").order("created_at", { ascending: false }).limit(20);
     if (res.error) {
@@ -861,6 +935,7 @@ async function loadPendingMutations() {
 // ============================================================
 async function loadFailedMutations() {
   var tbody = document.getElementById("failedTableBody");
+  if (!canReadStockMutations()) return;
   try {
     var res = await SB.from("stock_mutations").select("*").eq("sync_status", "failed").order("created_at", { ascending: false }).limit(20);
     if (res.error) {
@@ -881,7 +956,9 @@ async function loadFailedMutations() {
         '<td><strong>' + (r.qty_after != null ? r.qty_after : "-") + '</strong></td>' +
         '<td>' + (r.shopee_account || "-") + '</td>' +
         '<td>' + statusBadge("failed") + '</td>' +
-        '<td><button class="btn btn-warning btn-sm" onclick="retryMutation(\'' + r.id + '\')"><i class="fas fa-redo"></i> Retry</button></td>' +
+        '<td>' + (canShopeeAction("stock-sync")
+          ? '<button class="btn btn-warning btn-sm" onclick="retryMutation(\'' + r.id + '\')"><i class="fas fa-redo"></i> Retry</button>'
+          : '<span style="color:var(--text-muted);">-</span>') + '</td>' +
         '</tr>';
     }).join("");
   } catch (err) {
@@ -893,6 +970,7 @@ async function loadFailedMutations() {
 // OPEN CONNECT MODAL
 // ============================================================
 function openConnectModal() {
+  if (!isActiveOwner()) { showToast("Hanya owner yang dapat menghubungkan Shopee", "error"); return; }
   document.getElementById("inputShopId").value = "";
   document.getElementById("inputAccessToken").value = "";
   document.getElementById("inputRefreshToken").value = "";
@@ -902,6 +980,7 @@ function closeConnectModal() {
   document.getElementById("connectModal").classList.remove("active");
 }
 async function connectShopee() {
+  if (!isActiveOwner()) { showToast("Hanya owner yang dapat mengatur koneksi Shopee", "error"); return; }
   var shopId = document.getElementById("inputShopId").value.trim();
   var accessToken = document.getElementById("inputAccessToken").value.trim();
   var refreshToken = document.getElementById("inputRefreshToken").value.trim();
@@ -929,6 +1008,7 @@ async function connectShopee() {
 // OAUTH: AUTHORIZE SHOPEE (redirect ke Shopee Production)
 // ============================================================
 async function authorizeShopee() {
+  if (!isActiveOwner()) { showToast("Hanya owner yang dapat menghubungkan Shopee", "error"); return; }
   showLoading("authorizeBtn");
   try {
     var result = await callEdgeFunction("shopee-connect", { action: "authorize" });
@@ -947,6 +1027,7 @@ async function authorizeShopee() {
 // OAUTH: CALLBACK (halaman menerima ?code=&shop_id= dari Shopee)
 // ============================================================
 function handleOAuthCallback() {
+  if (!isActiveOwner()) return;
   var params = new URLSearchParams(window.location.search);
   var code = params.get("code");
   var shopId = params.get("shop_id");
@@ -1019,11 +1100,16 @@ async function syncShopee() {
     }
     step('✓', 'Koneksi Shopee OK');
 
+    var canPullProducts = canShopeeAction('pull-products');
+    var canPullOrders = canShopeeAction('pull-orders');
+    var canStockSync = canShopeeAction('stock-sync');
+
     // STEP 2 — Pull Produk (per akun connected)
-    step('⏳', '1/3 Mengambil produk Shopee (semua akun)...');
+    if (!canPullProducts) step('ℹ', 'Pull produk dilewati — perlu akses menu Katalog');
+    else step('⏳', '1/3 Mengambil produk Shopee (semua akun)...');
     var prodResults = [];
     var prodHasError = false;
-    for (var ai = 0; ai < accounts.length; ai++) {
+    for (var ai = 0; canPullProducts && ai < accounts.length; ai++) {
       var acc = accounts[ai];
       if (acc.connection_status !== 'connected' || !acc.shop_id) continue;
       var shopIdStr = String(acc.shop_id);
@@ -1039,8 +1125,10 @@ async function syncShopee() {
         step('✓', '  • Pull produk ' + shopIdStr + ' — Fetched: ' + nv(pr.fetched) + ' | Inserted: ' + nv(pr.inserted) + ' | Updated: ' + nv(pr.updated) + ' | Failed: ' + nv(pr.failed));
       }
     }
-    var prodOk = prodResults.some(function (r) { return r.success === true; });
-    if (!prodOk) {
+    var prodOk = !canPullProducts || prodResults.some(function (r) { return r.success === true; });
+    if (!canPullProducts) {
+      step('ℹ', 'Pull Produk dilewati');
+    } else if (!prodOk) {
       // Pull Produk gagal TIDAK menghentikan workflow:
       // tampilkan warning lalu tetap lanjut ke STEP 3/4 (stock sync tetap jalan).
       prodOk = false;
@@ -1051,11 +1139,12 @@ async function syncShopee() {
     }
 
     // STEP 3 — Pull Order
-    step('⏳', '2/3 Mengambil order Shopee...');
+    if (!canPullOrders) step('ℹ', 'Pull order dilewati — perlu akses menu Penjualan');
+    else step('⏳', '2/3 Mengambil order Shopee...');
     var orderRes = null;
     var orderOk = true;
     var imported = '-';
-    try { orderRes = await callEdgeFunction('shopee-pull-orders', {}); } catch (e) { orderRes = null; }
+    try { orderRes = canPullOrders ? await callEdgeFunction('shopee-pull-orders', {}) : { success: true, skipped: true }; } catch (e) { orderRes = null; }
     if (!orderRes || orderRes.success === false) {
       // Gagal sebagian pada pull order TIDAK menghentikan workflow:
       // tampilkan warning lalu tetap lanjut ke STEP 4 (sinkronisasi stok).
@@ -1087,11 +1176,15 @@ async function syncShopee() {
     }
 
     // STEP 4 — Sync Stock
-    step('⏳', '3/3 Sinkronisasi stok...');
+    if (!canStockSync) step('ℹ', 'Sinkronisasi stok dilewati — perlu akses menu Gudang/Persediaan');
+    else step('⏳', '3/3 Sinkronisasi stok...');
     var stockRes = null;
-    try { stockRes = await callEdgeFunction('shopee-stock-sync', {}); } catch (e) { stockRes = null; }
+    try { stockRes = canStockSync ? await callEdgeFunction('shopee-stock-sync', {}) : { success: true, skipped: true }; } catch (e) { stockRes = null; }
     var stockOk = false;
-    if (stockRes && !stockRes.error && stockRes.message !== 'Sync already running') {
+    if (!canStockSync) {
+      stockOk = true;
+      step('ℹ', 'Stock dilewati');
+    } else if (stockRes && !stockRes.error && stockRes.message !== 'Sync already running') {
       stockOk = true;
       step('✓', 'Stock selesai — Synced: ' + nv(stockRes.synced) + ' | Failed: ' + nv(stockRes.failed));
     } else {
@@ -1101,7 +1194,10 @@ async function syncShopee() {
 
     // Ringkasan akhir
     if (summary) {
-      summary.innerHTML = '<div>Produk ' + (prodOk ? '✓' : '⚠️') + ' | Order ' + (orderOk ? '✓' : '⚠️') + ' | Stock ' + (stockOk ? '✓' : '⚠️') + '</div>';
+      var prodMark = canPullProducts ? (prodOk ? '✓' : '⚠️') : '—';
+      var orderMark = canPullOrders ? (orderOk ? '✓' : '⚠️') : '—';
+      var stockMark = canStockSync ? (stockOk ? '✓' : '⚠️') : '—';
+      summary.innerHTML = '<div>Produk ' + prodMark + ' | Order ' + orderMark + ' | Stock ' + stockMark + '</div>';
       if (String(imported) !== '-' && Number(imported) > 0) {
         summary.innerHTML += '<div style="color:var(--success);">📦 ' + imported + ' order baru menunggu Picking di Gudang</div>';
       }
@@ -1123,6 +1219,7 @@ async function syncShopee() {
 // SYNC STOCK
 // ============================================================
 async function syncStock() {
+  if (!canShopeeAction("stock-sync")) { showToast("Perlu akses menu Gudang atau Persediaan", "error"); return; }
   showToast("Sinkronisasi stok dimulai...");
   try {
     var result = await callEdgeFunction("shopee-stock-sync", {});
@@ -1143,6 +1240,7 @@ async function syncStock() {
 // PULL ORDERS
 // ============================================================
 async function pullOrders() {
+  if (!canShopeeAction("pull-orders")) { showToast("Perlu akses menu Penjualan", "error"); return; }
   showToast("Mengambil pesanan dari Shopee...");
   try {
     var result = await callEdgeFunction("shopee-pull-orders", {});
@@ -1161,6 +1259,7 @@ async function pullOrders() {
 // PULL PRODUK
 // ============================================================
 async function pullProducts() {
+  if (!canShopeeAction("pull-products")) { showToast("Perlu akses menu Katalog", "error"); return; }
   showToast("Menarik produk dari Shopee...");
   try {
     var result = await callEdgeFunction("shopee-pull-products", {});
@@ -1179,10 +1278,11 @@ async function pullProducts() {
 // RETRY FAILED MUTATION
 // ============================================================
 async function retryMutation(id) {
+  if (!canShopeeAction("stock-sync")) { showToast("Perlu akses menu Gudang atau Persediaan", "error"); return; }
   try {
-    var res = await SB.from("stock_mutations").update({ sync_status: "pending" }).eq("id", id);
-    if (res.error) {
-      showToast("Gagal retry: " + res.error.message, "error");
+    var res = await apiFetch("/api/stock-mutations/" + encodeURIComponent(id) + "/retry", { method: "POST", body: {} });
+    if (!res.ok) {
+      showToast("Gagal retry: " + ((res.data && (res.data.message || res.data.error)) || ("HTTP " + res.status)), "error");
     } else {
       showToast("Mutasi dijadwalkan ulang untuk sinkronisasi");
     }
@@ -1211,7 +1311,14 @@ function refreshDashboard() {
 // ============================================================
 // INIT
 // ============================================================
-function init() {
+async function init() {
+  var res = await apiFetch("/api/auth/me");
+  if (!res.ok || !res.data || !res.data.user) {
+    window.location.href = "index.html";
+    return;
+  }
+  currentUser = res.data.user;
+  applyMarketplacePermissions();
   refreshDashboard();
   handleOAuthCallback();
 }

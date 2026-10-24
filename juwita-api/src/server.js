@@ -2,7 +2,20 @@ import http from "node:http";
 import { pool } from "./db.js";
 import { verifyPassword, hashPassword } from "./auth.js";
 import { signAccessToken, verifyAccessToken } from "./jwt.js";
-import { requireAuth, requireOwner } from "./middleware.js";
+import { requireAuth } from "./middleware.js";
+import {
+  checkTableAccess,
+  checkProductColumns,
+  isOwnerUser,
+  userHasAnyMenu,
+  userHasMenu,
+  shopeeActionAllowed,
+  isAllowedEmployeeRole,
+  isAllowedMenuToken,
+  PRODUCT_READ_MENUS,
+  PRODUCT_PRICE_READ_MENUS,
+  SHOPEE_ACTION_MENUS,
+} from "./permissions.js";
 import { connectShop, pullOrders, pullProducts, syncStock, syncPrice, syncPriceOne } from "./shopee.js";
 
 const PORT = Number(process.env.PORT || 3000);
@@ -300,88 +313,12 @@ const TABLE_READ_COLUMNS = {
 
 // ============================================================
 // OTORISASI DATA API (default-deny)
-// owner = akses penuh. Non-owner dibatasi role + status ACTIVE
-// (sudah dicek requireAuth) + menu + operasi + kolom.
-// Nilai operasi: "*" = semua user terautentikasi; array = daftar menu;
-// null/tidak ada = hanya owner.
+// Peta tabel/operasi/kolom ada di permissions.js. Owner = akses penuh.
+// Non-owner dibatasi status ACTIVE (requireAuth) + menu + operasi + kolom.
 // ============================================================
-const DATA_TABLE_ACCESS = {
-  products:                { read: "*", create: ["katalog"], update: ["katalog", "pricing", "persediaan", "pembelian"], delete: null },
-  orders:                  { read: ["pos", "penjualan", "gudang"], create: null, update: null, delete: null },
-  order_items:             { read: ["pos", "penjualan", "gudang"], create: null, update: null, delete: null },
-  karyawan:                { read: ["hr", "pengaturan"], create: null, update: null, delete: null },
-  attendance_records:      { read: ["hr"], create: ["hr"], update: ["hr"], delete: ["hr"] },
-  // Kehadiran (absen kamera): baca untuk HR/owner. Tulis HANYA lewat
-  // endpoint /api/attendance/* (identitas & waktu dari server).
-  attendance_clock:        { read: ["hr"], create: null, update: null, delete: null },
-  // Jadwal kerja (HR): HR (menu "hr") / owner dapat baca & ubah.
-  work_schedules:          { read: ["hr"], create: ["hr"], update: ["hr"], delete: ["hr"] },
-  warehouse_receiving:     { read: ["gudang"], create: ["gudang"], update: ["gudang"], delete: ["gudang"] },
-  warehouse_racks:         { read: ["gudang"], create: ["gudang"], update: ["gudang"], delete: ["gudang"] },
-  warehouse_opname:        { read: ["gudang"], create: ["gudang"], update: ["gudang"], delete: ["gudang"] },
-  stock_mutations:         { read: ["persediaan", "gudang", "katalog"], create: null, update: null, delete: null },
-  app_users:               { read: ["hr", "pengaturan"], create: null, update: null, delete: null },
-  accounting_accounts:     { read: ["akuntansi"], create: null, update: null, delete: null },
-  accounting_transactions: { read: ["akuntansi"], create: ["akuntansi"], update: ["akuntansi"], delete: ["akuntansi"] },
-  v_account_balance:       { read: ["akuntansi"], create: null, update: null, delete: null },
-  marketplace_config:      { read: ["pengaturan"], create: null, update: null, delete: null },
-  activity_log:            { read: ["penjualan", "pengaturan"], create: null, update: null, delete: null },
-  suppliers:               { read: ["pembelian"], create: ["pembelian"], update: ["pembelian"], delete: ["pembelian"] },
-  purchases:               { read: ["pembelian"], create: ["pembelian"], update: ["pembelian"], delete: ["pembelian"] },
-  purchase_items:          { read: ["pembelian"], create: ["pembelian"], update: ["pembelian"], delete: ["pembelian"] },
-};
-
-// Grup kolom produk (non-owner): kolom sensitif dibatasi per menu.
-const PRODUCT_STOCK_COLUMNS = new Set(["stock", "maxstock", "minstock"]);
-const PRODUCT_PRICE_COLUMNS = new Set(["price"]);
-const PRODUCT_MODAL_COLUMNS = new Set(["modal"]);
-
-// Izin aksi tambahan, disimpan di app_users.menus (bukan menu halaman).
-const PRICING_EDIT_PERMISSION = "pricing.edit";
-
-function isOwnerUser(user) {
-  return !!user && String(user.role || "").toLowerCase() === "owner";
-}
-
-function canEditPricing(user) {
-  if (!user || user.status !== "ACTIVE") return false;
-  if (isOwnerUser(user)) return true;
-  return userHasMenu(user, ["pricing"]) && userHasMenu(user, [PRICING_EDIT_PERMISSION]);
-}
-
-function userHasMenu(user, menus) {
-  if (!user || !Array.isArray(user.menus)) return false;
-  return menus.some((m) => user.menus.includes(m));
-}
-
-function checkTableAccess(user, table, op) {
-  if (isOwnerUser(user)) return true;
-  const rule = DATA_TABLE_ACCESS[table];
-  if (!rule) return false; // default-deny
-  const allowed = rule[op];
-  if (allowed === "*") return true;
-  if (!Array.isArray(allowed) || allowed.length === 0) return false;
-  return userHasMenu(user, allowed);
-}
-
-function productColumnMenus(col) {
-  if (PRODUCT_STOCK_COLUMNS.has(col)) return ["persediaan", "pembelian", "katalog"];
-  if (PRODUCT_PRICE_COLUMNS.has(col)) return ["pricing", "katalog"];
-  if (PRODUCT_MODAL_COLUMNS.has(col)) return ["pembelian", "katalog"];
-  return ["katalog"]; // master
-}
-
-function checkProductColumns(user, cols) {
-  if (isOwnerUser(user)) return true;
-  for (const c of cols) {
-    if (!userHasMenu(user, productColumnMenus(c))) return false;
-  }
-  return true;
-}
-
 function checkMenuAccess(user, menu) {
   if (isOwnerUser(user)) return true;
-  return userHasMenu(user, [menu]);
+  return userHasMenu(user, menu);
 }
 
 function tableName(pathname) {
@@ -430,8 +367,6 @@ const PRODUCT_DELETE_REFERENCES = [
   ["warehouse_racks", "data rak"],
   ["activity_log", "log marketplace"],
   ["product_shopee_mapping", "mapping Shopee"],
-  ["product_prices", "harga produk"],
-  ["product_price_sync_queue", "antrean sinkron harga"],
 ];
 
 async function productDeleteReferences(client, productId) {
@@ -544,8 +479,11 @@ async function handleDataWrite(req, res, table, method) {
       if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(c)) return sendJson(res, 400, { error: "invalid_column" });
       if (FORBIDDEN_COLUMNS.has(c)) return sendJson(res, 400, { error: "forbidden_column" });
     }
-    if (table === "products" && !checkProductColumns(req.user, cols)) {
+    if (table === "products" && !checkProductColumns(req.user, cols, "create")) {
       return sendJson(res, 403, { error: "forbidden" });
+    }
+    if (table === "app_users" && rows.some((r) => String(r.role || "").toLowerCase() === "owner")) {
+      return sendJson(res, 403, { error: "forbidden", message: "Role owner tidak dapat dibuat lewat API" });
     }
     const colList = cols.join(", ");
     const valueList = rows.map((r) => `(${cols.map((c, i) => `$${i + 1}`).join(", ")})`).join(", ");
@@ -593,6 +531,20 @@ async function handleDataWrite(req, res, table, method) {
     if (table === "products") {
       return deleteProductTransactional(req, res, u);
     }
+    if (table === "app_users") {
+      try {
+        const { rows: targets } = await pool.query(
+          `SELECT id, role FROM app_users${where}`,
+          params
+        );
+        if (targets.some((r) => String(r.role || "").toLowerCase() === "owner")) {
+          return sendJson(res, 403, { error: "forbidden", message: "Akun owner tidak dapat dihapus" });
+        }
+      } catch (err) {
+        console.error(`data DELETE app_users precheck failed:`, err.message);
+        return sendJson(res, 500, { error: "internal_error" });
+      }
+    }
     // Transaksi akuntansi POS_SALE tidak boleh dihapus (read-only dari POS).
     if (table === "accounting_transactions") {
       try {
@@ -626,12 +578,27 @@ async function handleDataWrite(req, res, table, method) {
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(c)) return sendJson(res, 400, { error: "invalid_column" });
     if (FORBIDDEN_COLUMNS.has(c)) return sendJson(res, 400, { error: "forbidden_column" });
   }
-  if (table === "products" && !checkProductColumns(req.user, cols)) {
+  if (table === "products" && !checkProductColumns(req.user, cols, "update")) {
     return sendJson(res, 403, { error: "forbidden" });
   }
-  // Harga jual legacy (products.price) mengikuti izin edit Pricing.
-  if (table === "products" && cols.includes("price") && !canEditPricing(req.user)) {
-    return sendJson(res, 403, { error: "forbidden" });
+  if (table === "app_users") {
+    if (String(updates.role || "").toLowerCase() === "owner") {
+      return sendJson(res, 403, { error: "forbidden", message: "Role owner tidak dapat diberikan lewat API" });
+    }
+    try {
+      const { rows: targets } = await pool.query(
+        `SELECT id, role FROM app_users${where}`,
+        params
+      );
+      const touchesProtected = ["role", "menus", "status", "phone", "password_hash"]
+        .some((c) => Object.prototype.hasOwnProperty.call(updates, c));
+      if (touchesProtected && targets.some((r) => String(r.role || "").toLowerCase() === "owner")) {
+        return sendJson(res, 403, { error: "forbidden", message: "Akun owner tidak dapat diubah melalui API generik" });
+      }
+    } catch (err) {
+      console.error(`data PATCH app_users precheck failed:`, err.message);
+      return sendJson(res, 500, { error: "internal_error" });
+    }
   }
   const setList = cols.map((c, i) => `${c} = $${idx + i}`).join(", ");
 
@@ -693,21 +660,237 @@ async function handleOrdersPost(req, res) {
   }
 }
 
-// --- Aksi gudang: panggil RPC lokal record_warehouse_action ---
+// --- Aksi gudang: endpoint tervalidasi (bukan update tabel orders bebas) ---
+const WAREHOUSE_ORDER_ACTIONS = new Set(["pick", "pack", "packing", "ship"]);
+
 async function handleOrdersPatch(req, res, orderId) {
   const { error, data } = await readJsonBody(req, 64 * 1024);
   if (error || !data || typeof data !== "object") {
     return sendJson(res, 400, { error: "invalid_request" });
   }
+  const action = typeof data.p_action === "string" ? data.p_action : "";
+  if (!WAREHOUSE_ORDER_ACTIONS.has(action)) {
+    return sendJson(res, 400, { error: "invalid_action" });
+  }
+  const petugas = req.user && req.user.name ? String(req.user.name) : "?";
   try {
+    if (action === "packing") {
+      const { rows } = await pool.query(
+        `UPDATE orders SET wmsstatus = 'Packing'
+          WHERE orderid = $1 AND wmsstatus IN ('Dipick', 'Packing')
+        RETURNING orderid, wmsstatus`,
+        [orderId]
+      );
+      if (!rows.length) {
+        return sendJson(res, 409, { error: "order_not_in_pickable_status" });
+      }
+      return sendJson(res, 200, {
+        data: { status: "ok", orderid: rows[0].orderid, wmsstatus: rows[0].wmsstatus },
+      });
+    }
     const { rows } = await pool.query(
       `SELECT record_warehouse_action($1,$2,$3,$4,$5) AS result`,
-      [orderId, data.p_action, data.p_petugas || null, data.p_courier || null, data.p_resi || null]
+      [orderId, action, petugas, data.p_courier || null, data.p_resi || null]
     );
-    sendJson(res, 200, { data: rows[0].result });
+    return sendJson(res, 200, { data: rows[0].result });
   } catch (err) {
     console.error("orders PATCH failed:", err.message);
-    sendJson(res, 500, { error: "internal_error" });
+    return sendJson(res, 500, { error: "internal_error" });
+  }
+}
+
+// --- Penerimaan PO (Gudang): transaksi tervalidasi + mutasi stok ---
+async function handleGudangReceive(req, res, purchaseId) {
+  if (!/^[1-9]\d*$/.test(String(purchaseId || ""))) {
+    return sendJson(res, 400, { error: "invalid_purchase_id" });
+  }
+  const { error, data } = await readJsonBody(req, 256 * 1024);
+  if (error || !data || typeof data !== "object" || !Array.isArray(data.items)) {
+    return sendJson(res, 400, { error: "invalid_request" });
+  }
+  const requested = new Map();
+  for (const item of data.items) {
+    if (!item || typeof item !== "object") {
+      return sendJson(res, 400, { error: "invalid_request" });
+    }
+    const itemId = String(item.purchase_item_id || "");
+    const qty = Number(item.qty);
+    if (!/^[1-9]\d*$/.test(itemId) || !Number.isInteger(qty) || qty <= 0) {
+      return sendJson(res, 400, { error: "invalid_item" });
+    }
+    if (requested.has(itemId)) {
+      return sendJson(res, 400, { error: "duplicate_item" });
+    }
+    requested.set(itemId, qty);
+  }
+  if (requested.size === 0) {
+    return sendJson(res, 400, { error: "invalid_request" });
+  }
+
+  let client = null;
+  try {
+    client = await pool.connect();
+    await client.query("BEGIN");
+
+    const purchaseRes = await client.query(
+      `SELECT id, po_number, receiving_status FROM purchases WHERE id = $1 FOR UPDATE`,
+      [purchaseId]
+    );
+    if (!purchaseRes.rows.length) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 404, { error: "purchase_not_found" });
+    }
+    const purchase = purchaseRes.rows[0];
+
+    const itemsRes = await client.query(
+      `SELECT id, product_id, product_name, qty, qty_received, harga_beli
+         FROM purchase_items WHERE purchase_id = $1 ORDER BY id FOR UPDATE`,
+      [purchaseId]
+    );
+    if (!itemsRes.rows.length) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 400, { error: "purchase_has_no_items" });
+    }
+    const itemsById = new Map(itemsRes.rows.map((row) => [String(row.id), row]));
+
+    const received = [];
+    for (const [itemId, qty] of requested) {
+      const item = itemsById.get(itemId);
+      if (!item) {
+        await client.query("ROLLBACK");
+        return sendJson(res, 400, { error: "purchase_item_mismatch", purchase_item_id: itemId });
+      }
+      const remaining = Number(item.qty) - Number(item.qty_received);
+      if (qty > remaining) {
+        await client.query("ROLLBACK");
+        return sendJson(res, 409, {
+          error: "qty_exceeds_remaining",
+          purchase_item_id: itemId,
+          remaining,
+        });
+      }
+
+      const productRes = await client.query(
+        `SELECT id, name, stock FROM products WHERE id = $1 FOR UPDATE`,
+        [item.product_id]
+      );
+      if (!productRes.rows.length) {
+        await client.query("ROLLBACK");
+        return sendJson(res, 404, { error: "product_not_found", product_id: item.product_id });
+      }
+      const product = productRes.rows[0];
+      const qtyBefore = Number(product.stock) || 0;
+      const qtyAfter = qtyBefore + qty;
+      const modal = Number(item.harga_beli);
+      const safeModal = Number.isFinite(modal) && modal >= 0 ? modal : 0;
+
+      await client.query(
+        `UPDATE products SET stock = $1, modal = $2 WHERE id = $3`,
+        [qtyAfter, safeModal, product.id]
+      );
+      await client.query(
+        `UPDATE purchase_items SET qty_received = qty_received + $1 WHERE id = $2`,
+        [qty, item.id]
+      );
+      await client.query(
+        `INSERT INTO stock_mutations (
+           product_id, product_name, type, quantity,
+           qty_before, qty_after, source, sync_status, created_at
+         ) VALUES ($1,$2,'IN',$3,$4,$5,$6,'pending',now())`,
+        [
+          product.id,
+          product.name || item.product_name || null,
+          qty,
+          qtyBefore,
+          qtyAfter,
+          "Penerimaan PO " + (purchase.po_number || purchaseId),
+        ]
+      );
+      received.push({
+        purchase_item_id: item.id,
+        product_id: product.id,
+        qty,
+        qty_before: qtyBefore,
+        qty_after: qtyAfter,
+      });
+    }
+
+    const receivedMap = new Map(received.map((r) => [String(r.purchase_item_id), r.qty]));
+    const allReceived = itemsRes.rows.every((item) => {
+      const added = receivedMap.get(String(item.id)) || 0;
+      return Number(item.qty_received) + added >= Number(item.qty);
+    });
+    const someReceived = itemsRes.rows.some((item) => {
+      const added = receivedMap.get(String(item.id)) || 0;
+      return Number(item.qty_received) + added > 0;
+    });
+    const receivingStatus = allReceived ? "Diterima" : someReceived ? "Sebagian" : "Belum";
+
+    await client.query(
+      `UPDATE purchases SET receiving_status = $1 WHERE id = $2`,
+      [receivingStatus, purchaseId]
+    );
+    await client.query("COMMIT");
+    return sendJson(res, 200, {
+      data: { ok: true, purchase_id: Number(purchaseId), receiving_status: receivingStatus, received },
+    });
+  } catch (err) {
+    if (client) {
+      try { await client.query("ROLLBACK"); } catch {}
+    }
+    console.error("gudang receive failed:", err.message);
+    return sendJson(res, 500, { error: "internal_error" });
+  } finally {
+    if (client) client.release();
+  }
+}
+
+// --- Mulai opname (Gudang): endpoint tervalidasi ---
+async function handleGudangOpnameStart(req, res) {
+  const { error, data } = await readJsonBody(req, 16 * 1024);
+  if (error || !data || typeof data !== "object") {
+    return sendJson(res, 400, { error: "invalid_request" });
+  }
+  const zone = typeof data.zone === "string" ? data.zone.trim() : "";
+  if (!zone || zone.length > 120) {
+    return sendJson(res, 400, { error: "invalid_zone" });
+  }
+  const officer = req.user && req.user.name ? String(req.user.name) : "?";
+  const id = "OPN-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO warehouse_opname (id, zone, officer, status)
+       VALUES ($1,$2,$3,'open')
+       RETURNING id, zone, officer, session_date, status, created_at`,
+      [id, zone, officer]
+    );
+    return sendJson(res, 200, { data: rows[0] });
+  } catch (err) {
+    console.error("gudang opname start failed:", err.message);
+    return sendJson(res, 500, { error: "internal_error" });
+  }
+}
+
+// --- Retry mutasi stok gagal (Gudang/Persediaan) ---
+async function handleStockMutationRetry(req, res, mutationId) {
+  if (!/^[1-9]\d*$/.test(String(mutationId || ""))) {
+    return sendJson(res, 400, { error: "invalid_mutation_id" });
+  }
+  try {
+    const { rows } = await pool.query(
+      `UPDATE stock_mutations
+          SET sync_status = 'pending', shopee_sync_at = NULL
+        WHERE id = $1 AND sync_status = 'failed'
+        RETURNING id, product_id, sync_status`,
+      [mutationId]
+    );
+    if (!rows.length) {
+      return sendJson(res, 404, { error: "mutation_not_found_or_not_failed" });
+    }
+    return sendJson(res, 200, { data: rows[0] });
+  } catch (err) {
+    console.error("stock mutation retry failed:", err.message);
+    return sendJson(res, 500, { error: "internal_error" });
   }
 }
 
@@ -727,10 +910,20 @@ async function handleEmployeesPost(req, res) {
       if (!phone || !fullName || !role || password.length < 6) {
         return sendJson(res, 400, { error: "invalid_request" });
       }
+      if (!isAllowedEmployeeRole(role)) {
+        return sendJson(res, 400, { error: "invalid_role" });
+      }
+      if (!Array.isArray(data.menus) || data.menus.length === 0) {
+        return sendJson(res, 400, { error: "invalid_menus" });
+      }
+      const uniqueMenus = [...new Set(data.menus.map((m) => String(m)))];
+      if (uniqueMenus.some((m) => !isAllowedMenuToken(m))) {
+        return sendJson(res, 400, { error: "invalid_menus" });
+      }
       const exists = await pool.query("SELECT id FROM app_users WHERE phone = $1", [phone]);
       if (exists.rows.length) return sendJson(res, 409, { error: "phone_exists" });
       const hash = await hashPassword(password);
-      const menus = Array.isArray(data.menus) ? JSON.stringify(data.menus) : "[]";
+      const menus = JSON.stringify(uniqueMenus);
       const { rows } = await pool.query(
         `INSERT INTO app_users (phone, full_name, role, role_label, menus, status, password_hash)
          VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, phone, full_name, role, role_label, menus, status`,
@@ -911,6 +1104,12 @@ async function handleAttendanceRekap(req, res) {
 
 // --- Shopee (pengganti Edge Function) ---
 async function handleShopeeAction(req, res, action) {
+  if (!Object.prototype.hasOwnProperty.call(SHOPEE_ACTION_MENUS, action)) {
+    return sendJson(res, 404, { error: "unknown_action" });
+  }
+  if (!shopeeActionAllowed(req.user, action)) {
+    return sendJson(res, 403, { error: "forbidden" });
+  }
   const { data } = await readJsonBody(req, 64 * 1024);
   const shopId = data && data.shop_id ? String(data.shop_id) : "";
   try {
@@ -1062,17 +1261,23 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && pathname === "/api/products") {
     const user = await requireAuth(req, res);
     if (!user) return;
+    if (!isOwnerUser(user) && !userHasAnyMenu(user, PRODUCT_READ_MENUS)) {
+      return sendJson(res, 403, { error: "forbidden" });
+    }
     return handleProducts(req, res);
   }
   if (req.method === "GET" && pathname === "/api/product-prices") {
     const user = await requireAuth(req, res);
     if (!user) return;
+    if (!isOwnerUser(user) && !userHasAnyMenu(user, PRODUCT_PRICE_READ_MENUS)) {
+      return sendJson(res, 403, { error: "forbidden" });
+    }
     return handleProductPrices(req, res);
   }
   if (req.method === "PUT" && pathname === "/api/product-prices") {
     const user = await requireAuth(req, res);
     if (!user) return;
-    if (!canEditPricing(user)) return sendJson(res, 403, { error: "forbidden" });
+    if (!checkMenuAccess(user, "pricing")) return sendJson(res, 403, { error: "forbidden" });
     return handleProductPricesPut(req, res);
   }
   if (req.method === "POST" && pathname === "/api/orders") {
@@ -1084,7 +1289,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && pathname === "/api/employees") {
     const user = await requireAuth(req, res);
     if (!user) return;
-    if (!requireOwner(req, res)) return;
+    if (!isOwnerUser(user)) return sendJson(res, 403, { error: "forbidden" });
     return handleEmployeesPost(req, res);
   }
   if (req.method === "POST" && pathname === "/api/attendance/checkin") {
@@ -1106,7 +1311,7 @@ const server = http.createServer(async (req, res) => {
     const user = await requireAuth(req, res);
     if (!user) return;
     // Rekap presensi: HR (menu "hr") atau owner.
-    if (!isOwnerUser(user) && !userHasMenu(user, ["hr"])) {
+    if (!checkMenuAccess(user, "hr")) {
       return sendJson(res, 403, { error: "forbidden" });
     }
     return handleAttendanceRekap(req, res);
@@ -1117,6 +1322,28 @@ const server = http.createServer(async (req, res) => {
     if (!checkMenuAccess(user, "gudang")) return sendJson(res, 403, { error: "forbidden" });
     return handleOrdersPatch(req, res, decodeURIComponent(pathname.slice("/api/orders/".length)));
   }
+  if (req.method === "POST" && pathname.startsWith("/api/gudang/purchases/") && pathname.endsWith("/receive")) {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    if (!checkMenuAccess(user, "gudang")) return sendJson(res, 403, { error: "forbidden" });
+    const purchaseId = pathname.slice("/api/gudang/purchases/".length, -"/receive".length);
+    return handleGudangReceive(req, res, decodeURIComponent(purchaseId));
+  }
+  if (req.method === "POST" && pathname === "/api/gudang/opname") {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    if (!checkMenuAccess(user, "gudang")) return sendJson(res, 403, { error: "forbidden" });
+    return handleGudangOpnameStart(req, res);
+  }
+  if (req.method === "POST" && pathname.startsWith("/api/stock-mutations/") && pathname.endsWith("/retry")) {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    if (!isOwnerUser(user) && !userHasAnyMenu(user, ["gudang", "persediaan"])) {
+      return sendJson(res, 403, { error: "forbidden" });
+    }
+    const mutationId = pathname.slice("/api/stock-mutations/".length, -"/retry".length);
+    return handleStockMutationRetry(req, res, decodeURIComponent(mutationId));
+  }
   if (req.method === "POST" && pathname.startsWith("/api/rpc/")) {
     const user = await requireAuth(req, res);
     if (!user) return;
@@ -1125,7 +1352,6 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && pathname.startsWith("/api/shopee/")) {
     const user = await requireAuth(req, res);
     if (!user) return;
-    if (!requireOwner(req, res)) return;
     return handleShopeeAction(req, res, pathname.slice("/api/shopee/".length));
   }
   if (pathname.startsWith("/api/data/")) {
@@ -1148,10 +1374,14 @@ const server = http.createServer(async (req, res) => {
   sendJson(res, 404, { status: "error", message: "Not Found" });
 });
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`Juwita API listening on http://127.0.0.1:${PORT}`);
-});
+export { server };
 
-for (const sig of ["SIGTERM", "SIGINT"]) {
-  process.on(sig, () => server.close(() => process.exit(0)));
+if (process.env.NODE_ENV !== "test") {
+  server.listen(PORT, "127.0.0.1", () => {
+    console.log(`Juwita API listening on http://127.0.0.1:${PORT}`);
+  });
+
+  for (const sig of ["SIGTERM", "SIGINT"]) {
+    process.on(sig, () => server.close(() => process.exit(0)));
+  }
 }
