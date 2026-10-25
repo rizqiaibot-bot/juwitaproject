@@ -59,7 +59,7 @@ export const PRODUCT_UPDATE_COLUMN_MENUS = Object.freeze({
   sku: ["katalog"],
   plu: ["katalog"],
   price: ["pricing"],
-  modal: ["pembelian"],
+  modal: ["katalog", "pembelian"],
   stock: ["persediaan", "pembelian"],
   minstock: ["persediaan"],
   maxstock: ["persediaan"],

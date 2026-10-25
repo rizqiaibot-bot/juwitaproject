@@ -57,14 +57,14 @@ test("tanpa menu ditolak (default-deny)", () => {
   assert.equal(shopeeActionAllowed(noMenu, "pull-orders"), false);
 });
 
-test("produk: Katalog boleh create termasuk harga awal, tetapi tidak boleh update harga/modal/stok", () => {
+test("produk: Katalog boleh create termasuk harga awal; update master + modal, bukan harga/stok", () => {
   assert.equal(checkTableAccess(katalog, "products", "create"), true);
   assert.equal(checkTableAccess(katalog, "products", "update"), true);
   assert.equal(checkTableAccess(katalog, "products", "delete"), true);
   assert.equal(checkProductColumns(katalog, ["id", "name", "price", "stock", "modal"], "create"), true);
   assert.equal(checkProductColumns(katalog, ["name", "sku", "category", "barcode"], "update"), true);
   assert.equal(checkProductColumns(katalog, ["price"], "update"), false);
-  assert.equal(checkProductColumns(katalog, ["modal"], "update"), false);
+  assert.equal(checkProductColumns(katalog, ["modal"], "update"), true);
   assert.equal(checkProductColumns(katalog, ["stock"], "update"), false);
   assert.equal(checkProductColumns(katalog, ["price"], "create"), true);
   assert.equal(checkProductColumns(katalog, ["kolom_baru"], "update"), false);
@@ -84,6 +84,26 @@ test("produk: hanya Pricing yang boleh update harga; stock lewat domain stok", (
   assert.equal(checkProductColumns(gudang, ["stock"], "update"), false);
   assert.equal(checkProductColumns(gudang, ["modal"], "update"), false);
   assert.equal(checkTableAccess(gudang, "products", "update"), false);
+});
+
+test("produk: matriks modal, stok, dan harga per menu", () => {
+  assert.equal(checkProductColumns(owner, ["modal", "stock", "price"], "update"), true);
+
+  assert.equal(checkProductColumns(katalog, ["modal"], "update"), true);
+  assert.equal(checkProductColumns(katalog, ["stock"], "update"), false);
+  assert.equal(checkProductColumns(katalog, ["price"], "update"), false);
+
+  assert.equal(checkProductColumns(pembelian, ["modal"], "update"), true);
+  assert.equal(checkProductColumns(pembelian, ["stock"], "update"), true);
+  assert.equal(checkProductColumns(pembelian, ["price"], "update"), false);
+
+  assert.equal(checkProductColumns(pricing, ["modal"], "update"), false);
+  assert.equal(checkProductColumns(pricing, ["stock"], "update"), false);
+  assert.equal(checkProductColumns(pricing, ["price"], "update"), true);
+
+  assert.equal(checkProductColumns(persediaan, ["modal"], "update"), false);
+  assert.equal(checkProductColumns(persediaan, ["stock"], "update"), true);
+  assert.equal(checkProductColumns(persediaan, ["price"], "update"), false);
 });
 
 test("produk: delete hanya Katalog", () => {

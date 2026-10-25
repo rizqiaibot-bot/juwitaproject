@@ -2727,7 +2727,7 @@
                             <input type="number" id="newProdPrice" class="form-control" placeholder="Contoh: 15000" required />
                         </div>
                         <div class="form-group" id="stockFieldGroup">
-                            <label>Stok Awal</label>
+                            <label id="stockFieldLabel">Stok Awal</label>
                             <input type="number" id="newProdStock" class="form-control" placeholder="Contoh: 100" required />
                         </div>
                     </div>
@@ -6166,6 +6166,8 @@
             if (pg) pg.style.display = "";
             const sg = document.getElementById("stockFieldGroup");
             if (sg) sg.style.display = "";
+            const stockLabel = document.getElementById("stockFieldLabel");
+            if (stockLabel) stockLabel.textContent = "Stok Awal";
             ["newProdName","newProdSKU","newProdModal","newProdPrice","newProdStock","newProdLength","newProdWidth","newProdHeight","newProdWeight","newProdBarcode","newProdPLU","newProdShopeeId","newProdShopeeSku"].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) { el.value = ""; el.disabled = false; }
@@ -6189,9 +6191,10 @@
             document.getElementById("newProdSKU").value = p.sku || "";
             document.getElementById("newProdCat").value = p.category || "Frozen Food";
             const modalEl = document.getElementById("newProdModal");
+            const canModal = canEditProductModal();
             modalEl.value = p.modal || 0;
-            modalEl.disabled = true;
-            modalEl.title = "Modal hanya dapat diubah melalui Pembelian/Penerimaan";
+            modalEl.disabled = !canModal;
+            modalEl.title = canModal ? "" : "Modal hanya dapat diubah melalui Katalog/Pembelian";
             const supEl = document.getElementById("newProdSupplier");
             if (supEl) supEl.value = p.supplier || "";
             document.getElementById("newProdBarcode").value = p.barcode || "";
@@ -6206,7 +6209,11 @@
             const pg = document.getElementById("priceFieldGroup");
             if (pg) pg.style.display = "none";
             const sg = document.getElementById("stockFieldGroup");
-            if (sg) sg.style.display = "none";
+            if (sg) sg.style.display = canEditProductStock() ? "" : "none";
+            const stockInput = document.getElementById("newProdStock");
+            if (stockInput) stockInput.value = (p.stock != null) ? p.stock : "";
+            const stockLabel = document.getElementById("stockFieldLabel");
+            if (stockLabel) stockLabel.textContent = "Stok Saat Ini";
             // Pre-fill foto bila sudah ada.
             pendingPhotoData = null;
             const existingPhoto = productPhotoSrc(p);
@@ -6502,6 +6509,14 @@
             return !!(currentUser &&
                 String(currentUser.role || "").toLowerCase() === "owner" &&
                 String(currentUser.status || "").toUpperCase() === "ACTIVE");
+        }
+
+        function canEditProductModal() {
+            return isActiveOwner() || hasAnyMenu(["katalog", "pembelian"]);
+        }
+
+        function canEditProductStock() {
+            return isActiveOwner() || hasAnyMenu(["persediaan", "pembelian"]);
         }
 
         // Izin edit Pricing: owner aktif ATAU karyawan aktif dengan menu "pricing".
@@ -9909,6 +9924,21 @@
                         return;
                     }
                     const updates = { name, sku: finalSku, category: cat, supplier, barcode: barcode || null, plu, shopee_item_id, shopee_sku };
+                    if (canEditProductModal()) {
+                        if (!Number.isInteger(modal) || modal < 0) {
+                            showToast("Harga modal harus angka bulat >= 0");
+                            return;
+                        }
+                        updates.modal = modal;
+                    }
+                    if (canEditProductStock()) {
+                        const stockValue = parseFloat(document.getElementById("newProdStock").value);
+                        if (!isFinite(stockValue)) {
+                            showToast("Stok harus berupa angka");
+                            return;
+                        }
+                        updates.stock = stockValue;
+                    }
                     // Hanya kirim foto bila pengguna memilih foto baru; jika tidak,
                     // field imageicon tidak disentuh agar foto lama tetap tersimpan.
                     if (pendingPhotoData !== null) updates.imageicon = pendingPhotoData;

@@ -36,6 +36,14 @@ const USERS = {
     id: "pos-id", phone: "081000000007", full_name: "POS Test",
     role: "kasir", role_label: "Kasir", menus: ["pos"], status: "ACTIVE",
   },
+  "pembelian-id": {
+    id: "pembelian-id", phone: "081000000008", full_name: "Pembelian Test",
+    role: "staf", role_label: "Staf", menus: ["pembelian"], status: "ACTIVE",
+  },
+  "persediaan-id": {
+    id: "persediaan-id", phone: "081000000009", full_name: "Persediaan Test",
+    role: "staf", role_label: "Staf", menus: ["persediaan"], status: "ACTIVE",
+  },
 };
 
 const captured = {};
@@ -92,6 +100,17 @@ class FakePool {
       return { rows: [{ orderid: params[0], wmsstatus: "Packing" }] };
     }
     if (sql.includes("FROM public.attendance_clock")) {
+      return { rows: [] };
+    }
+    if (sql.includes("SELECT id, name, stock FROM products")) {
+      return { rows: [PRODUCT_ROW] };
+    }
+    if (sql.startsWith("UPDATE products SET")) {
+      captured.productPatch = params;
+      return { rows: [PRODUCT_ROW] };
+    }
+    if (sql.includes("INSERT INTO stock_mutations")) {
+      captured.stockMutation = params;
       return { rows: [] };
     }
     throw new Error("UNEXPECTED_QUERY: " + sql.slice(0, 140));
@@ -258,6 +277,28 @@ test("Katalog tidak boleh PATCH harga produk lama", async () => {
 test("Katalog tidak boleh mengirim kolom produk tak dikenal", async () => {
   const r = await call("/api/data/products", "POST", "katalog-id", { name: "X", kolom_baru: 1 });
   assert.equal(r.status, 403);
+});
+
+test("Matriks edit produk: modal, stok, dan harga ditegakkan backend", async () => {
+  const cases = [
+    ["owner-id", { modal: 100 }, 200],
+    ["katalog-id", { modal: 100 }, 200],
+    ["pembelian-id", { modal: 100 }, 200],
+    ["pricing-id", { modal: 100 }, 403],
+    ["persediaan-id", { modal: 100 }, 403],
+    ["katalog-id", { stock: 10 }, 403],
+    ["pembelian-id", { stock: 10 }, 200],
+    ["persediaan-id", { stock: 10 }, 200],
+    ["pricing-id", { stock: 10 }, 403],
+    ["katalog-id", { price: 2000 }, 403],
+    ["pembelian-id", { price: 2000 }, 403],
+    ["persediaan-id", { price: 2000 }, 403],
+    ["pricing-id", { price: 2000 }, 200],
+  ];
+  for (const [userId, body, expected] of cases) {
+    const r = await call("/api/data/products?id=1", "PATCH", userId, body);
+    assert.equal(r.status, expected, userId + " " + JSON.stringify(body));
+  }
 });
 
 test("Katalog boleh DELETE produk; Pricing tidak", async () => {
