@@ -113,6 +113,9 @@ class FakePool {
       captured.insertedPosPrice = params;
       return { rows: [] };
     }
+    if (sql.includes("SELECT id FROM products WHERE id = ANY")) {
+      return { rows: [{ id: 1 }] };
+    }
     if (sql.includes("SELECT id, name, stock FROM products")) {
       return { rows: [PRODUCT_ROW] };
     }
@@ -209,6 +212,12 @@ pg.Pool = FakePool;
 process.env.DATABASE_URL = "postgresql://fake:fake@127.0.0.1:5432/fake";
 process.env.JWT_SECRET = "test-only-secret";
 process.env.NODE_ENV = "test";
+for (const key of [
+  "SHOPEE_PARTNER_ID", "SHOPEE_PARTNER_KEY", "SHOPEE_SHOP_ID",
+  "SHOPEE2_PARTNER_ID", "SHOPEE2_PARTNER_KEY", "SHOPEE2_SHOP_ID",
+]) {
+  delete process.env[key];
+}
 
 const { server } = await import("../src/server.js");
 let base = "";
@@ -278,6 +287,23 @@ test("Katalog tidak boleh PUT harga; Pricing lolos guard", async () => {
   assert.equal(denied.status, 403);
   const allowed = await call("/api/product-prices", "PUT", "pricing-id", {});
   assert.equal(allowed.status, 400); // body invalid, tetapi guard menu lolos
+});
+
+test("Pricing dapat menyimpan harga POS, Shopee 1, dan Shopee 2", async () => {
+  const r = await call("/api/product-prices", "PUT", "pricing-id", [
+    { product_id: 1, channel: "pos", price: 3000 },
+    { product_id: 1, channel: "shopee:724153261", price: 3100 },
+    { product_id: 1, channel: "shopee:1214362884", price: 3200 },
+  ]);
+  assert.equal(r.status, 200);
+  assert.equal(r.data.count, 3);
+});
+
+test("PUT harga per channel tanpa menu Pricing ditolak", async () => {
+  const body = [{ product_id: 1, channel: "pos", price: 3000 }];
+  assert.equal((await call("/api/product-prices", "PUT", "hr-id", body)).status, 403);
+  assert.equal((await call("/api/product-prices", "PUT", "katalog-id", body)).status, 403);
+  assert.equal((await call("/api/product-prices", "PUT", "owner-id", body)).status, 200);
 });
 
 test("Katalog tidak boleh PATCH harga produk lama", async () => {

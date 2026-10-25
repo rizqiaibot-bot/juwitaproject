@@ -2989,9 +2989,8 @@
         <div id="page-harga-belanja" class="page-content">
             <div class="page-header">
                 <div><h1>Harga Belanja Modal</h1><div class="page-header-desc">Daftar harga beli/modal dari supplier</div></div>
-                <button class="checkout-btn" onclick="resetProductForm(); showPage('tambah-produk')" style="width:auto;padding:10px 24px;"><i class="fas fa-plus-circle"></i> Tambah Produk</button>
             </div>
-            <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>KATEGORI</th><th>HARGA BELI</th><th>SUPPLIER</th><th>AKSI</th></tr></thead><tbody id="belanjaTableBody"></tbody></table></div>
+            <div class="table-wrapper"><table><thead><tr><th>PRODUK</th><th>KATEGORI</th><th>HARGA BELI</th><th>SUPPLIER</th></tr></thead><tbody id="belanjaTableBody"></tbody></table></div>
         </div>
 
         <div id="page-harga-jual" class="page-content">
@@ -6408,7 +6407,6 @@
                                 <td>${p.category}</td>
                                 <td>Rp ${(p.modal || 0).toLocaleString('id-ID')}</td>
                                 <td>${p.supplier || '-'}</td>
-                                <td><button class="aksi-btn" onclick="editProduct(${p.id})"><i class="fas fa-pen"></i> Edit</button></td>
                             </tr>`;
                 }).join('');
             }
@@ -9696,6 +9694,7 @@
             // Harga per channel: muat ulang product_prices (RLS authenticated)
             // saat halaman Harga Jual dibuka, lalu render ulang tabel.
             if (pageId === "harga-jual") setTimeout(() => ensureProductPricesLoaded(true), 10);
+            if (pageId === "ubah-harga") setTimeout(() => ensureProductPricesLoaded(true), 10);
             if (pageId === "margin-keuntungan") setTimeout(() => ensureProductPricesLoaded(true), 10);
             if (pageId === "pricing") setTimeout(() => ensureProductPricesLoaded(true), 10);
             // Pastikan polling live tetap berjalan saat halaman Penjualan dibuka.
