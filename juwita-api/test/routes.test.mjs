@@ -102,6 +102,17 @@ class FakePool {
     if (sql.includes("FROM public.attendance_clock")) {
       return { rows: [] };
     }
+    if (sql.includes("SELECT to_regclass('product_prices') AS t")) {
+      return { rows: [{ t: "product_prices" }] };
+    }
+    if (sql.startsWith("INSERT INTO products")) {
+      captured.insertedProduct = params;
+      return { rows: [PRODUCT_ROW] };
+    }
+    if (sql.startsWith("INSERT INTO product_prices")) {
+      captured.insertedPosPrice = params;
+      return { rows: [] };
+    }
     if (sql.includes("SELECT id, name, stock FROM products")) {
       return { rows: [PRODUCT_ROW] };
     }
@@ -299,6 +310,48 @@ test("Matriks edit produk: modal, stok, dan harga ditegakkan backend", async () 
     const r = await call("/api/data/products?id=1", "PATCH", userId, body);
     assert.equal(r.status, expected, userId + " " + JSON.stringify(body));
   }
+});
+
+test("Katalog dapat memakai seluruh aksi utama Katalog", async () => {
+  fakeRefs.order_items = 0;
+  fakeRefs.product_shopee_mapping = 0;
+  const list = await call("/api/products", "GET", "katalog-id");
+  assert.equal(list.status, 200);
+
+  const created = await call("/api/data/products", "POST", "katalog-id", {
+    id: 2, name: "Katalog Baru", category: "Test", price: 1000,
+    modal: 500, stock: 0, sku: "KAT-2",
+  });
+  assert.equal(created.status, 200);
+
+  const edited = await call("/api/data/products?id=1", "PATCH", "katalog-id", {
+    name: "Nama Baru", sku: "KAT-1", category: "Test",
+  });
+  assert.equal(edited.status, 200);
+
+  const modal = await call("/api/data/products?id=1", "PATCH", "katalog-id", { modal: 750 });
+  assert.equal(modal.status, 200);
+
+  const deleted = await call("/api/data/products?id=1", "DELETE", "katalog-id", {});
+  assert.equal(deleted.status, 200);
+});
+
+test("Aksi Katalog tanpa menu Katalog ditolak backend", async () => {
+  const create = await call("/api/data/products", "POST", "hr-id", {
+    id: 3, name: "Ditolak", category: "Test", price: 1000, modal: 500, stock: 0,
+  });
+  assert.equal(create.status, 403);
+
+  const edit = await call("/api/data/products?id=1", "PATCH", "hr-id", { name: "Ditolak" });
+  assert.equal(edit.status, 403);
+
+  const del = await call("/api/data/products?id=1", "DELETE", "hr-id", {});
+  assert.equal(del.status, 403);
+
+  const pricingCreate = await call("/api/data/products", "POST", "pricing-id", {
+    id: 4, name: "Ditolak Pricing", category: "Test", price: 1000, modal: 500, stock: 0,
+  });
+  assert.equal(pricingCreate.status, 403);
 });
 
 test("Katalog boleh DELETE produk; Pricing tidak", async () => {

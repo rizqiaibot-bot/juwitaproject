@@ -4084,7 +4084,7 @@
             const deepGroup = pageMenuGroup(JUWITA_DEEP_PAGE);
             const avail = (JUWITA_DEEP_PAGE && deepGroup && getMenuPermissions(deepGroup))
                 ? JUWITA_DEEP_PAGE
-                : (currentUser.menus[0] || "pos");
+                : defaultPageForMenu(currentUser.menus[0]);
             showPage(avail);
             ensureOrdersPolling();
             // Pastikan data (produk POS, dll.) di-load SETELAH auth tersedia,
@@ -4209,7 +4209,7 @@
             const deepGroup = pageMenuGroup(JUWITA_DEEP_PAGE);
             const avail = (JUWITA_DEEP_PAGE && deepGroup && getMenuPermissions(deepGroup))
                 ? JUWITA_DEEP_PAGE
-                : ((currentUser.menus && currentUser.menus[0]) || "pos");
+                : defaultPageForMenu(currentUser.menus && currentUser.menus[0]);
             showPage(avail);
             ensureOrdersPolling();
             showToast("Login berhasil sebagai " + currentUser.name);
@@ -9641,6 +9641,19 @@
             return menuMap[pageId] || "";
         }
 
+        // Menu token bukan selalu ID halaman (mis. katalog → daftar-produk).
+        function defaultPageForMenu(menu) {
+            const defaults = {
+                katalog: "daftar-produk",
+                penjualan: "daftar-penjualan",
+                persediaan: "monitor-stok",
+                pembelian: "data-pembelian",
+                gudang: "penerimaan",
+                hr: "karyawan"
+            };
+            return defaults[menu] || menu || "pos";
+        }
+
         function showPage(pageId) {
             // Permission check
             if (currentUser) {
@@ -10208,7 +10221,7 @@
                     const deepGroup = pageMenuGroup(JUWITA_DEEP_PAGE);
                     const available = (JUWITA_DEEP_PAGE && deepGroup && getMenuPermissions(deepGroup))
                         ? JUWITA_DEEP_PAGE
-                        : (currentUser.menus[0] || "pos");
+                        : defaultPageForMenu(currentUser.menus[0]);
                     showPage(available);
                 } else {
                     openPhoneLogin(); // login screen sebagai halaman awal (gate)
