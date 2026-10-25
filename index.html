@@ -2842,8 +2842,46 @@
         </div>
 
         <div id="page-mutasi-stok" class="page-content">
-            <div class="page-header"><h1>Mutasi Stok</h1><div class="page-header-desc">Catat perpindahan stok antar gudang atau lokasi</div></div>
-            <div class="form-card"><h3 style="margin-bottom:16px;">Form Mutasi Barang</h3><div class="form-grid"><div class="form-group"><label>Produk</label><select id="mutasiProductSelect" class="form-control"><option value="">Pilih produk</option></select></div><div class="form-group"><label>Jumlah</label><input type="number" class="form-control" value="1" /></div><div class="form-group"><label>Dari Lokasi</label><select class="form-control"><option>Gudang Utama</option><option>Gudang Cabang</option></select></div><div class="form-group"><label>Ke Lokasi</label><select class="form-control"><option>Gudang Cabang</option><option>Gudang Utama</option></select></div></div><button class="checkout-btn" onclick="showToast('Mutasi stok berhasil dicatat')"><i class="fas fa-check"></i> Proses Mutasi</button></div>
+            <div class="page-header"><h1>Penyesuaian Stok</h1><div class="page-header-desc">Sesuaikan stok pusat dengan riwayat mutasi yang tercatat</div></div>
+            <div class="form-card">
+                <h3 style="margin-bottom:16px;">Form Penyesuaian Stok</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Produk</label>
+                        <select id="mutasiProductSelect" class="form-control" onchange="updateStockAdjustmentPreview()">
+                            <option value="">Pilih produk</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Jenis Penyesuaian</label>
+                        <select id="mutasiDirection" class="form-control" onchange="updateStockAdjustmentPreview()">
+                            <option value="in">Stok Bertambah</option>
+                            <option value="out">Stok Berkurang</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Jumlah (desimal diperbolehkan)</label>
+                        <input type="number" id="mutasiQty" class="form-control" min="0.000001" step="any" value="1" oninput="updateStockAdjustmentPreview()" />
+                    </div>
+                    <div class="form-group">
+                        <label>Alasan (wajib)</label>
+                        <input type="text" id="mutasiReason" class="form-control" maxlength="500" placeholder="Contoh: koreksi stok opname" oninput="updateStockAdjustmentPreview()" />
+                    </div>
+                </div>
+                <div id="mutasiPreview" style="margin:12px 0;padding:10px 14px;border-radius:var(--radius-sm);background:var(--bg-primary);border:1px solid var(--border-color);font-size:0.8rem;line-height:1.6;">
+                    Pilih produk untuk melihat stok saat ini.
+                </div>
+                <button type="button" id="mutasiSubmit" class="checkout-btn" onclick="submitStockAdjustment()" disabled>
+                    <i class="fas fa-check"></i> Simpan Penyesuaian
+                </button>
+            </div>
+            <div style="margin-top:20px;">
+                <h3 style="margin-bottom:10px;font-size:1rem;">Riwayat Mutasi Stok</h3>
+                <div class="table-wrapper"><table>
+                    <thead><tr><th>WAKTU</th><th>PRODUK</th><th>JENIS</th><th>QTY</th><th>STOK</th><th>SUMBER</th></tr></thead>
+                    <tbody id="mutasiHistoryBody"><tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Memuat...</td></tr></tbody>
+                </table></div>
+            </div>
         </div>
 
         <div id="page-data-pembelian" class="page-content">
@@ -4348,6 +4386,136 @@
             sel.appendChild(frag);
         }
         window.populateMutasiStokProducts = populateMutasiStokProducts;
+
+        function formatStockQty(value) {
+            return Number(value).toLocaleString("id-ID", { maximumFractionDigits: 6 });
+        }
+
+        function isValidStockAdjustmentQty(raw) {
+            const text = String(raw == null ? "" : raw).trim();
+            if (!/^\d+(?:\.\d{1,6})?$/.test(text)) return false;
+            const n = Number(text);
+            return Number.isFinite(n) && n > 0 && n <= 1000000000000;
+        }
+
+        function updateStockAdjustmentPreview() {
+            const preview = document.getElementById("mutasiPreview");
+            const submit = document.getElementById("mutasiSubmit");
+            if (!preview || !submit) return;
+            const selected = document.getElementById("mutasiProductSelect");
+            const product = selected ? products.find(function (p) {
+                return String(p.id) === String(selected.value);
+            }) : null;
+            const qtyRaw = (document.getElementById("mutasiQty")?.value || "").trim();
+            const qty = Number(qtyRaw);
+            const direction = document.getElementById("mutasiDirection")?.value || "in";
+            const reason = (document.getElementById("mutasiReason")?.value || "").trim();
+            if (!product) {
+                preview.textContent = "Pilih produk untuk melihat stok saat ini.";
+                preview.style.color = "var(--text-muted)";
+                submit.disabled = true;
+                return;
+            }
+            const before = Number(product.stock) || 0;
+            const after = direction === "out" ? before - qty : before + qty;
+            const validQty = isValidStockAdjustmentQty(qtyRaw);
+            const validReason = reason.length > 0 && reason.length <= 500;
+            const valid = validQty && validReason && after >= 0;
+            submit.disabled = !valid;
+            if (!validQty) {
+                preview.textContent = "Jumlah harus angka positif, maksimal 6 desimal.";
+                preview.style.color = "var(--danger)";
+            } else if (after < 0) {
+                preview.textContent = "Stok tidak cukup. Stok saat ini " + formatStockQty(before) + ", tidak boleh menjadi " + formatStockQty(after) + ".";
+                preview.style.color = "var(--danger)";
+            } else if (!validReason) {
+                preview.textContent = "Alasan wajib diisi (maksimal 500 karakter).";
+                preview.style.color = "var(--danger)";
+            } else {
+                preview.textContent = "Stok saat ini: " + formatStockQty(before) + " → setelah penyesuaian: " + formatStockQty(after) + ".";
+                preview.style.color = "var(--text-primary)";
+            }
+        }
+
+        async function loadStockMutations() {
+            const tbody = document.getElementById("mutasiHistoryBody");
+            if (!tbody) return;
+            try {
+                const res = await apiFetch("/api/data/stock_mutations?order=created_at&dir=desc&limit=50");
+                if (!res.ok) {
+                    const msg = (res.data && (res.data.message || res.data.error)) ? (res.data.message || res.data.error) : ("HTTP " + res.status);
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--danger);">Gagal memuat riwayat: ' + escEmp(msg) + '</td></tr>';
+                    return;
+                }
+                const rows = (res.data && Array.isArray(res.data.data)) ? res.data.data : [];
+                if (!rows.length) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Belum ada mutasi stok.</td></tr>';
+                    return;
+                }
+                const typeLabel = { IN: "Masuk", OUT: "Keluar", ADJUST: "Penyesuaian" };
+                tbody.innerHTML = rows.map(function (r) {
+                    return '<tr>' +
+                        '<td>' + escEmp(fmtWIB(r.created_at)) + '</td>' +
+                        '<td>' + escEmp(r.product_name || ("#" + r.product_id)) + '</td>' +
+                        '<td>' + escEmp(typeLabel[r.type] || r.type || "-") + '</td>' +
+                        '<td>' + escEmp(r.quantity != null ? r.quantity : "-") + '</td>' +
+                        '<td>' + escEmp((r.qty_before != null ? r.qty_before : "-") + " → " + (r.qty_after != null ? r.qty_after : "-")) + '</td>' +
+                        '<td>' + escEmp(r.source || "-") + '</td>' +
+                        '</tr>';
+                }).join("");
+            } catch (err) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--danger);">Gagal memuat riwayat: ' + escEmp(err && err.message ? err.message : "gagal") + '</td></tr>';
+            }
+        }
+
+        async function submitStockAdjustment() {
+            const selected = document.getElementById("mutasiProductSelect");
+            const product = selected ? products.find(function (p) {
+                return String(p.id) === String(selected.value);
+            }) : null;
+            const qtyRaw = (document.getElementById("mutasiQty")?.value || "").trim();
+            const qty = Number(qtyRaw);
+            const direction = document.getElementById("mutasiDirection")?.value || "in";
+            const reason = (document.getElementById("mutasiReason")?.value || "").trim();
+            const submit = document.getElementById("mutasiSubmit");
+            if (!product) { showToast("Pilih produk", "error"); return; }
+            if (!isValidStockAdjustmentQty(qtyRaw)) { showToast("Jumlah harus angka positif, maksimal 6 desimal", "error"); return; }
+            if (!reason) { showToast("Alasan wajib diisi", "error"); return; }
+            const before = Number(product.stock) || 0;
+            if (direction === "out" && before - qty < 0) { showToast("Stok tidak cukup", "error"); return; }
+            if (submit) { submit.disabled = true; submit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...'; }
+            try {
+                const res = await apiFetch("/api/persediaan/stock-adjustments", {
+                    method: "POST",
+                    body: { product_id: product.id, direction: direction, quantity: qtyRaw, reason: reason }
+                });
+                if (!res.ok) {
+                    const msg = (res.data && (res.data.message || res.data.error)) ? (res.data.message || res.data.error) : ("HTTP " + res.status);
+                    showToast("Gagal menyesuaikan stok: " + msg, "error");
+                    return;
+                }
+                const data = (res.data && res.data.data) || {};
+                product.stock = Number(data.stock_after);
+                document.getElementById("mutasiQty").value = "1";
+                document.getElementById("mutasiReason").value = "";
+                renderProducts(currentSearch, posCategory);
+                renderMonitorStok();
+                renderCatalogTable();
+                await loadStockMutations();
+                showToast("Stok " + (product.name || "#" + product.id) + " disesuaikan menjadi " + product.stock);
+            } catch (err) {
+                showToast("Gagal menyesuaikan stok: " + (err && err.message ? err.message : "gagal"), "error");
+            } finally {
+                if (submit) {
+                    submit.innerHTML = '<i class="fas fa-check"></i> Simpan Penyesuaian';
+                }
+                updateStockAdjustmentPreview();
+            }
+        }
+
+        window.updateStockAdjustmentPreview = updateStockAdjustmentPreview;
+        window.loadStockMutations = loadStockMutations;
+        window.submitStockAdjustment = submitStockAdjustment;
 
         async function initSupabaseData(force) {
             if (dataLoading) return;
@@ -9128,12 +9296,13 @@
         // ============================================================
         // TOAST
         // ============================================================
-        function showToast(msg) {
+        function showToast(msg, type) {
             const container = document.getElementById("toastContainer");
             if (!container) return;
+            const isError = type === "error";
             const toast = document.createElement("div");
-            toast.className = "toast";
-            toast.innerHTML = `<i class="fas fa-check-circle" style="color:#10b981;"></i> ${msg}`;
+            toast.className = isError ? "toast toast-error" : "toast";
+            toast.innerHTML = `<i class="fas ${isError ? "fa-times-circle" : "fa-check-circle"}" style="color:${isError ? "#ef4444" : "#10b981"};"></i> ${msg}`;
             container.appendChild(toast);
             setTimeout(() => {
                 toast.style.opacity = "0";
@@ -9690,7 +9859,11 @@
             if (pageId === "jadwal-kerja") setTimeout(() => syncKaryawanRealtime().then(() => loadJadwalKerja()).then(() => renderJadwalKerja()), 10);
             if (pageId === "absensi") setTimeout(() => attendanceInit(), 10);
             else attendanceLeave();
-            if (pageId === "mutasi-stok") setTimeout(() => populateMutasiStokProducts(), 10);
+            if (pageId === "mutasi-stok") setTimeout(() => {
+                populateMutasiStokProducts();
+                updateStockAdjustmentPreview();
+                loadStockMutations();
+            }, 10);
             // Harga per channel: muat ulang product_prices (RLS authenticated)
             // saat halaman Harga Jual dibuka, lalu render ulang tabel.
             if (pageId === "harga-jual") setTimeout(() => ensureProductPricesLoaded(true), 10);

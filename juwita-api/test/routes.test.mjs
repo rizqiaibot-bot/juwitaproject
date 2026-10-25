@@ -47,6 +47,10 @@ const USERS = {
 };
 
 const captured = {};
+const fakeState = {
+  stockProductFound: true,
+  failStockMutation: false,
+};
 const fakeRefs = {
   order_items: 0,
   purchase_items: 0,
@@ -145,6 +149,17 @@ class FakePool {
         if (sql.includes("SELECT id, name FROM products WHERE id = $1 FOR UPDATE")) {
           return { rows: [{ id: 1, name: "Produk Test" }] };
         }
+        if (sql.includes("SELECT to_regclass('product_prices') AS t")) {
+          return { rows: [{ t: "product_prices" }] };
+        }
+        if (sql.startsWith("INSERT INTO products ")) {
+          captured.insertedProduct = params;
+          return { rows: [PRODUCT_ROW] };
+        }
+        if (sql.startsWith("INSERT INTO product_prices")) {
+          captured.insertedPosPrice = params;
+          return { rows: [] };
+        }
         if (sql.includes("SELECT to_regclass($1) AS t")) {
           return { rows: [{ t: params[0] }] };
         }
@@ -178,20 +193,49 @@ class FakePool {
             }],
           };
         }
+        if (sql.includes("stock::text AS stock") && sql.includes("FOR UPDATE")) {
+          if (!fakeState.stockProductFound) return { rows: [] };
+          const before = 7;
+          const qty = Number(params[2]);
+          const after = params[1] === "out" ? before - qty : before + qty;
+          return {
+            rows: [{
+              id: 1,
+              name: "Produk Test",
+              stock: String(before),
+              stock_after: String(after),
+              negative: after < 0,
+            }],
+          };
+        }
+        if (sql.includes("UPDATE products SET stock = $1::numeric WHERE id = $2")) {
+          captured.stockUpdate = params;
+          return { rows: [] };
+        }
         if (sql.includes("SELECT id, name, stock FROM products WHERE id = $1 FOR UPDATE")) {
-          return { rows: [{ id: 1, name: "Produk Test", stock: 7 }] };
+          return { rows: fakeState.stockProductFound ? [{ id: 1, name: "Produk Test", stock: 7 }] : [] };
         }
         if (sql.includes("UPDATE products SET stock = $1, modal = $2 WHERE id = $3")) {
           captured.productUpdate = params;
           return { rows: [] };
+        }
+        if (sql.includes("UPDATE products SET stock = $1 WHERE id = $2") && !sql.includes("RETURNING")) {
+          captured.stockUpdate = params;
+          return { rows: [] };
+        }
+        if (sql.startsWith("UPDATE products SET") && sql.includes("RETURNING *")) {
+          captured.productPatch = params;
+          return { rows: [{ ...PRODUCT_ROW, stock: params[0] }] };
         }
         if (sql.includes("UPDATE purchase_items SET qty_received = qty_received + $1 WHERE id = $2")) {
           captured.itemUpdate = params;
           return { rows: [] };
         }
         if (sql.includes("INSERT INTO stock_mutations")) {
+          if (fakeState.failStockMutation) throw new Error("forced stock mutation failure");
           captured.mutation = params;
-          return { rows: [] };
+          captured.mutationCount = (captured.mutationCount || 0) + 1;
+          return { rows: [{ id: 99 }] };
         }
         if (sql.includes("UPDATE purchases SET receiving_status = $1 WHERE id = $2")) {
           captured.purchaseUpdate = params;
@@ -531,4 +575,112 @@ test("Karyawan non-owner tidak boleh membuat akun", async () => {
 test("Retry mutasi stok hanya untuk Gudang/Persediaan/owner", async () => {
   const denied = await call("/api/stock-mutations/1/retry", "POST", "penjualan-id", {});
   assert.equal(denied.status, 403);
+});
+
+test("Penyesuaian stok bertambah: satu transaksi dan satu mutasi", async () => {
+  captured.mutationCount = 0;
+  captured.tx = [];
+  const r = await call("/api/persediaan/stock-adjustments", "POST", "persediaan-id", {
+    product_id: 1, direction: "in", quantity: 3, reason: "Koreksi opname",
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.data.stock_before, 7);
+  assert.equal(r.data.data.stock_after, 10);
+  assert.equal(r.data.data.mutation_id, 99);
+  assert.equal(captured.mutationCount, 1);
+  assert.deepEqual(captured.tx, ["BEGIN", "COMMIT"]);
+});
+
+test("Penyesuaian stok berkurang: satu transaksi dan satu mutasi", async () => {
+  captured.mutationCount = 0;
+  captured.tx = [];
+  const r = await call("/api/persediaan/stock-adjustments", "POST", "persediaan-id", {
+    product_id: 1, direction: "out", quantity: 2, reason: "Barang rusak",
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.data.stock_after, 5);
+  assert.equal(captured.mutationCount, 1);
+  assert.deepEqual(captured.tx, ["BEGIN", "COMMIT"]);
+});
+
+test("Penyesuaian stok menolak jumlah nol/negatif dan stok akhir negatif", async () => {
+  const zero = await call("/api/persediaan/stock-adjustments", "POST", "persediaan-id", {
+    product_id: 1, direction: "in", quantity: 0, reason: "Tes",
+  });
+  assert.equal(zero.status, 400);
+  const negative = await call("/api/persediaan/stock-adjustments", "POST", "persediaan-id", {
+    product_id: 1, direction: "out", quantity: -1, reason: "Tes",
+  });
+  assert.equal(negative.status, 400);
+  const insufficient = await call("/api/persediaan/stock-adjustments", "POST", "persediaan-id", {
+    product_id: 1, direction: "out", quantity: 8, reason: "Tes",
+  });
+  assert.equal(insufficient.status, 409);
+});
+
+test("Penyesuaian stok menerima desimal valid, menolak overflow, dan menormalisasi alasan", async () => {
+  const decimal = await call("/api/persediaan/stock-adjustments", "POST", "persediaan-id", {
+    product_id: 1, direction: "in", quantity: "1.5", reason: "Tes desimal",
+  });
+  assert.equal(decimal.status, 200);
+  assert.equal(decimal.data.data.quantity, 1.5);
+  assert.equal(decimal.data.data.stock_after, 8.5);
+  const tooManyDecimals = await call("/api/persediaan/stock-adjustments", "POST", "persediaan-id", {
+    product_id: 1, direction: "in", quantity: "0.1234567", reason: "Tes presisi",
+  });
+  assert.equal(tooManyDecimals.status, 400);
+  const overflow = await call("/api/persediaan/stock-adjustments", "POST", "persediaan-id", {
+    product_id: 1, direction: "in", quantity: 1000000000001, reason: "Tes overflow",
+  });
+  assert.equal(overflow.status, 400);
+  const normalized = await call("/api/persediaan/stock-adjustments", "POST", "persediaan-id", {
+    product_id: 1, direction: "in", quantity: "1", reason: "  Koreksi\n\topname  ",
+  });
+  assert.equal(normalized.status, 200);
+  assert.equal(normalized.data.data.source, "Penyesuaian Stok (IN) - Koreksi opname - oleh Persediaan Test");
+});
+
+test("PATCH products menolak stok negatif/null, tetapi menerima angka valid", async () => {
+  const negative = await call("/api/data/products?id=1", "PATCH", "persediaan-id", { stock: -1 });
+  assert.equal(negative.status, 400);
+  const nullStock = await call("/api/data/products?id=1", "PATCH", "persediaan-id", { stock: null });
+  assert.equal(nullStock.status, 400);
+  const valid = await call("/api/data/products?id=1", "PATCH", "persediaan-id", { stock: 10 });
+  assert.equal(valid.status, 200);
+});
+
+test("Penyesuaian stok menolak produk tidak valid/tidak ditemukan", async () => {
+  const invalid = await call("/api/persediaan/stock-adjustments", "POST", "persediaan-id", {
+    product_id: "abc", direction: "in", quantity: 1, reason: "Tes",
+  });
+  assert.equal(invalid.status, 400);
+  fakeState.stockProductFound = false;
+  const missing = await call("/api/persediaan/stock-adjustments", "POST", "persediaan-id", {
+    product_id: 999, direction: "in", quantity: 1, reason: "Tes",
+  });
+  assert.equal(missing.status, 404);
+  fakeState.stockProductFound = true;
+});
+
+test("Penyesuaian stok: izin Persediaan/Pembelian/owner, tanpa izin ditolak", async () => {
+  const body = { product_id: 1, direction: "in", quantity: 1, reason: "Tes izin" };
+  assert.equal((await call("/api/persediaan/stock-adjustments", "POST", "hr-id", body)).status, 403);
+  assert.equal((await call("/api/persediaan/stock-adjustments", "POST", "pricing-id", body)).status, 403);
+  assert.equal((await call("/api/persediaan/stock-adjustments", "POST", "persediaan-id", body)).status, 200);
+  assert.equal((await call("/api/persediaan/stock-adjustments", "POST", "pembelian-id", body)).status, 200);
+  assert.equal((await call("/api/persediaan/stock-adjustments", "POST", "owner-id", body)).status, 200);
+});
+
+test("Gagal mencatat mutasi membatalkan perubahan stok", async () => {
+  captured.tx = [];
+  fakeState.failStockMutation = true;
+  try {
+    const r = await call("/api/persediaan/stock-adjustments", "POST", "persediaan-id", {
+      product_id: 1, direction: "in", quantity: 1, reason: "Tes rollback",
+    });
+    assert.equal(r.status, 500);
+    assert.deepEqual(captured.tx, ["BEGIN", "ROLLBACK"]);
+  } finally {
+    fakeState.failStockMutation = false;
+  }
 });

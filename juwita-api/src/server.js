@@ -527,13 +527,13 @@ async function detachProductShopeeMapping(req, res, productId) {
 // Produk baru: pastikan channel POS punya baris harga eksplisit.
 // Hanya memakai products.price yang diisi pengguna saat membuat produk.
 // Channel Shopee TIDAK dibuat/diubah di sini.
-async function ensureProductPosPrice(row) {
+async function ensureProductPosPriceWithClient(client, row) {
   const price = Number(row && row.price);
   if (!Number.isInteger(price) || price < 0) return;
   try {
-    const { rows } = await pool.query("SELECT to_regclass('product_prices') AS t");
+    const { rows } = await client.query("SELECT to_regclass('product_prices') AS t");
     if (!rows[0] || !rows[0].t) return;
-    await pool.query(
+    await client.query(
       `INSERT INTO product_prices (product_id, channel, price)
        VALUES ($1, 'pos', $2)
        ON CONFLICT (product_id, channel) DO NOTHING`,
@@ -541,20 +541,34 @@ async function ensureProductPosPrice(row) {
     );
   } catch (err) {
     console.error("ensure product POS price failed:", err.message);
+    throw err;
+  }
+}
+
+async function ensureProductPosPrice(row) {
+  try {
+    return await ensureProductPosPriceWithClient(pool, row);
+  } catch {
+    // Perilaku lama: kegagalan harga POS tidak menggagalkan pemanggil non-transaksi.
+    return undefined;
   }
 }
 
 // Catat mutation stok (pending) agar worker sync mengirim ke SEMUA mapping Shopee.
 // TIDAK boleh ada jalur ubah products.stock yang melewati fungsi ini.
-async function recordProductStockMutation(productId, productName, qtyBefore, qtyAfter, source) {
+async function recordProductStockMutationWithClient(client, productId, productName, qtyBefore, qtyAfter, source) {
   if (qtyAfter === qtyBefore) return;
   const type = qtyAfter > qtyBefore ? "IN" : "OUT";
   const quantity = Math.abs(qtyAfter - qtyBefore);
-  await pool.query(
+  await client.query(
     `INSERT INTO stock_mutations (product_id, product_name, type, quantity, qty_before, qty_after, source, sync_status, created_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,'pending',now())`,
     [productId, productName, type, quantity, qtyBefore, qtyAfter, source]
   );
+}
+
+async function recordProductStockMutation(productId, productName, qtyBefore, qtyAfter, source) {
+  return recordProductStockMutationWithClient(pool, productId, productName, qtyBefore, qtyAfter, source);
 }
 
 async function handleDataWrite(req, res, table, method) {
@@ -574,6 +588,12 @@ async function handleDataWrite(req, res, table, method) {
     if (table === "products" && !checkProductColumns(req.user, cols, "create")) {
       return sendJson(res, 403, { error: "forbidden" });
     }
+    if (table === "products" && rows.some((r) =>
+      Object.prototype.hasOwnProperty.call(r, "stock") &&
+      !(r.stock !== null && r.stock !== "" && Number.isFinite(Number(r.stock)) && Number(r.stock) >= 0)
+    )) {
+      return sendJson(res, 400, { error: "invalid_stock" });
+    }
     if (table === "app_users" && rows.some((r) => String(r.role || "").toLowerCase() === "owner")) {
       return sendJson(res, 403, { error: "forbidden", message: "Role owner tidak dapat dibuat lewat API" });
     }
@@ -583,25 +603,49 @@ async function handleDataWrite(req, res, table, method) {
       const v = r[c];
       return (typeof v === "object" && v !== null) ? JSON.stringify(v) : v;
     }));
+    let client = null;
     try {
-      const { rows: inserted } = await pool.query(
-        `INSERT INTO ${table} (${colList}) VALUES ${valueList} RETURNING *`,
-        flat
-      );
-      // Produk baru: stok awal > 0 → catat mutation agar sinkron ke Shopee.
+      let inserted;
       if (table === "products") {
+        client = await pool.connect();
+        await client.query("BEGIN");
+        const result = await client.query(
+          `INSERT INTO ${table} (${colList}) VALUES ${valueList} RETURNING *`,
+          flat
+        );
+        inserted = result.rows;
+        // Produk baru + harga POS + mutasi stok awal harus satu transaksi.
         for (const row of inserted) {
-          await ensureProductPosPrice(row);
+          await ensureProductPosPriceWithClient(client, row);
           const initialStock = Number(row.stock) || 0;
           if (initialStock > 0) {
-            await recordProductStockMutation(row.id, row.name, 0, initialStock, "Produk Baru");
+            await recordProductStockMutationWithClient(
+              client,
+              row.id,
+              row.name,
+              0,
+              initialStock,
+              "Produk Baru"
+            );
           }
         }
+        await client.query("COMMIT");
+      } else {
+        const result = await pool.query(
+          `INSERT INTO ${table} (${colList}) VALUES ${valueList} RETURNING *`,
+          flat
+        );
+        inserted = result.rows;
       }
       sendJson(res, 200, { data: inserted });
     } catch (err) {
+      if (client) {
+        try { await client.query("ROLLBACK"); } catch {}
+      }
       console.error(`data POST ${table} failed:`, err.message);
       sendJson(res, 500, { error: "internal_error" });
+    } finally {
+      if (client) client.release();
     }
     return;
   }
@@ -673,6 +717,12 @@ async function handleDataWrite(req, res, table, method) {
   if (table === "products" && !checkProductColumns(req.user, cols, "update")) {
     return sendJson(res, 403, { error: "forbidden" });
   }
+  if (table === "products" && Object.prototype.hasOwnProperty.call(updates, "stock")) {
+    const rawStock = updates.stock;
+    if (!(rawStock !== null && rawStock !== "" && Number.isFinite(Number(rawStock)) && Number(rawStock) >= 0)) {
+      return sendJson(res, 400, { error: "invalid_stock" });
+    }
+  }
   if (table === "app_users") {
     if (String(updates.role || "").toLowerCase() === "owner") {
       return sendJson(res, 403, { error: "forbidden", message: "Role owner tidak dapat diberikan lewat API" });
@@ -696,36 +746,66 @@ async function handleDataWrite(req, res, table, method) {
 
   // Perubahan products.stock lewat data API wajib mencatat mutation (pending)
   // agar worker sync mengirim stok terbaru ke SEMUA mapping Shopee produk.
+  // Update stok + insert mutation harus satu transaksi.
   const trackStock = table === "products" && cols.includes("stock");
-  let beforeMap = {};
-  if (trackStock) {
-    const { rows: beforeRows } = await pool.query(`SELECT id, name, stock FROM products${where}`, params);
-    for (const r of beforeRows) beforeMap[String(r.id)] = r;
-  }
+  let client = null;
 
   try {
-    const { rows: updated } = await pool.query(
-      `UPDATE ${table} SET ${setList}${where} RETURNING *`,
-      [...params, ...cols.map((c) => {
-        const v = updates[c];
-        return (typeof v === "object" && v !== null) ? JSON.stringify(v) : v;
-      })]
-    );
-
+    let updated;
     if (trackStock) {
+      client = await pool.connect();
+      await client.query("BEGIN");
+      const { rows: beforeRows } = await client.query(
+        `SELECT id, name, stock FROM products${where} FOR UPDATE`,
+        params
+      );
+      const beforeMap = {};
+      for (const r of beforeRows) beforeMap[String(r.id)] = r;
+
+      const result = await client.query(
+        `UPDATE ${table} SET ${setList}${where} RETURNING *`,
+        [...params, ...cols.map((c) => {
+          const v = updates[c];
+          return (typeof v === "object" && v !== null) ? JSON.stringify(v) : v;
+        })]
+      );
+      updated = result.rows;
+
       for (const row of updated) {
         const before = beforeMap[String(row.id)];
         if (!before) continue;
-        const qtyBefore = Number(before.stock) || 0;
-        const qtyAfter = Number(row.stock) || 0;
-        await recordProductStockMutation(row.id, row.name || before.name, qtyBefore, qtyAfter, "Perubahan Stok");
+        const qtyBefore = Number(before.stock);
+        const qtyAfter = Number(row.stock);
+        await recordProductStockMutationWithClient(
+          client,
+          row.id,
+          row.name || before.name,
+          qtyBefore,
+          qtyAfter,
+          "Perubahan Stok"
+        );
       }
+      await client.query("COMMIT");
+    } else {
+      const result = await pool.query(
+        `UPDATE ${table} SET ${setList}${where} RETURNING *`,
+        [...params, ...cols.map((c) => {
+          const v = updates[c];
+          return (typeof v === "object" && v !== null) ? JSON.stringify(v) : v;
+        })]
+      );
+      updated = result.rows;
     }
 
     sendJson(res, 200, { data: updated });
   } catch (err) {
+    if (client) {
+      try { await client.query("ROLLBACK"); } catch {}
+    }
     console.error(`data PATCH ${table} failed:`, err.message);
     sendJson(res, 500, { error: "internal_error" });
+  } finally {
+    if (client) client.release();
   }
 }
 
@@ -960,6 +1040,138 @@ async function handleGudangOpnameStart(req, res) {
   } catch (err) {
     console.error("gudang opname start failed:", err.message);
     return sendJson(res, 500, { error: "internal_error" });
+  }
+}
+
+function normalizeAuditText(value) {
+  return String(value == null ? "" : value)
+    .replace(/[\u0000-\u001F\u007F]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// --- Penyesuaian stok pusat (Persediaan/Pembelian/owner) ---
+// Satu transaksi: update products.stock + tepat satu stock_mutations.
+const MAX_STOCK_ADJUSTMENT = 1000000000000; // 1e12, batas aman API
+const MAX_STOCK_DECIMALS = 6;
+
+async function handleStockAdjustment(req, res) {
+  const { error, data } = await readJsonBody(req, 64 * 1024);
+  if (error || !data || typeof data !== "object") {
+    return sendJson(res, 400, { error: "invalid_request" });
+  }
+  const productId = String(data.product_id || "");
+  const direction = String(data.direction || "").toLowerCase();
+  const reason = normalizeAuditText(data.reason);
+  let quantityText = "";
+  if (typeof data.quantity === "number") {
+    quantityText = Number.isFinite(data.quantity) ? String(data.quantity) : "";
+  } else if (typeof data.quantity === "string") {
+    quantityText = data.quantity.trim();
+  }
+  const quantityRegex = new RegExp("^\\d+(?:\\.\\d{1," + MAX_STOCK_DECIMALS + "})?$");
+  const quantity = Number(quantityText);
+  if (!/^[1-9]\d*$/.test(productId)) {
+    return sendJson(res, 400, { error: "invalid_product_id" });
+  }
+  if (direction !== "in" && direction !== "out") {
+    return sendJson(res, 400, { error: "invalid_direction" });
+  }
+  if (!quantityRegex.test(quantityText) ||
+      !Number.isFinite(quantity) ||
+      quantity <= 0 ||
+      quantity > MAX_STOCK_ADJUSTMENT) {
+    return sendJson(res, 400, { error: "invalid_quantity" });
+  }
+  if (!reason || reason.length > 500) {
+    return sendJson(res, 400, { error: "invalid_reason" });
+  }
+
+  const actor = normalizeAuditText(req.user && req.user.name) || "?";
+  let client = null;
+  try {
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `SELECT id, name, stock::text AS stock,
+              CASE WHEN $2 = 'in'
+                   THEN (stock + $3::numeric)::text
+                   ELSE (stock - $3::numeric)::text
+              END AS stock_after,
+              CASE WHEN $2 = 'out' AND stock - $3::numeric < 0
+                   THEN true ELSE false
+              END AS negative
+         FROM products WHERE id = $1 FOR UPDATE`,
+      [productId, direction, quantityText]
+    );
+    if (!rows.length) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 404, { error: "product_not_found" });
+    }
+    const product = rows[0];
+    if (product.stock === null || product.stock === undefined || product.stock_after === null) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 409, { error: "invalid_stock_state" });
+    }
+    const stockBefore = Number(product.stock);
+    const stockAfter = Number(product.stock_after);
+    if (!Number.isFinite(stockBefore) || !Number.isFinite(stockAfter)) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 409, { error: "invalid_stock_state" });
+    }
+    if (product.negative === true || stockAfter < 0) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 409, {
+        error: "insufficient_stock",
+        message: "Stok tidak boleh negatif.",
+        stock_before: stockBefore,
+        quantity,
+      });
+    }
+
+    await client.query(
+      "UPDATE products SET stock = $1::numeric WHERE id = $2",
+      [product.stock_after, product.id]
+    );
+    const source = "Penyesuaian Stok (" + (direction === "in" ? "IN" : "OUT") + ") - " + reason + " - oleh " + actor;
+    const { rows: inserted } = await client.query(
+      `INSERT INTO stock_mutations (
+         product_id, product_name, type, quantity,
+         qty_before, qty_after, source, sync_status, created_at
+       ) VALUES ($1,$2,$3,$4::numeric,$5::numeric,$6::numeric,$7,'pending',now())
+       RETURNING id`,
+      [
+        product.id,
+        product.name || null,
+        direction === "in" ? "IN" : "OUT",
+        quantityText,
+        product.stock,
+        product.stock_after,
+        source,
+      ]
+    );
+    await client.query("COMMIT");
+    return sendJson(res, 200, {
+      data: {
+        ok: true,
+        product_id: product.id,
+        product_name: product.name || null,
+        direction,
+        quantity,
+        stock_before: stockBefore,
+        stock_after: stockAfter,
+        mutation_id: inserted[0] ? inserted[0].id : null,
+        source,
+      },
+    });
+  } catch (err) {
+    if (client) {
+      try { await client.query("ROLLBACK"); } catch {}
+    }
+    console.error("stock adjustment failed:", err.message);
+    return sendJson(res, 500, { error: "internal_error" });
+  } finally {
+    if (client) client.release();
   }
 }
 
@@ -1433,6 +1645,14 @@ const server = http.createServer(async (req, res) => {
     if (!user) return;
     if (!checkMenuAccess(user, "gudang")) return sendJson(res, 403, { error: "forbidden" });
     return handleGudangOpnameStart(req, res);
+  }
+  if (req.method === "POST" && pathname === "/api/persediaan/stock-adjustments") {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    if (!isOwnerUser(user) && !userHasAnyMenu(user, ["persediaan", "pembelian"])) {
+      return sendJson(res, 403, { error: "forbidden" });
+    }
+    return handleStockAdjustment(req, res);
   }
   if (req.method === "POST" && pathname.startsWith("/api/stock-mutations/") && pathname.endsWith("/retry")) {
     const user = await requireAuth(req, res);
