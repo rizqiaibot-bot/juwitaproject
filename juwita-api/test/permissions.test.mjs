@@ -113,6 +113,59 @@ test("produk: delete hanya Katalog", () => {
   assert.equal(checkTableAccess(pembelian, "products", "delete"), false);
 });
 
+test("matriks tabel operasional per menu", () => {
+  const allow = (user, table, op) => checkTableAccess(user, table, op);
+  const deny = (user, table, op) => !checkTableAccess(user, table, op);
+
+  assert.equal(allow(pos, "orders", "read"), true);
+  assert.equal(deny(pos, "orders", "update"), true);
+  assert.equal(allow(pos, "products", "read"), true);
+  assert.equal(deny(pos, "products", "update"), true);
+
+  assert.equal(allow(penjualan, "orders", "read"), true);
+  assert.equal(allow(penjualan, "order_items", "read"), true);
+  assert.equal(deny(penjualan, "products", "update"), true);
+  assert.equal(deny(penjualan, "suppliers", "read"), true);
+
+  assert.equal(allow(katalog, "products", "create"), true);
+  assert.equal(allow(katalog, "products", "update"), true);
+  assert.equal(allow(katalog, "products", "delete"), true);
+  assert.equal(deny(katalog, "pricing", "read"), true);
+
+  assert.equal(allow(persediaan, "products", "read"), true);
+  assert.equal(allow(persediaan, "products", "update"), true);
+  assert.equal(allow(persediaan, "stock_mutations", "read"), true);
+  assert.equal(deny(persediaan, "products", "delete"), true);
+
+  assert.equal(allow(pembelian, "suppliers", "create"), true);
+  assert.equal(allow(pembelian, "purchases", "update"), true);
+  assert.equal(allow(pembelian, "purchase_items", "delete"), true);
+  assert.equal(deny(pembelian, "products", "delete"), true);
+
+  assert.equal(allow(gudang, "warehouse_racks", "update"), true);
+  assert.equal(allow(gudang, "purchases", "read"), true);
+  assert.equal(deny(gudang, "purchases", "update"), true);
+  assert.equal(deny(gudang, "orders", "update"), true);
+
+  assert.equal(allow(pricing, "products", "read"), true);
+  assert.equal(allow(pricing, "products", "update"), true);
+  assert.equal(deny(pricing, "products", "delete"), true);
+  assert.equal(deny(pricing, "stock_mutations", "read"), true);
+
+  assert.equal(allow(akuntansi, "accounting_transactions", "create"), true);
+  assert.equal(allow(akuntansi, "accounting_transactions", "delete"), true);
+  assert.equal(deny(akuntansi, "accounting_accounts", "update"), true);
+
+  assert.equal(allow(hr, "attendance_records", "create"), true);
+  assert.equal(allow(hr, "work_schedules", "delete"), true);
+  assert.equal(deny(hr, "app_users", "update"), true);
+
+  assert.equal(allow(pengaturan, "app_users", "read"), true);
+  assert.equal(deny(pengaturan, "app_users", "update"), true);
+  assert.equal(allow(pengaturan, "marketplace_config", "read"), true);
+  assert.equal(deny(pengaturan, "marketplace_config", "update"), true);
+});
+
 test("read produk/harga dibatasi menu pembaca", () => {
   assert.equal(checkTableAccess(pos, "products", "read"), true);
   assert.equal(checkTableAccess(penjualan, "products", "read"), true);
