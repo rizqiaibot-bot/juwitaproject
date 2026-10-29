@@ -193,6 +193,7 @@ export const SHOPEE_ACTION_MENUS = Object.freeze({
   "pull-orders": ["penjualan"],
   "pull-products": ["katalog"],
   "stock-sync": ["gudang", "persediaan"],
+  "reconcile-stock": ["gudang", "persediaan"],
   "price-sync": ["pricing"],
   publish: ["katalog"],
 });

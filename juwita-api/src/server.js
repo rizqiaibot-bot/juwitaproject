@@ -16,7 +16,7 @@ import {
   PRODUCT_PRICE_READ_MENUS,
   SHOPEE_ACTION_MENUS,
 } from "./permissions.js";
-import { connectShop, pullOrders, pullProducts, syncStock, syncPrice, syncPriceOne } from "./shopee.js";
+import { connectShop, pullOrders, pullProducts, syncStock, syncPrice, syncPriceOne, reconcileStock } from "./shopee.js";
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -1431,6 +1431,11 @@ async function handleShopeeAction(req, res, action) {
     }
     if (action === "stock-sync") {
       const r = await syncStock(shopId);
+      return sendJson(res, 200, { data: r });
+    }
+    if (action === "reconcile-stock") {
+      const cursor = data && data.cursor != null ? data.cursor : null;
+      const r = await reconcileStock(shopId, { cursor });
       return sendJson(res, 200, { data: r });
     }
     if (action === "price-sync") {
