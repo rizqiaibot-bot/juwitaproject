@@ -904,7 +904,7 @@ export async function syncPrice(shopId) {
   const accounts = await loadAccounts();
   const channelByShop = { "724153261": "shopee:724153261", "1214362884": "shopee:1214362884" };
   const targets = shopId ? accounts.filter((a) => a.shop_id === String(shopId)) : accounts;
-  let synced = 0, failed = 0;
+  let synced = 0, failed = 0, skipped = 0;
   for (const acc of targets) {
     const channel = channelByShop[acc.shop_id];
     if (!channel) continue;
@@ -923,23 +923,30 @@ export async function syncPrice(shopId) {
     );
     for (const r of rows) {
       let res = await updatePriceOne(acc, token, r.shopee_item_id, r.price);
-      if (!res.ok && refresh_token) {
+      if (!res.ok && !res.skipped && refresh_token) {
         const rr = await refreshToken(acc, acc.shop_id, refresh_token);
         if (rr.access_token) {
           token = rr.access_token;
           res = await updatePriceOne(acc, token, r.shopee_item_id, r.price);
         }
       }
-      if (res.ok) synced++; else failed++;
+      if (res.ok) synced++; else if (res.skipped) skipped++; else failed++;
     }
   }
-  return { synced, failed };
+  return { synced, failed, skipped };
 }
 
 async function updatePriceOne(acc, accessToken, itemId, price) {
   // Item 2-tier (variasi) wajib kirim model_id per model; 1-tier cukup original_price.
   const ml = await getModelList(acc, accessToken, itemId);
   if (ml.error) return { ok: false, error: ml.error };
+
+  // product_prices hanya menyimpan SATU harga per channel. Listing yang harga
+  // variasinya berbeda-beda tidak boleh diratakan diam-diam → dilewati.
+  if (ml.models.length > 1) {
+    const distinct = new Set(ml.models.map((m) => Number(m.price_info && m.price_info[0] && m.price_info[0].original_price)));
+    if (distinct.size > 1) return { ok: false, skipped: true, error: "harga variasi berbeda, tidak diratakan" };
+  }
 
   const n = Number(price);
   const priceList = ml.models.length > 0
@@ -992,9 +999,9 @@ export async function syncPriceOne(productId, channel) {
   if (!access_token) return { ok: false, error: "access_token Shopee tidak tersedia" };
 
   let r = await updatePriceOne(acc, access_token, maps[0].shopee_item_id, price);
-  if (!r.ok && refresh_token) {
+  if (!r.ok && !r.skipped && refresh_token) {
     const rr = await refreshToken(acc, acc.shop_id, refresh_token);
     if (rr.access_token) r = await updatePriceOne(acc, rr.access_token, maps[0].shopee_item_id, price);
   }
-  return { ok: r.ok, error: r.ok ? null : r.error };
+  return { ok: r.ok, skipped: !!r.skipped, error: r.ok ? null : r.error };
 }

@@ -39,6 +39,7 @@ const shopee = {
   updatePrices: [],   // {shop_id, item_id, price}
   failStockForShop: null,
   orderDetails: {},   // order_sn -> detail
+  models: {},         // item_id -> model list (variasi)
 };
 function fakeJson(body) { return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) }; }
 const realFetch = globalThis.fetch;
@@ -48,7 +49,10 @@ function fakeFetch(url, opts = {}) {
   const shopId = u.searchParams.get("shop_id");
   const body = opts.body ? JSON.parse(opts.body) : null;
   const p = u.pathname;
-  if (p.endsWith("/product/get_model_list")) return Promise.resolve(fakeJson({ error: "", response: { model: [] } }));
+  if (p.endsWith("/product/get_model_list")) {
+    const models = shopee.models[u.searchParams.get("item_id")] || [];
+    return Promise.resolve(fakeJson({ error: "", response: { model: models } }));
+  }
   if (p.endsWith("/product/get_item_base_info")) {
     return Promise.resolve(fakeJson({ error: "", response: { item_list: [{ stock_info_v2: { seller_stock: [{ location_id: "loc" }] } }] } }));
   }
@@ -116,6 +120,7 @@ beforeEach(async () => {
   shopee.updatePrices.length = 0;
   shopee.failStockForShop = null;
   shopee.orderDetails = {};
+  shopee.models = {};
   await admin.query(`TRUNCATE products, orders, order_items, stock_mutations, marketplace_config,
     marketplace_credentials, activity_log, marketplace_orders, product_shopee_mapping, product_prices, app_users
     RESTART IDENTITY CASCADE`);
@@ -412,4 +417,15 @@ test("syncPrice: harga Shopee 1 hanya ke listing Shopee 1, Shopee 2 ke listing S
     shopee.updatePrices.map((x) => [x.shop_id, x.item_id, x.price]).sort(),
     [[S1, ITEM_S1, 11000], [S2, ITEM_S2, 12500]].sort()
   );
+});
+
+test("syncPrice: listing dengan harga variasi berbeda TIDAK diratakan", { skip }, async () => {
+  shopee.models[String(ITEM_S2)] = [
+    { model_id: 1, price_info: [{ original_price: 12000 }] },
+    { model_id: 2, price_info: [{ original_price: 15000 }] },
+  ];
+  const r = await shopeeLib.syncPrice();
+  assert.equal(r.skipped, 1);
+  assert.equal(r.failed, 0);
+  assert.deepEqual(shopee.updatePrices.map((x) => [x.shop_id, x.item_id]), [[S1, ITEM_S1]]);
 });
