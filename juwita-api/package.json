@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test test/permissions.test.mjs test/routes.test.mjs"
+    "test": "node --test test/permissions.test.mjs test/routes.test.mjs test/shopee-reconcile.test.mjs",
+    "test:integration": "node --test test/integration/sync-consistency.test.mjs"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

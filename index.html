@@ -8787,7 +8787,7 @@
             const now = new Date();
             const todayStamp = now.toISOString().slice(0, 10).replace(/-/g, "");
             const todayCount = ordersData.filter(o => o.orderId && o.orderId.startsWith("ORD-" + todayStamp)).length;
-            const orderId = "ORD-" + todayStamp + "-" + String(todayCount + 1).padStart(2, "0");
+            let orderId = "ORD-" + todayStamp + "-" + String(todayCount + 1).padStart(2, "0");
             const dateStr = now.toISOString().slice(0, 10) + " " + now.toTimeString().slice(0, 5);
             const channel = ["QRIS", "EDC", "Split", "Transfer", "Piutang"].indexOf(method) !== -1 ? "POS2" : "POS1";
 
@@ -8895,6 +8895,12 @@
                 }
             }
             checkoutLock = false;
+
+            // Server bisa memberi nomor baru bila orderid bentrok (idempotency_key sama).
+            if (orderResult && orderResult.orderid && orderResult.orderid !== orderId) {
+                orderId = orderResult.orderid;
+                order.orderId = orderId;
+            }
 
             ordersData.unshift({ ...order, synced: orderResult.status === "queued" ? false : true });
 

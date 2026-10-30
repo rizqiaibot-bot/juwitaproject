@@ -17,6 +17,7 @@ import {
   SHOPEE_ACTION_MENUS,
 } from "./permissions.js";
 import { connectShop, pullOrders, pullProducts, syncStock, syncPrice, syncPriceOne, reconcileStock } from "./shopee.js";
+import { nextOrderNumber, formatOrderId, lockOrderDay } from "./order-id.js";
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -809,26 +810,55 @@ async function handleDataWrite(req, res, table, method) {
   }
 }
 
+// Konflik orders_pkey dari sync_offline_order (bukan konflik idempotency).
+function isOrderIdConflict(result) {
+  return !!result && result.status === "conflict" &&
+    String(result.message || "").startsWith("orderid sudah ada");
+}
+
 // --- Checkout POS: panggil RPC lokal sync_offline_order ---
 async function handleOrdersPost(req, res) {
   const { error, data } = await readJsonBody(req, 2 * 1024 * 1024);
   if (error || !data || typeof data !== "object") {
     return sendJson(res, 400, { error: "invalid_request" });
   }
+  // orderid dibuat di client (hitungan lokal) sehingga bisa bentrok dengan
+  // kasir/device lain atau order Shopee. RPC menolak tanpa menyentuh stok,
+  // lalu dikirim ulang dengan nomor baru + idempotency_key SAMA (retry aman:
+  // bila transaksi ini ternyata sudah masuk → already_exists). Pembuatan
+  // nomor diserialkan per tanggal (lock sama dengan import Shopee).
+  const m = /^ORD-([0-9]{8})-[0-9]+$/.exec(String(data.p_orderid || ""));
+  let client = null;
   try {
-    const { rows } = await pool.query(
-      `SELECT sync_offline_order($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) AS result`,
-      [
-        data.p_orderid, data.p_idempotency_key, data.p_date, data.p_channel,
-        data.p_customer, data.p_total, data.p_paystatus, data.p_wmsstatus,
-        data.p_courier, data.p_resi, data.p_payment_method, data.p_subtotal,
-        data.p_diskon, data.p_bayar, data.p_kembalian, JSON.stringify(data.p_items),
-      ]
-    );
-    sendJson(res, 200, { data: rows[0].result });
+    client = await pool.connect();
+    await client.query("BEGIN");
+    if (m) await lockOrderDay(client, m[1]);
+    const callRpc = async (orderId) => {
+      const { rows } = await client.query(
+        `SELECT sync_offline_order($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) AS result`,
+        [
+          orderId, data.p_idempotency_key, data.p_date, data.p_channel,
+          data.p_customer, data.p_total, data.p_paystatus, data.p_wmsstatus,
+          data.p_courier, data.p_resi, data.p_payment_method, data.p_subtotal,
+          data.p_diskon, data.p_bayar, data.p_kembalian, JSON.stringify(data.p_items),
+        ]
+      );
+      return rows[0].result;
+    };
+    let result = await callRpc(data.p_orderid);
+    let n = 0;
+    for (let attempt = 0; m && attempt < 10 && isOrderIdConflict(result); attempt++) {
+      n = Math.max(await nextOrderNumber(client, m[1]), n + 1);
+      result = await callRpc(formatOrderId(m[1], n));
+    }
+    await client.query("COMMIT");
+    sendJson(res, 200, { data: result });
   } catch (err) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("orders POST failed:", err.message);
     sendJson(res, 500, { error: "internal_error" });
+  } finally {
+    if (client) client.release();
   }
 }
 

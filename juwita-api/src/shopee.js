@@ -475,28 +475,63 @@ async function logActivity(entry) {
   }
 }
 
+// Satu kunci advisory untuk semua push stok massal (syncStock & reconcileStock,
+// dari worker maupun endpoint manual) agar dua proses tidak saling menimpa
+// listing Shopee dengan nilai stok yang sudah basi.
+const STOCK_PUSH_LOCK_KEY = 745300102;
+
+async function withStockPushLock(fn) {
+  const client = await pool.connect();
+  let locked = false;
+  try {
+    const { rows } = await client.query("SELECT pg_try_advisory_lock($1) AS ok", [STOCK_PUSH_LOCK_KEY]);
+    locked = !!(rows[0] && rows[0].ok);
+    if (!locked) return { busy: true };
+    return { busy: false, value: await fn() };
+  } finally {
+    if (locked) await client.query("SELECT pg_advisory_unlock($1)", [STOCK_PUSH_LOCK_KEY]).catch(() => {});
+    client.release();
+  }
+}
+
+// Stok terkini dibaca tepat sebelum dikirim (bukan dari snapshot awal batch).
+async function currentStock(productId) {
+  const { rows } = await pool.query("SELECT stock FROM products WHERE id = $1", [productId]);
+  return rows.length ? Math.max(0, Math.floor(Number(rows[0].stock))) : null;
+}
+
 // Stock sync: kirim products.stock (single source of truth) ke SEMUA Shopee
 // yang ter-mapping untuk product_id tersebut. shopee_account TIDAK menentukan
 // target — target ditentukan dari product_shopee_mapping (bisa Shopee 1 & 2).
 export async function syncStock(shopId, opts = {}) {
+  if (opts.dryRun) return syncStockUnlocked(shopId, opts);
+  const r = await withStockPushLock(() => syncStockUnlocked(shopId, opts));
+  if (r.busy) return { synced: 0, failed: 0, busy: true, dry_run: false, results: [] };
+  return r.value;
+}
+
+async function syncStockUnlocked(shopId, opts = {}) {
   const dryRun = !!opts.dryRun;
   const accounts = await loadAccounts();
   const accountByShop = {};
   for (const a of accounts) accountByShop[String(a.shop_id)] = a;
 
-  // Dedupe pending per product_id (pakai mutation terbaru tiap produk).
+  // Kelompokkan pending per product_id. Hanya mutasi yang terlihat di snapshot
+  // ini yang nanti ditandai synced; mutasi baru tetap pending → tick berikutnya.
   const { rows: products } = await pool.query(
-    `SELECT DISTINCT ON (m.product_id) m.product_id, p.name, p.stock, m.id AS mutation_id
+    `SELECT m.product_id, p.name, array_agg(m.id ORDER BY m.id) AS mutation_ids
      FROM stock_mutations m
      JOIN products p ON p.id = m.product_id
      WHERE m.sync_status = 'pending'
-     ORDER BY m.product_id, m.id DESC`
+     GROUP BY m.product_id, p.name
+     ORDER BY m.product_id`
   );
 
   let synced = 0, failed = 0;
   const results = [];
   for (const p of products) {
-    const stock = Math.max(0, Math.round(Number(p.stock)));
+    const stock = await currentStock(p.product_id);
+    if (stock == null) continue;
 
     // Cari SEMUA mapping Shopee milik produk ini (target sebenarnya).
     const { rows: maps } = await pool.query(
@@ -510,7 +545,7 @@ export async function syncStock(shopId, opts = {}) {
       // Produk tanpa mapping TIDAK boleh diam-diam ditandai synced.
       // Tandai failed agar terlihat, dan catat alasan ke activity_log.
       if (!dryRun) {
-        await pool.query("UPDATE stock_mutations SET sync_status='failed', shopee_sync_at=now() WHERE id=$1", [p.mutation_id]);
+        await pool.query("UPDATE stock_mutations SET sync_status='failed', shopee_sync_at=now() WHERE id = ANY($1::bigint[]) AND sync_status='pending'", [p.mutation_ids]);
       }
       failed++;
       if (!dryRun) await logActivity({ shop_id: null, product_id: p.product_id, product_name: p.name, qty_after: stock, status: "failed", error_message: "tanpa mapping Shopee" });
@@ -567,7 +602,7 @@ export async function syncStock(shopId, opts = {}) {
     }
 
     if (allOk) {
-      if (!dryRun) await pool.query("UPDATE stock_mutations SET sync_status='synced', shopee_sync_at=now() WHERE id=$1", [p.mutation_id]);
+      if (!dryRun) await pool.query("UPDATE stock_mutations SET sync_status='synced', shopee_sync_at=now() WHERE id = ANY($1::bigint[]) AND sync_status='pending'", [p.mutation_ids]);
       synced++;
     }
     // else: biarkan pending agar di-retry pada tick berikutnya.
@@ -585,7 +620,7 @@ export async function syncStockForProduct(productId) {
   if (!prods.length) return { ok: false, error: "produk tidak ditemukan" };
 
   const p = prods[0];
-  const stock = Math.max(0, Math.round(Number(p.stock)));
+  const stock = Math.max(0, Math.floor(Number(p.stock)));
 
   const { rows: maps } = await pool.query(
     "SELECT shop_id, shopee_item_id FROM product_shopee_mapping WHERE product_id = $1",
@@ -629,6 +664,18 @@ export async function syncStockForProduct(productId) {
 const RECONCILE_BATCH_LIMIT_DEFAULT = 200;
 
 export async function reconcileStock(shopId, opts = {}) {
+  if (opts.dryRun) return reconcileStockUnlocked(shopId, opts);
+  const r = await withStockPushLock(() => reconcileStockUnlocked(shopId, opts));
+  if (r.busy) {
+    return {
+      shop_id: shopId || "all", synced: 0, failed: 0, skipped: 0, listings_processed: 0,
+      hasMore: false, next_cursor: null, busy: true, dry_run: false, results: [],
+    };
+  }
+  return r.value;
+}
+
+async function reconcileStockUnlocked(shopId, opts = {}) {
   const accounts = await loadAccounts();
   const accountByShop = {};
   for (const a of accounts) accountByShop[String(a.shop_id)] = a;
@@ -663,7 +710,10 @@ export async function reconcileStock(shopId, opts = {}) {
   let hasMore = hasMoreProducts;
 
   for (const p of page) {
-    const stock = Math.max(0, Math.round(Number(p.stock)));
+    // Baca ulang: halaman produk bisa dibaca beberapa menit sebelum giliran
+    // produk ini dikirim (throttle), sementara POS/Shopee terus berjualan.
+    const fresh = await currentStock(p.id);
+    const stock = fresh != null ? fresh : Math.max(0, Math.floor(Number(p.stock)));
 
     const { rows: maps } = await pool.query(
       "SELECT shop_id, shopee_item_id FROM product_shopee_mapping WHERE product_id = $1",
@@ -756,7 +806,7 @@ export async function syncStockOne(productId, shopId) {
   if (!maps.length || maps[0].shopee_item_id == null) return { ok: false, error: "belum ada mapping Shopee" };
 
   const shopeeItemId = maps[0].shopee_item_id;
-  const stock = Math.max(0, Math.round(Number(prods[0].stock)));
+  const stock = Math.max(0, Math.floor(Number(prods[0].stock)));
 
   const { access_token, refresh_token } = await ensureToken(acc);
   if (!access_token) return { ok: false, error: "access_token Shopee tidak tersedia" };
@@ -810,7 +860,7 @@ function sellerLocations(stockInfo) {
 }
 
 async function updateStockOne(acc, accessToken, itemId, qtyAfter) {
-  const stock = Math.max(0, Math.round(Number(qtyAfter)));
+  const stock = Math.max(0, Math.floor(Number(qtyAfter)));
 
   // Shopee sekarang wajib pakai seller_stock (dengan location_id) untuk 1-tier
   // maupun 2-tier (variasi). normal_stock sudah tidak diterima.
@@ -861,13 +911,15 @@ export async function syncPrice(shopId) {
     const { access_token, refresh_token } = await ensureToken(acc);
     if (!access_token) { failed++; continue; }
     let token = access_token;
+    // Mapping WAJIB milik toko yang sama dengan channel harga: harga Shopee 1
+    // tidak boleh dikirim ke listing Shopee 2 (dan sebaliknya).
     const { rows } = await pool.query(
       `SELECT pp.product_id, pp.price, pm.shopee_item_id
        FROM product_prices pp
-       JOIN product_shopee_mapping pm ON pm.product_id = pp.product_id
+       JOIN product_shopee_mapping pm ON pm.product_id = pp.product_id AND pm.shop_id = $2
        WHERE pp.channel = $1 AND pm.shopee_item_id IS NOT NULL AND pp.price IS NOT NULL
        ORDER BY pp.product_id LIMIT 200`,
-      [channel]
+      [channel, String(acc.shop_id)]
     );
     for (const r of rows) {
       let res = await updatePriceOne(acc, token, r.shopee_item_id, r.price);

@@ -27,6 +27,7 @@ const state = {
   mappings: {},          // product_id -> [{shop_id, shopee_item_id}]
   updateStockResponse: { error: null, response: {} },
   authRefreshCalls: 0,   // berapa kali /auth/access_token/get dipanggil
+  lockFree: true,        // hasil pg_try_advisory_lock
 };
 
 function normalize(text) {
@@ -35,8 +36,26 @@ function normalize(text) {
 
 class FakePool {
   on() { return this; }
+  // Koneksi khusus untuk advisory lock push stok.
+  async connect() {
+    return {
+      async query(text) {
+        const sql = normalize(text);
+        if (sql.includes("pg_try_advisory_lock")) return { rows: [{ ok: state.lockFree }] };
+        if (sql.includes("pg_advisory_unlock")) return { rows: [{ pg_advisory_unlock: true }] };
+        throw new Error("UNEXPECTED_CLIENT_QUERY: " + sql.slice(0, 140));
+      },
+      release() {},
+    };
+  }
   async query(text, params) {
     const sql = normalize(text);
+    if (sql === "SELECT stock FROM products WHERE id = $1") {
+      const id = Number(params[0]);
+      const p = state.syncProducts.find((r) => Number(r.product_id) === id) ||
+        state.reconcileProducts.find((r) => Number(r.id) === id);
+      return { rows: p ? [{ stock: p.stock }] : [] };
+    }
     if (sql.includes("FROM marketplace_config")) {
       return { rows: state.accounts };
     }
@@ -123,6 +142,7 @@ beforeEach(() => {
   state.mappings = {};
   state.updateStockResponse = { error: null, response: {} };
   state.authRefreshCalls = 0;
+  state.lockFree = true;
 });
 
 after(() => {
@@ -132,7 +152,7 @@ after(() => {
 
 test("syncStock: produk tanpa mapping ditandai failed, bukan synced", async () => {
   state.accounts = [{ shop_id: "724153261", shop_name: "Shopee 1" }];
-  state.syncProducts = [{ product_id: 206, name: "DADA FILLET BONELLES DADA 1kg", stock: 99, mutation_id: 1 }];
+  state.syncProducts = [{ product_id: 206, name: "DADA FILLET BONELLES DADA 1kg", stock: 99, mutation_ids: [1] }];
   state.mappings = { 206: [] };
 
   const r = await syncStock();
@@ -281,7 +301,7 @@ test("reconcileStock: dry-run tidak memanggil update_stock & tidak menulis DB", 
 test("syncStock: dry-run tidak mengubah stock_mutations & tidak kirim stok", async () => {
   state.accounts = [{ shop_id: "724153261", shop_name: "Shopee 1" }];
   state.credentials = { "724153261": { access_token: "tok1", refresh_token: null } };
-  state.syncProducts = [{ product_id: 206, name: "DADA FILLET BONELLES DADA 1kg", stock: 99, mutation_id: 1 }];
+  state.syncProducts = [{ product_id: 206, name: "DADA FILLET BONELLES DADA 1kg", stock: 99, mutation_ids: [1] }];
   state.mappings = { 206: [{ shop_id: "724153261", shopee_item_id: 24494633239 }] };
 
   const r = await syncStock(null, { dryRun: true });
@@ -319,4 +339,37 @@ test("reconcileStock: Shopee 2 memakai SHOPEE2_PARTNER_ID untuk sign", async () 
   assert.ok(shop1.url.includes("partner_id=fake-partner-id"), "Shopee 1 pakai SHOPEE_PARTNER_ID");
   assert.ok(shop2.url.includes("partner_id=fake2-partner-id"), "Shopee 2 pakai SHOPEE2_PARTNER_ID");
   assert.ok(!shop2.url.includes("partner_id=fake-partner-id"), "Shopee 2 TIDAK boleh pakai partner Shopee 1");
+});
+
+test("syncStock & reconcileStock: lock push stok sedang dipegang → tidak kirim apa pun", async () => {
+  state.accounts = [{ shop_id: "724153261", shop_name: "Shopee 1" }];
+  state.credentials = { "724153261": { access_token: "tok1", refresh_token: null } };
+  state.syncProducts = [{ product_id: 206, name: "DADA FILLET BONELLES DADA 1kg", stock: 99, mutation_ids: [1] }];
+  state.reconcileProducts = [{ id: 206, name: "DADA FILLET BONELLES DADA 1kg", stock: 99 }];
+  state.mappings = { 206: [{ shop_id: "724153261", shopee_item_id: 24494633239 }] };
+  state.lockFree = false;
+
+  const s = await syncStock();
+  const r = await reconcileStock();
+
+  assert.equal(s.busy, true);
+  assert.equal(r.busy, true);
+  assert.equal(r.hasMore, false);
+  assert.equal(captured.updateStocks.length, 0, "tidak boleh kirim stok saat run lain berjalan");
+  assert.equal(captured.stockMutationUpdate, null, "mutasi tetap pending");
+});
+
+test("syncStock: semua mutasi pending yang terlihat ditandai synced sekaligus", async () => {
+  state.accounts = [{ shop_id: "724153261", shop_name: "Shopee 1" }];
+  state.credentials = { "724153261": { access_token: "tok1", refresh_token: null } };
+  state.syncProducts = [{ product_id: 206, name: "DADA FILLET BONELLES DADA 1kg", stock: 7, mutation_ids: [3, 5, 9] }];
+  state.mappings = { 206: [{ shop_id: "724153261", shopee_item_id: 24494633239 }] };
+
+  const r = await syncStock();
+
+  assert.equal(r.synced, 1);
+  assert.equal(captured.updateStocks[0].body.stock_list[0].seller_stock[0].stock, 7);
+  assert.match(captured.stockMutationUpdate.sql, /sync_status='synced'/);
+  assert.match(captured.stockMutationUpdate.sql, /sync_status='pending'/);
+  assert.deepEqual(captured.stockMutationUpdate.params[0], [3, 5, 9]);
 });
