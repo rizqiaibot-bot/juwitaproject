@@ -44,6 +44,10 @@ const USERS = {
     id: "persediaan-id", phone: "081000000009", full_name: "Persediaan Test",
     role: "staf", role_label: "Staf", menus: ["persediaan"], status: "ACTIVE",
   },
+  "off-id": {
+    id: "off-id", phone: "081000000010", full_name: "Nonaktif Test",
+    role: "staf", role_label: "Staf", menus: [], status: "INACTIVE",
+  },
 };
 
 const captured = {};
@@ -275,8 +279,8 @@ function token(userId) {
   });
 }
 
-async function call(path, method = "GET", userId = null, body = null) {
-  const headers = {};
+async function call(path, method = "GET", userId = null, body = null, extraHeaders = null) {
+  const headers = Object.assign({}, extraHeaders || {});
   if (userId) headers.Authorization = "Bearer " + token(userId);
   if (body != null) headers["Content-Type"] = "application/json";
   const res = await fetch(base + path, {
@@ -683,4 +687,45 @@ test("Gagal mencatat mutasi membatalkan perubahan stok", async () => {
   } finally {
     fakeState.failStockMutation = false;
   }
+});
+
+// ============================================================
+// MANIPULASI TOKEN: claim palsu TIDAK dihormati — sumber kebenaran = DB.
+// ============================================================
+function forgedToken(sub, claims) {
+  return jwt.sign(claims, process.env.JWT_SECRET, {
+    algorithm: "HS256",
+    subject: sub,
+    expiresIn: "1h",
+  });
+}
+
+test("Karyawan dengan claim role=owner palsu ditolak endpoint owner", async () => {
+  const headers = { Authorization: "Bearer " + forgedToken("katalog-id", { role: "owner", status: "ACTIVE" }) };
+  const r = await call("/api/employees", "POST", null, {
+    action: "create", phone: "081111111111", full_name: "Palsu", role: "staf",
+    password: "123456", menus: ["pos"],
+  }, headers);
+  assert.equal(r.status, 403);
+
+  const admin = await call("/api/data/app_users", "GET", null, null, headers);
+  assert.equal(admin.status, 403);
+});
+
+test("Karyawan dengan claim menus disuntikkan tetap dibatasi menu DB", async () => {
+  const headers = {
+    Authorization: "Bearer " + forgedToken("katalog-id", {
+      role: "owner", status: "ACTIVE",
+      menus: ["pos", "penjualan", "katalog", "persediaan", "pembelian", "gudang", "pricing", "akuntansi", "hr", "pengaturan"],
+    }),
+  };
+  // katalog-id di DB hanya punya menu "katalog": baca karyawan harus ditolak.
+  const r = await call("/api/data/karyawan", "GET", null, null, headers);
+  assert.equal(r.status, 403);
+});
+
+test("User nonaktif dengan claim status=ACTIVE palsu ditolak", async () => {
+  const headers = { Authorization: "Bearer " + forgedToken("off-id", { role: "owner", status: "ACTIVE" }) };
+  const r = await call("/api/data/products", "GET", null, null, headers);
+  assert.equal(r.status, 401);
 });

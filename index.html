@@ -4011,70 +4011,20 @@
         // Tidak ada lagi seed karyawan dummy.
         let karyawanData = [];
 
-        // --- ACCOUNTS & PERMISSIONS ---
-        const userAccounts = [
-            { username: "admin", password: "admin123", name: "Ahmad Hidayat", role: "Manager", roleLabel: "Manager Operasional", menus: ["pos","penjualan","katalog","persediaan","pembelian","gudang","pricing","hr","pengaturan"] },
-            { username: "siti", password: "siti123", name: "Siti Aminah", role: "Kasir", roleLabel: "Kasir POS Utama", menus: ["pos","penjualan"] },
-            { username: "doni", password: "doni123", name: "Doni Setiawan", role: "Gudang", roleLabel: "Staf Gudang / WMS", menus: ["pos","penjualan","katalog","persediaan","gudang"] },
-            { username: "fitri", password: "fitri123", name: "Fitri Handayani", role: "Keuangan", roleLabel: "Admin Keuangan", menus: ["penjualan","pembelian","pricing"] },
-            { username: "budi", password: "budi123", name: "Budi Utomo", role: "Kurir", roleLabel: "Kurir Pengiriman", menus: ["pos","gudang"] },
-            { username: "eko", password: "eko123", name: "Eko Prasetyo", role: "Gudang", roleLabel: "Staf Gudang", menus: ["pos","penjualan","katalog","persediaan","gudang"] },
-            { username: "dewi", password: "dewi123", name: "Dewi Lestari", role: "Kasir", roleLabel: "Kasir", menus: ["pos","penjualan"] }
-        ];
-
         // ============================================================
-        // PROTOTYPE LOGIN NOMOR HP + PASSWORD (TERISOLASI — akun DUMMY)
-        // Belum memakai Supabase Auth / DB. 7 akun existing & auto-login
-        // admin tetap fallback. Password TIDAK disimpan plaintext:
-        // hanya digest SHA-256 (salt: phone) yang ada di kode.
-        // Akun dummy: testkasir / 081234567890 / (password disimpan sebagai hash)
+        // LOGIN NYATA — JWT ke API lokal + resolve user dari app_users.
+        // Password HANYA di server (bcrypt hash). Tidak pernah plaintext
+        // di file/DB app.
         // ============================================================
-        const PROTO_SESSION_KEY = "juwita_proto_user";
-        const PROTO_PHONE = "081234567890";
-        const PROTO_HASH = "e3fbca6520fe58a82ecaf643e7ce8a4576331df7be8df9330fd2f2e95c8ff154"; // sha256("081234567890|juwita-proto|dummy123")
-        // FULL MENU untuk akun prototype/testkasir (diambil dari daftar menu admin,
-        // agar selalu konsisten dengan menu yang benar-benar tersedia di aplikasi).
-        const PROTO_FULL_MENUS = ["pos", "penjualan", "katalog", "persediaan", "pembelian", "gudang", "pricing", "akuntansi", "hr", "pengaturan"];
+        const JUWITA_AUTH_MODE = "auth";
+        const JUWITA_EMAIL_DOMAIN = "juwita.local"; // email internal: <noHp>@juwita.local
 
-        function protoFullMenus() {
-            const admin = userAccounts.find(a => a.username === "admin");
-            if (admin && Array.isArray(admin.menus) && admin.menus.length) return [...admin.menus];
-            return [...PROTO_FULL_MENUS];
-        }
-
-        async function protoHash(phone, password) {
-            const data = new TextEncoder().encode(phone + "|juwita-proto|" + password);
-            const buf = await crypto.subtle.digest("SHA-256", data);
-            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
-        }
-
+        // Normalisasi nomor HP: hanya digit, 62xxx → 0xxx.
         function protoNormalizePhone(raw) {
             let d = String(raw || "").replace(/\D/g, "");
             if (d.startsWith("62")) d = "0" + d.slice(2);
             return d;
         }
-
-        function buildProtoUser() {
-            return {
-                username: "testkasir",
-                phone: PROTO_PHONE,
-                name: "Test User",
-                role: "tester",
-                roleLabel: "Tester",
-                menus: protoFullMenus(),
-                loginMethod: "phone"
-            };
-        }
-
-        // ============================================================
-        // LOGIN NYATA — SUPABASE AUTH (dormant sampai infra siap)
-        // Mode "auth" diaktifkan SETELAH migration app_users diterapkan dan
-        // Auth user (email internal deterministik) dibuat oleh pemilik.
-        // Saat masih "prototype", jalur ini TIDAK aktif (prototype tetap jalan).
-        // Password HANYA di Supabase Auth. Tidak pernah plaintext di file/DB app.
-        // ============================================================
-        const JUWITA_AUTH_MODE = "auth"; // ubah ke "auth" saat siap
-        const JUWITA_EMAIL_DOMAIN = "juwita.local"; // email internal: <noHp>@juwita.local
 
         // Deep-link dari marketplace.html: index.html?page=<id> langsung membuka
         // halaman tujuan setelah login/restore. Parameter dibaca sekali lalu dihapus.
@@ -4115,7 +4065,7 @@
                 status: row.status,
                 privileges: privileges
             };
-            localStorage.removeItem(PROTO_SESSION_KEY);
+            localStorage.removeItem("juwita_proto_user"); // bersihkan sisa mode lama
             renderUserUI();
             filterMenuByRole();
             const deepGroup = pageMenuGroup(JUWITA_DEEP_PAGE);
@@ -4220,36 +4170,7 @@
         }
 
         async function phoneLoginSubmit() {
-            if (JUWITA_AUTH_MODE === "auth") { return realLoginSubmit(); }
-            const errEl = document.getElementById("phoneLoginError");
-            const hpInput = document.getElementById("phoneLoginHp");
-            const passInput = document.getElementById("phoneLoginPass");
-            const hp = protoNormalizePhone(hpInput ? hpInput.value : "");
-            const pass = passInput ? passInput.value : "";
-            if (!hp) { if (errEl) errEl.textContent = "Nomor HP wajib diisi"; return; }
-            if (hp !== PROTO_PHONE) { if (errEl) errEl.textContent = "Nomor HP tidak terdaftar"; return; }
-            if (!pass) { if (errEl) errEl.textContent = "Password wajib diisi"; return; }
-            let hash;
-            try {
-                hash = await protoHash(hp, pass);
-            } catch (e) {
-                if (errEl) errEl.textContent = "Web Crypto tidak tersedia (butuh https / localhost)";
-                return;
-            }
-            if (hash !== PROTO_HASH) { if (errEl) errEl.textContent = "Password salah"; return; }
-            currentUser = buildProtoUser();
-            localStorage.setItem(PROTO_SESSION_KEY, JSON.stringify(currentUser));
-            localStorage.removeItem("juwita_user");
-            closePhoneLogin();
-            renderUserUI();
-            filterMenuByRole();
-            const deepGroup = pageMenuGroup(JUWITA_DEEP_PAGE);
-            const avail = (JUWITA_DEEP_PAGE && deepGroup && getMenuPermissions(deepGroup))
-                ? JUWITA_DEEP_PAGE
-                : defaultPageForMenu(currentUser.menus && currentUser.menus[0]);
-            showPage(avail);
-            ensureOrdersPolling();
-            showToast("Login berhasil sebagai " + currentUser.name);
+            return realLoginSubmit();
         }
 
         // ============================================================
@@ -4830,26 +4751,10 @@
             });
         }
 
-        function doLogin(username, password) {
-            const acc = userAccounts.find(a => a.username === username && a.password === password);
-            if (!acc) return null;
-            const user = {
-                username: acc.username,
-                name: acc.name,
-                role: acc.role,
-                roleLabel: acc.roleLabel,
-                menus: [...acc.menus]
-            };
-            currentUser = user;
-            localStorage.setItem("juwita_user", JSON.stringify(user));
-            renderUserUI();
-            return user;
-        }
-
         function doLogout() {
             currentUser = null;
             localStorage.removeItem("juwita_user");
-            localStorage.removeItem(PROTO_SESSION_KEY);
+            localStorage.removeItem("juwita_proto_user"); // bersihkan sisa mode lama
             localStorage.removeItem(JUWITA_TOKEN_KEY);
             location.reload();
         }
@@ -4899,54 +4804,8 @@
         }
 
         function renderAccountCards() {
-            const container = document.getElementById("accountListContainer");
-            if (!container) return;
             // Mode Auth nyata → kelola karyawan dari app_users (hanya owner).
-            if (JUWITA_AUTH_MODE === "auth") { renderAppAccounts(); return; }
-            const totalEl = document.getElementById("totalAkun");
-            if (totalEl) totalEl.textContent = `Total: ${userAccounts.length} Akun`;
-
-            const allMenus = ["pos","penjualan","katalog","persediaan","pembelian","gudang","pricing","akuntansi","hr","pengaturan"];
-            const menuLabels = {
-                pos: "POS", penjualan: "Penjualan", katalog: "Katalog",
-                persediaan: "Persediaan", pembelian: "Pembelian", gudang: "Gudang",
-                pricing: "Pricing", akuntansi: "Akuntansi", hr: "HR", pengaturan: "Pengaturan"
-            };
-
-            container.innerHTML = userAccounts.map((a, i) => {
-                const chips = allMenus.map(m => {
-                    const active = a.menus.includes(m);
-                    return `<span class="menu-chip-edit${active?' active':''}" data-account="${i}" data-menu="${m}" onclick="toggleAccountMenu(${i},'${m}')">${menuLabels[m]}</span>`;
-                }).join("");
-                return `<div class="account-card">
-                    <div class="account-header">
-                        <div class="account-info">
-                            <span class="acc-name">${a.name}</span>
-                            <span class="acc-detail">@${a.username} · ${a.roleLabel}</span>
-                        </div>
-                        <i class="fas fa-user-gear" style="color:var(--text-muted);font-size:1.2rem;"></i>
-                    </div>
-                    <div style="display:flex;flex-wrap:wrap;gap:3px;">${chips}</div>
-                </div>`;
-            }).join("");
-        }
-
-        function toggleAccountMenu(idx, menu) {
-            const acc = userAccounts[idx];
-            if (!acc) return;
-            if (acc.menus.includes(menu)) {
-                acc.menus = acc.menus.filter(m => m !== menu);
-            } else {
-                acc.menus.push(menu);
-            }
-            acc.menus.sort();
-            renderAccountCards();
-            if (currentUser && currentUser.username === acc.username) {
-                currentUser.menus = [...acc.menus];
-                localStorage.setItem("juwita_user", JSON.stringify(currentUser));
-                filterMenuByRole();
-            }
-            showToast(`Akses "${menu}" ${acc.menus.includes(menu)?'diberikan':'dicabut'}`);
+            renderAppAccounts();
         }
 
         // ============================================================
@@ -10361,44 +10220,14 @@
             setTimeout(() => document.getElementById("scanInput")?.focus(), 200);
 
             // --- AUTH INIT: LOGIN GATE (tanpa session → tampilkan LOGIN SCREEN) ---
-            if (JUWITA_AUTH_MODE === "auth") {
-                // Mode nyata: sesi Supabase + resolve dari app_users.
-                currentUser = null;
-                filterMenuByRole();
-                renderUserUI();
-                openPhoneLogin(); // tampilkan gate dulu
-                realRestoreSession().then(function (ok) {
-                    if (ok) closePhoneLogin();
-                });
-            } else {
-                // Mode prototype (fallback sampai login Rizkin terbukti).
-                let protoSession = null;
-                try {
-                    const raw = localStorage.getItem(PROTO_SESSION_KEY);
-                    if (raw) {
-                        const p = JSON.parse(raw);
-                        if (p && p.username === "testkasir" && Array.isArray(p.menus)) protoSession = p;
-                    }
-                } catch (e) { /* abaikan */ }
-                if (protoSession) {
-                    currentUser = protoSession;
-                } else {
-                    currentUser = null; // TIDAK ada auto-login admin
-                }
-                filterMenuByRole();
-                renderUserUI();
-
-                // --- DEFAULT PAGE ---
-                if (currentUser) {
-                    const deepGroup = pageMenuGroup(JUWITA_DEEP_PAGE);
-                    const available = (JUWITA_DEEP_PAGE && deepGroup && getMenuPermissions(deepGroup))
-                        ? JUWITA_DEEP_PAGE
-                        : defaultPageForMenu(currentUser.menus[0]);
-                    showPage(available);
-                } else {
-                    openPhoneLogin(); // login screen sebagai halaman awal (gate)
-                }
-            }
+            // Mode nyata: JWT + resolve dari app_users via API lokal.
+            currentUser = null;
+            filterMenuByRole();
+            renderUserUI();
+            openPhoneLogin(); // tampilkan gate dulu
+            realRestoreSession().then(function (ok) {
+                if (ok) closePhoneLogin();
+            });
 
             // --- LOAD DATA FROM SUPABASE ---
             initSupabaseData();
@@ -10503,7 +10332,6 @@
         window.doLogout = doLogout;
         window.filterMenuByRole = filterMenuByRole;
         window.renderAccountCards = renderAccountCards;
-        window.toggleAccountMenu = toggleAccountMenu;
         window.openEmployeeForm = openEmployeeForm;
         window.closeEmployeeForm = closeEmployeeForm;
         window.saveEmployeeForm = saveEmployeeForm;

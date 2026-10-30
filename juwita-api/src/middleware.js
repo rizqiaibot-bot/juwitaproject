@@ -66,29 +66,5 @@ export async function requireAuth(req, res) {
   }
 }
 
-export function requireOwner(req, res) {
-  const user = req.user;
-  if (!user || String(user.role || "").toLowerCase() !== "owner") {
-    sendJson(res, 403, { error: "forbidden" });
-    return false;
-  }
-  return true;
-}
-
-export function requireMenu(req, res, menu) {
-  const user = req.user;
-  if (!user || !Array.isArray(user.menus) || !user.menus.includes(menu)) {
-    sendJson(res, 403, { error: "forbidden" });
-    return false;
-  }
-  return true;
-}
-
-export function requirePrivilege(req, res, privilege) {
-  const user = req.user;
-  if (!user || !Array.isArray(user.privileges) || !user.privileges.includes(privilege)) {
-    sendJson(res, 403, { error: "forbidden" });
-    return false;
-  }
-  return true;
-}
+// Otorisasi route memakai helper di permissions.js (checkTableAccess,
+// checkProductColumns, shopeeActionAllowed, isOwnerUser, userHasMenu).
