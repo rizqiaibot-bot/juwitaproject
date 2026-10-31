@@ -210,7 +210,12 @@ async function pullOrdersForAccount(account) {
 
 async function main() {
   const startedAt = Date.now();
-  const active = ACCOUNTS.filter((a) => a.partner_id && a.shop_id);
+  // Toko yang di-Disconnect di dashboard Marketplace tidak ditarik ordernya.
+  const { rows: offRows } = await pool.query(
+    "SELECT shop_id FROM marketplace_config WHERE platform = 'shopee' AND connection_status = 'disconnected'"
+  );
+  const disconnected = new Set(offRows.map((r) => String(r.shop_id)));
+  const active = ACCOUNTS.filter((a) => a.partner_id && a.shop_id && !disconnected.has(String(a.shop_id)));
   let totalPulled = 0, totalInserted = 0, totalFailed = 0;
   for (const account of active) {
     try {

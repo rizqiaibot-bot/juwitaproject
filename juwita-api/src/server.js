@@ -16,7 +16,7 @@ import {
   PRODUCT_PRICE_READ_MENUS,
   SHOPEE_ACTION_MENUS,
 } from "./permissions.js";
-import { connectShop, disconnectShop, pullOrders, pullProducts, syncStock, syncPrice, syncPriceOne, reconcileStock } from "./shopee.js";
+import { connectShop, disconnectShop, pullOrders, pullProducts, syncStock, syncStockOne, syncPrice, syncPriceOne, reconcileStock } from "./shopee.js";
 import { nextOrderNumber, formatOrderId, lockOrderDay } from "./order-id.js";
 
 const PORT = Number(process.env.PORT || 3000);
@@ -519,6 +519,115 @@ async function detachProductShopeeMapping(req, res, productId) {
       try { await client.query("ROLLBACK"); } catch {}
     }
     console.error("detach product Shopee mapping failed:", err.message);
+    return sendJson(res, 500, { error: "internal_error" });
+  } finally {
+    if (client) client.release();
+  }
+}
+
+// Mapping Shopee PER TOKO untuk satu produk (dipakai input Item ID Shopee 2).
+async function getProductShopeeMapping(req, res, productId) {
+  if (!/^[1-9]\d*$/.test(String(productId || ""))) {
+    return sendJson(res, 400, { error: "invalid_product_id" });
+  }
+  try {
+    const { rows } = await pool.query(
+      "SELECT shop_id, shopee_item_id FROM product_shopee_mapping WHERE product_id = $1 ORDER BY id",
+      [productId]
+    );
+    return sendJson(res, 200, { data: rows });
+  } catch (err) {
+    console.error("get product Shopee mapping failed:", err.message);
+    return sendJson(res, 500, { error: "internal_error" });
+  }
+}
+
+// Set/ubah/hapus mapping produk → listing Shopee untuk SATU toko.
+// Tidak mengubah products.stock; setelah tersimpan, stok pusat dikirim ke listing.
+async function putProductShopeeMapping(req, res, productId) {
+  if (!/^[1-9]\d*$/.test(String(productId || ""))) {
+    return sendJson(res, 400, { error: "invalid_product_id" });
+  }
+  const { data } = await readJsonBody(req, 16 * 1024);
+  const shopId = data && data.shop_id ? String(data.shop_id) : "";
+  const rawItem = data ? data.shopee_item_id : null;
+  const itemId = rawItem === null || rawItem === undefined || rawItem === "" ? null : String(rawItem).trim();
+  if (!shopId) return sendJson(res, 400, { error: "shop_id wajib diisi" });
+  if (itemId !== null && !/^[1-9]\d{0,18}$/.test(itemId)) {
+    return sendJson(res, 400, { error: "Shopee Item ID harus angka" });
+  }
+
+  let client = null;
+  try {
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const { rows: prod } = await client.query("SELECT id FROM products WHERE id = $1 FOR UPDATE", [productId]);
+    if (!prod.length) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 404, { error: "product_not_found" });
+    }
+    const { rows: shop } = await client.query(
+      "SELECT connection_status FROM marketplace_config WHERE platform = 'shopee' AND shop_id = $1 LIMIT 1",
+      [shopId]
+    );
+    if (!shop.length) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 400, { error: "toko Shopee tidak dikenal" });
+    }
+
+    if (itemId === null) {
+      await client.query("DELETE FROM product_shopee_mapping WHERE product_id = $1 AND shop_id = $2", [productId, shopId]);
+      await client.query("COMMIT");
+      return sendJson(res, 200, { data: { ok: true, product_id: Number(productId), shop_id: shopId, shopee_item_id: null } });
+    }
+
+    // 1 listing per toko hanya boleh menunjuk 1 produk pusat.
+    const { rows: taken } = await client.query(
+      `SELECT m.product_id, p.name FROM product_shopee_mapping m
+       LEFT JOIN products p ON p.id = m.product_id
+       WHERE m.shop_id = $1 AND m.shopee_item_id = $2 AND m.product_id <> $3 LIMIT 1`,
+      [shopId, itemId, productId]
+    );
+    if (taken.length) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 409, {
+        error: `Item ID ${itemId} sudah dipakai produk "${taken[0].name || taken[0].product_id}" di toko ini`,
+      });
+    }
+
+    const { rows: existing } = await client.query(
+      "SELECT id FROM product_shopee_mapping WHERE product_id = $1 AND shop_id = $2 ORDER BY id",
+      [productId, shopId]
+    );
+    if (existing.length) {
+      await client.query("UPDATE product_shopee_mapping SET shopee_item_id = $1 WHERE id = $2", [itemId, existing[0].id]);
+    } else {
+      await client.query(
+        "INSERT INTO product_shopee_mapping (product_id, shop_id, shopee_item_id) VALUES ($1, $2, $3)",
+        [productId, shopId, itemId]
+      );
+    }
+    await client.query("COMMIT");
+    client.release();
+    client = null;
+
+    // Kirim stok pusat saat ini ke listing (hanya jika toko connected).
+    let stockSync = null;
+    if (shop[0].connection_status === "connected") {
+      try {
+        stockSync = await syncStockOne(productId, shopId);
+      } catch (e) {
+        stockSync = { ok: false, error: (e && e.message) || "sync error" };
+      }
+    }
+    return sendJson(res, 200, {
+      data: { ok: true, product_id: Number(productId), shop_id: shopId, shopee_item_id: itemId, stock_sync: stockSync },
+    });
+  } catch (err) {
+    if (client) {
+      try { await client.query("ROLLBACK"); } catch {}
+    }
+    console.error("put product Shopee mapping failed:", err.message);
     return sendJson(res, 500, { error: "internal_error" });
   } finally {
     if (client) client.release();
@@ -1590,8 +1699,57 @@ async function handleMe(req, res) {
   }
 }
 
+// ============================================================
+// PUSH STOK REALTIME — setelah request yang bisa mengubah stok (POS, Gudang,
+// Persediaan, Order) sukses, kirim mutasi pending ke Shopee 1 & 2 dalam ~1 detik,
+// tanpa menunggu timer worker. Hanya MENGIRIM products.stock (qty_after);
+// tidak mengubah stok. Lock push stok tetap mencegah dua push bersamaan.
+// REALTIME_STOCK_PUSH=0 untuk mematikan.
+// ============================================================
+let stockPushTimer = null;
+let stockPushRunning = false;
+let stockPushAgain = false;
+
+function scheduleStockPush(delayMs = 1000) {
+  if (process.env.NODE_ENV === "test" || process.env.REALTIME_STOCK_PUSH === "0") return;
+  if (stockPushRunning) { stockPushAgain = true; return; }
+  if (stockPushTimer) return;
+  stockPushTimer = setTimeout(runStockPush, delayMs);
+}
+
+async function runStockPush() {
+  stockPushTimer = null;
+  stockPushRunning = true;
+  let retryDelay = 0;
+  try {
+    const r = await syncStock(null);
+    // Lock dipegang worker → coba lagi sebentar lagi (sekali).
+    if (r && r.busy) retryDelay = 5000;
+  } catch (err) {
+    console.error("realtime stock push failed:", err.message);
+  } finally {
+    stockPushRunning = false;
+    if (stockPushAgain) { stockPushAgain = false; scheduleStockPush(); }
+    else if (retryDelay) scheduleStockPush(retryDelay);
+  }
+}
+
+function mayChangeStock(method, pathname) {
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") return false;
+  return pathname === "/api/orders" ||
+    pathname.startsWith("/api/orders/") ||
+    pathname.startsWith("/api/gudang/") ||
+    pathname.startsWith("/api/persediaan/") ||
+    pathname.startsWith("/api/stock-mutations/") ||
+    pathname.startsWith("/api/rpc/") ||
+    pathname.startsWith("/api/data/");
+}
+
 const server = http.createServer(async (req, res) => {
   const { pathname } = new URL(req.url, "http://localhost");
+  if (mayChangeStock(req.method, pathname)) {
+    res.on("finish", () => { if (res.statusCode < 300) scheduleStockPush(); });
+  }
   if (req.method === "POST" && pathname === "/api/auth/login") {
     return handleLogin(req, res);
   }
@@ -1615,6 +1773,14 @@ const server = http.createServer(async (req, res) => {
     if (!checkMenuAccess(user, "katalog")) return sendJson(res, 403, { error: "forbidden" });
     const productId = pathname.slice("/api/products/".length, -"/shopee-mapping".length);
     return detachProductShopeeMapping(req, res, decodeURIComponent(productId));
+  }
+  if ((req.method === "GET" || req.method === "PUT") && pathname.startsWith("/api/products/") && pathname.endsWith("/shopee-mapping")) {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    if (!checkMenuAccess(user, "katalog")) return sendJson(res, 403, { error: "forbidden" });
+    const productId = decodeURIComponent(pathname.slice("/api/products/".length, -"/shopee-mapping".length));
+    if (req.method === "GET") return getProductShopeeMapping(req, res, productId);
+    return putProductShopeeMapping(req, res, productId);
   }
   if (req.method === "GET" && pathname === "/api/product-prices") {
     const user = await requireAuth(req, res);

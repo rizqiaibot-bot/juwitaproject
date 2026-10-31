@@ -2797,12 +2797,17 @@
                         <h4 style="font-size:0.9rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--text-primary);"><i class="fas fa-store" style="color:#f97316;"></i> Integrasi Shopee</h4>
                         <div class="form-grid" style="grid-template-columns: 1fr 1fr;row-gap:14px;">
                             <div class="form-group">
-                                <label>Shopee Item ID</label>
-                                <input type="number" id="newProdShopeeId" class="form-control" placeholder="ID produk di Shopee" />
+                                <label>Shopee 1 Item ID</label>
+                                <input type="number" id="newProdShopeeId" class="form-control" placeholder="ID produk di Shopee 1" />
                             </div>
                             <div class="form-group">
                                 <label>Shopee SKU</label>
                                 <input type="text" id="newProdShopeeSku" class="form-control" placeholder="SKU di Shopee" />
+                            </div>
+                            <div class="form-group">
+                                <label>Shopee 2 Item ID</label>
+                                <input type="number" id="newProdShopee2Id" class="form-control" placeholder="ID listing di Shopee 2 (juwita frozen food)" />
+                                <p style="font-size:0.65rem;color:var(--text-muted);margin-top:4px;font-weight:600;">Untuk sinkron stok ke Shopee 2. Kosongkan untuk melepas.</p>
                             </div>
                         </div>
                     </div>
@@ -6180,6 +6185,43 @@
         let editingProductId = null;
         let pendingPhotoData = null;
 
+        // Item ID Shopee 2 disimpan di product_shopee_mapping (per toko), bukan di products.
+        const SHOPEE2_SHOP_ID = "1214362884";
+        let shopee2ItemIdLoaded = "";
+
+        async function loadShopee2ItemId(productId) {
+            const el = document.getElementById("newProdShopee2Id");
+            if (!el) return;
+            el.value = "";
+            shopee2ItemIdLoaded = "";
+            const res = await apiFetch("/api/products/" + encodeURIComponent(productId) + "/shopee-mapping");
+            if (!res.ok || editingProductId !== productId) return;
+            const row = ((res.data && res.data.data) || []).find(r => String(r.shop_id) === SHOPEE2_SHOP_ID);
+            shopee2ItemIdLoaded = row && row.shopee_item_id != null ? String(row.shopee_item_id) : "";
+            el.value = shopee2ItemIdLoaded;
+        }
+
+        // Simpan bila berubah; dipanggil setelah produk tersimpan. Gagal tidak membatalkan simpan produk.
+        async function saveShopee2ItemId(productId) {
+            const el = document.getElementById("newProdShopee2Id");
+            if (!el) return;
+            const val = el.value.trim();
+            if (val === shopee2ItemIdLoaded) return;
+            const res = await apiFetch("/api/products/" + encodeURIComponent(productId) + "/shopee-mapping", {
+                method: "PUT",
+                body: { shop_id: SHOPEE2_SHOP_ID, shopee_item_id: val || null }
+            });
+            if (!res.ok) {
+                showToast("Item ID Shopee 2 gagal disimpan: " + ((res.data && res.data.error) || ("HTTP " + res.status)));
+                return;
+            }
+            const ss = res.data && res.data.data && res.data.data.stock_sync;
+            if (!val) showToast("Item ID Shopee 2 dilepas");
+            else if (ss && ss.ok) showToast("Shopee 2 tersambung, stok " + ss.stock + " terkirim");
+            else if (ss) showToast("Item ID Shopee 2 tersimpan, tapi kirim stok gagal: " + (ss.error || "error"));
+            else showToast("Item ID Shopee 2 tersimpan (Shopee 2 sedang disconnected)");
+        }
+
         function resetProductForm() {
             editingProductId = null;
             const t = document.getElementById("addProductTitle");
@@ -6194,10 +6236,11 @@
             if (sg) sg.style.display = "";
             const stockLabel = document.getElementById("stockFieldLabel");
             if (stockLabel) stockLabel.textContent = "Stok Awal";
-            ["newProdName","newProdSKU","newProdModal","newProdPrice","newProdStock","newProdLength","newProdWidth","newProdHeight","newProdWeight","newProdBarcode","newProdPLU","newProdShopeeId","newProdShopeeSku"].forEach(id => {
+            ["newProdName","newProdSKU","newProdModal","newProdPrice","newProdStock","newProdLength","newProdWidth","newProdHeight","newProdWeight","newProdBarcode","newProdPLU","newProdShopeeId","newProdShopeeSku","newProdShopee2Id"].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) { el.value = ""; el.disabled = false; }
             });
+            shopee2ItemIdLoaded = "";
             const catEl = document.getElementById("newProdCat");
             if (catEl) catEl.value = "Frozen Food";
             const supEl = document.getElementById("newProdSupplier");
@@ -6231,6 +6274,7 @@
             document.getElementById("newProdWeight").value = p.weight || "";
             document.getElementById("newProdShopeeId").value = p.shopee_item_id || "";
             document.getElementById("newProdShopeeSku").value = p.shopee_sku || "";
+            loadShopee2ItemId(id);
             // Katalog = master data & spesifikasi; sembunyikan Harga Jual + Stok Awal.
             const pg = document.getElementById("priceFieldGroup");
             if (pg) pg.style.display = "none";
@@ -10001,6 +10045,7 @@
                     const prod = products.find(x => x.id === editingProductId);
                     if (prod) Object.assign(prod, updates);
                     showToast(`${name} diperbarui`);
+                    await saveShopee2ItemId(editingProductId);
                     resetProductForm();
                     renderProducts();
                     renderCatalogTable();
@@ -10084,6 +10129,7 @@
                 renderMonitorStok();
                 renderPricingTables();
                 showToast(`${saved.name} ditambahkan`);
+                if (saved.id != null) await saveShopee2ItemId(saved.id);
                 showPage("daftar-produk");
             });
 
