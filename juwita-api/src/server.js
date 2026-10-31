@@ -16,7 +16,7 @@ import {
   PRODUCT_PRICE_READ_MENUS,
   SHOPEE_ACTION_MENUS,
 } from "./permissions.js";
-import { connectShop, pullOrders, pullProducts, syncStock, syncPrice, syncPriceOne, reconcileStock } from "./shopee.js";
+import { connectShop, disconnectShop, pullOrders, pullProducts, syncStock, syncPrice, syncPriceOne, reconcileStock } from "./shopee.js";
 import { nextOrderNumber, formatOrderId, lockOrderDay } from "./order-id.js";
 
 const PORT = Number(process.env.PORT || 3000);
@@ -1449,6 +1449,10 @@ async function handleShopeeAction(req, res, action) {
   try {
     if (action === "connect") {
       const r = await connectShop(shopId);
+      return sendJson(res, r.ok ? 200 : 400, { data: r });
+    }
+    if (action === "disconnect") {
+      const r = await disconnectShop(shopId);
       return sendJson(res, r.ok ? 200 : 400, { data: r });
     }
     if (action === "pull-orders") {

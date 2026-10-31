@@ -190,6 +190,7 @@ export const DATA_TABLE_ACCESS = Object.freeze({
 
 export const SHOPEE_ACTION_MENUS = Object.freeze({
   connect: null, // owner-only
+  disconnect: null, // owner-only
   "pull-orders": ["penjualan"],
   "pull-products": ["katalog"],
   "stock-sync": ["gudang", "persediaan"],

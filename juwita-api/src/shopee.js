@@ -92,6 +92,15 @@ async function loadAccounts() {
     .filter(Boolean);
 }
 
+// Toko yang SENGAJA diputus (tombol Disconnect). Listing-nya dilewati tanpa
+// dihitung gagal, agar mutasi tidak macet pending & tidak spam log failed.
+async function loadDisconnectedShopIds() {
+  const { rows } = await pool.query(
+    "SELECT shop_id FROM marketplace_config WHERE platform = 'shopee' AND connection_status = 'disconnected'"
+  );
+  return new Set(rows.map((r) => String(r.shop_id)));
+}
+
 async function loadToken(shopId) {
   const { rows } = await pool.query(
     "SELECT access_token, refresh_token FROM marketplace_credentials WHERE shop_id = $1 LIMIT 1",
@@ -147,11 +156,24 @@ async function getShopInfo(acc, accessToken) {
   return fetchJson(`${SHOPEE_API_URL}${path}?${params}`);
 }
 
+// Akun untuk (re)connect — tidak difilter connection_status agar toko yang
+// sedang 'disconnected' bisa disambungkan lagi dengan token tersimpan.
+async function loadAccountForConnect(shopId) {
+  if (!shopId) return (await loadAccounts())[0] || null;
+  const { rows } = await pool.query(
+    "SELECT shop_id, shop_name FROM marketplace_config WHERE platform = 'shopee' AND shop_id = $1 LIMIT 1",
+    [String(shopId)]
+  );
+  if (!rows[0]) return null;
+  const { partner_id, partner_key } = partnerForShop(rows[0].shop_id);
+  return { shop_id: String(rows[0].shop_id), shop_name: rows[0].shop_name || null, partner_id, partner_key };
+}
+
 // Koneksi: get_shop_info (dengan access_token).
 export async function connectShop(shopId) {
-  const accounts = await loadAccounts();
-  const acc = accounts.find((a) => a.shop_id === String(shopId)) || accounts[0];
-  if (!acc || !acc.partner_id) return { ok: false, error: "kredensial partner Shopee belum di-set" };
+  const acc = await loadAccountForConnect(shopId);
+  if (!acc) return { ok: false, error: "toko Shopee tidak ditemukan" };
+  if (!acc.partner_id) return { ok: false, error: "kredensial partner Shopee belum di-set" };
   const { access_token, refresh_token } = await ensureToken(acc);
   if (!access_token) return { ok: false, error: "access_token Shopee tidak tersedia" };
 
@@ -171,6 +193,20 @@ export async function connectShop(shopId) {
     [ok ? "connected" : "error", acc.shop_id]
   );
   return { ok, shop_name: body.shop_name || body.response?.shop_name || acc.shop_name, error: body.error || body.message };
+}
+
+// Putus sementara: connection_status = 'disconnected'. Semua sync (stok, harga,
+// order, produk) memakai loadAccounts() yang hanya mengambil toko 'connected',
+// jadi toko ini otomatis dilewati. Token & mapping TIDAK dihapus agar bisa
+// connect lagi tanpa authorize ulang.
+export async function disconnectShop(shopId) {
+  if (!shopId) return { ok: false, error: "shop_id wajib diisi" };
+  const r = await pool.query(
+    "UPDATE marketplace_config SET connection_status = 'disconnected' WHERE platform = 'shopee' AND shop_id = $1",
+    [String(shopId)]
+  );
+  if (!r.rowCount) return { ok: false, error: "toko Shopee tidak ditemukan" };
+  return { ok: true, shop_id: String(shopId), connection_status: "disconnected" };
 }
 
 async function getOrderList(acc, accessToken, timeFrom, timeTo, offset) {
@@ -515,6 +551,7 @@ async function syncStockUnlocked(shopId, opts = {}) {
   const accounts = await loadAccounts();
   const accountByShop = {};
   for (const a of accounts) accountByShop[String(a.shop_id)] = a;
+  const disconnected = await loadDisconnectedShopIds();
 
   // Kelompokkan pending per product_id. Hanya mutasi yang terlihat di snapshot
   // ini yang nanti ditandai synced; mutasi baru tetap pending → tick berikutnya.
@@ -539,7 +576,12 @@ async function syncStockUnlocked(shopId, opts = {}) {
       [p.product_id]
     );
 
-    const targets = maps.filter((mp) => !shopId || String(mp.shop_id) === String(shopId));
+    const mapped = maps.filter((mp) => !shopId || String(mp.shop_id) === String(shopId));
+    const targets = mapped.filter((mp) => !disconnected.has(String(mp.shop_id)));
+
+    // Semua listing produk ini ada di toko yang diputus → biarkan pending,
+    // terkirim otomatis setelah toko di-Connect lagi.
+    if (mapped.length > 0 && targets.length === 0) continue;
 
     if (targets.length === 0) {
       // Produk tanpa mapping TIDAK boleh diam-diam ditandai synced.
@@ -631,8 +673,10 @@ export async function syncStockForProduct(productId) {
 
   const results = [];
   let allOk = true;
+  const disconnected = await loadDisconnectedShopIds();
   for (const mp of maps) {
     const targetShop = String(mp.shop_id);
+    if (disconnected.has(targetShop)) { results.push({ shop_id: targetShop, shopee_item_id: mp.shopee_item_id, stock, ok: false, skipped: true, error: "toko Shopee disconnected" }); continue; }
     const acc = accountByShop[targetShop];
     if (!acc || !acc.partner_id) { allOk = false; results.push({ shop_id: targetShop, shopee_item_id: mp.shopee_item_id, stock, ok: false, error: "akun Shopee tidak tersedia" }); continue; }
 
@@ -679,6 +723,7 @@ async function reconcileStockUnlocked(shopId, opts = {}) {
   const accounts = await loadAccounts();
   const accountByShop = {};
   for (const a of accounts) accountByShop[String(a.shop_id)] = a;
+  const disconnected = await loadDisconnectedShopIds();
 
   const batchLimit = Number(opts.batchLimit ?? process.env.RECONCILE_BATCH_LIMIT) || RECONCILE_BATCH_LIMIT_DEFAULT;
   const cursor = opts.cursor != null ? Number(opts.cursor) : null;
@@ -719,7 +764,7 @@ async function reconcileStockUnlocked(shopId, opts = {}) {
       "SELECT shop_id, shopee_item_id FROM product_shopee_mapping WHERE product_id = $1",
       [p.id]
     );
-    const targets = maps.filter((mp) => !shopId || String(mp.shop_id) === String(shopId));
+    const targets = maps.filter((mp) => (!shopId || String(mp.shop_id) === String(shopId)) && !disconnected.has(String(mp.shop_id)));
     if (targets.length === 0) { skipped++; lastCompletedProductId = p.id; continue; }
 
     // Jangan mulai produk bila kuota listing habis (agar satu produk tidak
@@ -978,6 +1023,7 @@ export async function syncPriceOne(productId, channel) {
   const shopId = channelByShop[channel];
   if (!shopId) return { ok: false, skipped: true, error: "channel bukan Shopee" };
 
+  if ((await loadDisconnectedShopIds()).has(shopId)) return { ok: false, skipped: true, error: "toko Shopee disconnected" };
   const accounts = await loadAccounts();
   const acc = accounts.find((a) => a.shop_id === shopId);
   if (!acc || !acc.partner_id) return { ok: false, error: "akun Shopee tidak tersedia" };

@@ -795,6 +795,8 @@ function statusBadge(status) {
 async function callEdgeFunction(name, body) {
   var map = {
     "shopee-connect": "connect",
+    "shopee-disconnect": "disconnect",
+    "shopee-reconcile-stock": "reconcile-stock",
     "shopee-pull-orders": "pull-orders",
     "shopee-pull-products": "pull-products",
     "shopee-stock-sync": "stock-sync",
@@ -803,7 +805,7 @@ async function callEdgeFunction(name, body) {
   var action = map[name];
   if (!action) return { success: false, error: "edge function belum tersedia lokal: " + name };
   var res = await apiFetch("/api/shopee/" + action, { method: "POST", body: body || {} });
-  if (!res.ok) return { success: false, error: (res.data && res.data.error) || ("HTTP " + res.status) };
+  if (!res.ok) return { success: false, error: (res.data && (res.data.error || (res.data.data && res.data.data.error))) || ("HTTP " + res.status) };
   return res.data && res.data.data;
 }
 
@@ -855,9 +857,11 @@ async function loadAccounts() {
         '<td>' + statusBadge(r.connection_status) + '</td>' +
         '<td>' + (r.last_sync_at ? formatTime(r.last_sync_at) : "-") + '</td>' +
         '<td><div class="action-group">' +
-          (isActiveOwner()
-            ? '<button class="btn btn-primary btn-sm" onclick="openConnectModal()"><i class="fas fa-plug"></i> Connect</button>'
-            : '<span style="color:var(--text-muted);">-</span>') +
+          (!isActiveOwner()
+            ? '<span style="color:var(--text-muted);">-</span>'
+            : r.connection_status === "connected"
+              ? '<button class="btn btn-danger btn-sm" onclick="disconnectShopee(\'' + r.shop_id + '\')"><i class="fas fa-unlink"></i> Disconnect</button>'
+              : '<button class="btn btn-primary btn-sm" onclick="reconnectShopee(\'' + r.shop_id + '\')"><i class="fas fa-plug"></i> Connect</button>') +
         '</div></td>' +
         '</tr>';
     }).join("");
@@ -1001,6 +1005,40 @@ async function connectShopee() {
     showToast("Gagal: " + err.message, "error");
   }
   hideLoading("connectBtn");
+  refreshDashboard();
+}
+
+// ============================================================
+// DISCONNECT / RECONNECT (sementara — token & mapping tetap disimpan)
+// ============================================================
+async function disconnectShopee(shopId) {
+  if (!isActiveOwner()) { showToast("Hanya owner yang dapat mengatur koneksi Shopee", "error"); return; }
+  if (!confirm("Putuskan sementara toko Shopee " + shopId + "?\n\nSelama terputus, stok/harga POS tidak dikirim ke toko ini dan order tidak ditarik. Bisa Connect lagi kapan saja.")) return;
+  var result = await callEdgeFunction("shopee-disconnect", { shop_id: shopId });
+  if (result && result.ok) showToast("Toko " + shopId + " diputus sementara");
+  else showToast("Gagal disconnect: " + ((result && result.error) || "Unknown error"), "error");
+  refreshDashboard();
+}
+async function reconnectShopee(shopId) {
+  if (!isActiveOwner()) { showToast("Hanya owner yang dapat mengatur koneksi Shopee", "error"); return; }
+  var result = await callEdgeFunction("shopee-connect", { shop_id: shopId });
+  if (result && (result.ok || result.success)) {
+    showToast("Terhubung lagi ke " + (result.shop_name || shopId) + ". Menyamakan stok...");
+    // Selama terputus stok tidak dikirim → kirim ulang stok pusat ke toko ini.
+    var cursor = null, sent = 0, fail = 0;
+    for (var i = 0; i < 50; i++) {
+      var rc = await callEdgeFunction("shopee-reconcile-stock", { shop_id: shopId, cursor: cursor });
+      if (!rc || rc.busy || rc.success === false) { fail = -1; break; }
+      sent += rc.synced || 0; fail += rc.failed || 0;
+      if (!rc.hasMore) break;
+      cursor = rc.next_cursor;
+    }
+    if (fail === -1) showToast("Stok belum tersinkron otomatis, jalankan SYNC SHOPEE", "error");
+    else showToast("Stok " + shopId + " disamakan: " + sent + " listing" + (fail ? ", gagal " + fail : ""), fail ? "error" : "success");
+  } else {
+    showToast("Gagal connect: " + ((result && result.error) || "Unknown error") + ". Coba Authorize ulang.", "error");
+    openConnectModal();
+  }
   refreshDashboard();
 }
 

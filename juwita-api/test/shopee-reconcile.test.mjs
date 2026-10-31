@@ -28,6 +28,7 @@ const state = {
   updateStockResponse: { error: null, response: {} },
   authRefreshCalls: 0,   // berapa kali /auth/access_token/get dipanggil
   lockFree: true,        // hasil pg_try_advisory_lock
+  disconnected: [],      // shop_id dengan connection_status = 'disconnected'
 };
 
 function normalize(text) {
@@ -55,6 +56,9 @@ class FakePool {
       const p = state.syncProducts.find((r) => Number(r.product_id) === id) ||
         state.reconcileProducts.find((r) => Number(r.id) === id);
       return { rows: p ? [{ stock: p.stock }] : [] };
+    }
+    if (sql.includes("FROM marketplace_config") && sql.includes("connection_status = 'disconnected'")) {
+      return { rows: state.disconnected.map((shop_id) => ({ shop_id })) };
     }
     if (sql.includes("FROM marketplace_config")) {
       return { rows: state.accounts };
@@ -136,6 +140,7 @@ beforeEach(() => {
   captured.activityLogs.length = 0;
   captured.stockMutationUpdate = null;
   state.accounts = [];
+  state.disconnected = [];
   state.credentials = {};
   state.syncProducts = [];
   state.reconcileProducts = [];
@@ -372,4 +377,55 @@ test("syncStock: semua mutasi pending yang terlihat ditandai synced sekaligus", 
   assert.match(captured.stockMutationUpdate.sql, /sync_status='synced'/);
   assert.match(captured.stockMutationUpdate.sql, /sync_status='pending'/);
   assert.deepEqual(captured.stockMutationUpdate.params[0], [3, 5, 9]);
+});
+
+test("syncStock: toko disconnected dilewati, toko lain tetap sync & mutasi synced", async () => {
+  // Shopee 2 diputus → loadAccounts hanya mengembalikan Shopee 1.
+  state.accounts = [{ shop_id: "724153261", shop_name: "Shopee 1" }];
+  state.disconnected = ["1214362884"];
+  state.credentials = { "724153261": { access_token: "tok1", refresh_token: null } };
+  state.syncProducts = [{ product_id: 206, name: "P", stock: 7, mutation_ids: [3] }];
+  state.mappings = { 206: [
+    { shop_id: "724153261", shopee_item_id: 111 },
+    { shop_id: "1214362884", shopee_item_id: 222 },
+  ] };
+
+  const r = await syncStock();
+
+  assert.equal(r.synced, 1);
+  assert.equal(r.failed, 0);
+  assert.equal(captured.updateStocks.length, 1);
+  assert.equal(captured.updateStocks[0].body.item_id, 111);
+  assert.match(captured.stockMutationUpdate.sql, /sync_status='synced'/);
+});
+
+test("syncStock: produk yang hanya ter-mapping ke toko disconnected tetap pending", async () => {
+  state.accounts = [{ shop_id: "724153261", shop_name: "Shopee 1" }];
+  state.disconnected = ["1214362884"];
+  state.syncProducts = [{ product_id: 207, name: "Q", stock: 4, mutation_ids: [8] }];
+  state.mappings = { 207: [{ shop_id: "1214362884", shopee_item_id: 333 }] };
+
+  const r = await syncStock();
+
+  assert.equal(r.synced, 0);
+  assert.equal(r.failed, 0);
+  assert.equal(captured.updateStocks.length, 0);
+  assert.equal(captured.stockMutationUpdate, null);
+});
+
+test("reconcileStock: listing toko disconnected tidak dikirim", async () => {
+  state.accounts = [{ shop_id: "724153261", shop_name: "Shopee 1" }];
+  state.disconnected = ["1214362884"];
+  state.credentials = { "724153261": { access_token: "tok1", refresh_token: null } };
+  state.reconcileProducts = [{ id: 1, name: "A", stock: 5 }];
+  state.mappings = { 1: [
+    { shop_id: "724153261", shopee_item_id: 111 },
+    { shop_id: "1214362884", shopee_item_id: 222 },
+  ] };
+
+  const r = await reconcileStock();
+
+  assert.equal(r.failed, 0);
+  assert.equal(captured.updateStocks.length, 1);
+  assert.equal(captured.updateStocks[0].body.item_id, 111);
 });
