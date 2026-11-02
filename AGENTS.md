@@ -1,5 +1,15 @@
 # AGENTS.md — Juwita (WMS)
 
+## Status Terakhir (WAJIB dibaca lebih dulu)
+
+Lihat **`docs/PROJECT-STATE.md`**. Ringkasan kondisi per 2 Nov 2026:
+
+- `products.stock = 0` untuk SEMUA produk (reset 2 Nov 2026), POS belum pernah dipakai.
+- **Shopee 1 & Shopee 2 `disconnected`** — JANGAN sentuh stok Shopee.
+- **JANGAN Connect Shopee selama stok POS masih 0** (akan mengirim 0 ke listing).
+- Progres barcode: 33 produk sudah dipasang dari Google Sheet; 802 belum, 130 di antaranya menunggu review, 672 tidak ada di sheet.
+- Skrip terkait: `juwita-api/scripts/reset-pos-stock.mjs`, `juwita-api/scripts/match-barcodes.mjs`.
+
 ## Aturan Inti
 
 - 1 produk Juwita = 1 product_id.
