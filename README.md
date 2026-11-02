@@ -13,10 +13,11 @@ juwitaproject/
 ├── shopee-sync-schema.sql      # Tambahan kolom Shopee + tabel stock_mutations
 ├── stock-sync-schema.sql       # ⚠️ DEPRECATED — gunakan shopee-sync-schema.sql
 ├── gudang-schema.sql           # Schema tabel warehouse
-├── shopee-stock-sync.js        # Edge Function: push stok ke Shopee
-├── shopee-connect.js           # Edge Function: verifikasi koneksi Shopee
-├── shopee-pull-orders.js       # Edge Function: tarik order dari Shopee
-├── .env.example                # Template environment variables
+├── juwita-api/                 # Backend API + worker (Node.js, PostgreSQL lokal VPS)
+│   ├── src/                    # API server + modul Shopee
+│   ├── workers/                # pull order, import order, stock/price sync
+│   ├── scripts/                # skrip operasional (mis. reset stok POS)
+│   └── migrations/             # migration PostgreSQL
 └── .gitignore
 ```
 
@@ -24,7 +25,7 @@ juwitaproject/
 
 1. Clone repository
 2. Tidak perlu build step — file HTML langsung dibuka di browser
-3. Pastikan Supabase project sudah berjalan dan SQL schema sudah dijalankan
+3. Backend memakai `juwita-api` + PostgreSQL lokal (env `DATABASE_URL`)
 
 ```bash
 # Buka aplikasi utama
@@ -32,44 +33,30 @@ start index.html
 
 # Buka dashboard marketplace
 start marketplace.html
+
+# Jalankan backend
+cd juwita-api && npm install && npm start
 ```
 
-## Deploy Supabase Edge Functions
+## Deploy ke VPS (Biznet)
 
-```bash
-# Install Supabase CLI
-npm install -g supabase
+Deploy otomatis lewat GitHub Actions (`.github/workflows/deploy.yml`) saat push ke `main`:
 
-# Login
-supabase login
+- Frontend (`index.html`, `marketplace.html`, aset) → `/var/www/html`
+- Backend (`juwita-api/`) → `/var/www/juwita-api`
+- Service `juwita-api.service` di-restart otomatis
 
-# Deploy Edge Functions
-supabase functions deploy shopee-stock-sync
-supabase functions deploy shopee-connect
-supabase functions deploy shopee-pull-orders
+Worker Shopee (pull order, import order, sync stok/harga) dijalankan oleh timer systemd di VPS.
 
-# Set Environment Variables di Supabase Dashboard
-```
-
-## Deploy ke Vercel
-
-1. Push repository ke GitHub
-2. Import project di Vercel
-3. Set Build & Output Settings:
-   - Framework: Other
-   - Output Directory: `.`
-4. Deploy
-
-## Environment Variables
+## Environment Variables (juwita-api)
 
 | Variable | Deskripsi |
 |---|---|
-| `SUPABASE_URL` | URL project Supabase |
-| `SUPABASE_ANON_KEY` | Anon key Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (untuk Edge Function) |
-| `SHOPEE_PARTNER_ID` | Partner ID Shopee Toko 1 |
-| `SHOPEE_PARTNER_KEY` | Partner Key Shopee Toko 1 |
-| `SHOPEE_SHOP_ID` | Shop ID Shopee Toko 1 |
+| `DATABASE_URL` | Koneksi PostgreSQL lokal VPS |
+| `JWT_SECRET` | Secret token login |
+| `SHOPEE_PARTNER_ID` / `SHOPEE_PARTNER_KEY` / `SHOPEE_SHOP_ID` | Kredensial Shopee 1 |
+| `SHOPEE2_PARTNER_ID` / `SHOPEE2_PARTNER_KEY` / `SHOPEE2_SHOP_ID` | Kredensial Shopee 2 |
+| `SHOPEE_STOCK_PUSH` | `0` = matikan semua pengiriman stok ke Shopee |
 
 
 ## Daftar Fitur
@@ -111,15 +98,10 @@ Production: ░░░░░░░░░░  0%
 # 1. Pull perubahan terbaru
 git pull origin main
 
-# 2. Jika ada perubahan schema SQL, jalankan di Supabase SQL Editor
-#    (marketplace-schema.sql, shopee-sync-schema.sql, dll)
+# 2. Push ke main → GitHub Actions otomatis deploy ke VPS Biznet
+git push origin main
 
-# 3. Jika ada perubahan Edge Function, deploy ulang
-supabase functions deploy shopee-stock-sync
-supabase functions deploy shopee-connect
-supabase functions deploy shopee-pull-orders
-
-# 4. Vercel auto-deploy jika terhubung ke GitHub
+# 3. Jika ada perubahan schema SQL, jalankan migration di PostgreSQL VPS
 ```
 
 ## License

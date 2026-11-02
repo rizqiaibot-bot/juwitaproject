@@ -80,8 +80,8 @@ CREATE INDEX IF NOT EXISTS idx_marketplace_orders_sync    ON marketplace_orders(
 -- ============================================================
 
 -- Advisory lock untuk mencegah concurrent sync execution.
--- Lock ID 987654321 — DIGUNAKAN EKSKLUSIF oleh shopee-stock-sync Edge Function.
--- JANGAN gunakan lock ID yang sama untuk Edge Function atau proses lain.
+-- Lock ID 987654321 — hanya untuk proses sync lama; sync stok juwita-api
+-- memakai advisory lock 745300102. JANGAN pakai lock ID yang sama untuk proses lain.
 CREATE OR REPLACE FUNCTION sync_lock_acquire()
 RETURNS boolean AS $$
 BEGIN
