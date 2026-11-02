@@ -377,6 +377,20 @@ test("POS & Shopee 1 → stok terbaru dikirim ke Shopee 1 DAN Shopee 2; gagal �
   assert.equal(await stockOf(), 93);
 });
 
+test("Order Shopee diimport → stok terbaru langsung dikirim ke Shopee 1 & 2", { skip }, async () => {
+  await addMpOrder(S2, "SN-AUTO-PUSH", [{ item_id: ITEM_S2, qty: 3 }]);
+  const r = await worker.main();
+  assert.equal(r.imported, 1);
+  assert.equal(await stockOf(), 97);
+  assert.deepEqual(
+    shopee.updateStocks.map((x) => [x.shop_id, x.stock]).sort(),
+    [[S1, 97], [S2, 97]].sort()
+  );
+  const left = await admin.query("SELECT count(*)::int AS n FROM stock_mutations WHERE sync_status='pending'");
+  assert.equal(left.rows[0].n, 0, "mutasi harus sudah terkirim, bukan menggantung");
+  assert.equal(await stockOf(), 97, "push stok tidak boleh mengubah stok pusat");
+});
+
 test("Rekonsiliasi mengoreksi drift: kirim stok DB ke semua listing tanpa mutasi pending", { skip }, async () => {
   await admin.query("UPDATE products SET stock = 42 WHERE id=$1", [P]); // drift (tanpa mutasi)
   let total = 0, cursor = null, more = true;

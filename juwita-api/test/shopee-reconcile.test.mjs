@@ -25,6 +25,7 @@ const state = {
   syncProducts: [],      // hasil query DISTINCT ON (syncStock)
   reconcileProducts: [], // hasil query DISTINCT (reconcileStock)
   mappings: {},          // product_id -> [{shop_id, shopee_item_id}]
+  legacyItemIds: {},     // product_id -> Item ID Shopee 1 di products.shopee_item_id
   updateStockResponse: { error: null, response: {} },
   authRefreshCalls: 0,   // berapa kali /auth/access_token/get dipanggil
   lockFree: true,        // hasil pg_try_advisory_lock
@@ -77,6 +78,10 @@ class FakePool {
     }
     if (sql.includes("FROM stock_mutations m") && sql.includes("JOIN products")) {
       return { rows: state.syncProducts };
+    }
+    if (sql.includes("SELECT shopee_item_id FROM products WHERE id = $1 AND shopee_item_id IS NOT NULL")) {
+      const itemId = state.legacyItemIds[Number(params[0])];
+      return { rows: itemId != null ? [{ shopee_item_id: itemId }] : [] };
     }
     if (sql.includes("FROM product_shopee_mapping WHERE product_id = $1")) {
       return { rows: state.mappings[Number(params[0])] || [] };
@@ -145,6 +150,7 @@ beforeEach(() => {
   state.syncProducts = [];
   state.reconcileProducts = [];
   state.mappings = {};
+  state.legacyItemIds = {};
   state.updateStockResponse = { error: null, response: {} };
   state.authRefreshCalls = 0;
   state.lockFree = true;
@@ -168,6 +174,22 @@ test("syncStock: produk tanpa mapping ditandai failed, bukan synced", async () =
   assert.equal(r.results[0].error, "tanpa mapping Shopee");
   assert.equal(captured.activityLogs.length, 1);
   assert.equal(captured.activityLogs[0][6], "failed"); // status
+});
+
+test("syncStock: Item ID legacy Shopee 1 tetap dipakai walau belum ada baris mapping", async () => {
+  state.accounts = [{ shop_id: "724153261", shop_name: "Shopee 1" }];
+  state.credentials = { "724153261": { access_token: "tok1", refresh_token: null } };
+  state.syncProducts = [{ product_id: 300, name: "Produk Legacy", stock: 12, mutation_ids: [7] }];
+  state.mappings = { 300: [] };
+  state.legacyItemIds = { 300: 24494633239 };
+
+  const r = await syncStock();
+
+  assert.equal(r.synced, 1);
+  assert.equal(r.failed, 0);
+  assert.equal(captured.updateStocks.length, 1);
+  assert.equal(captured.updateStocks[0].body.item_id, 24494633239);
+  assert.match(captured.stockMutationUpdate.sql, /sync_status='synced'/);
 });
 
 test("reconcileStock: kirim products.stock ke semua listing ter-mapping", async () => {
@@ -315,6 +337,29 @@ test("syncStock: dry-run tidak mengubah stock_mutations & tidak kirim stok", asy
   assert.equal(r.synced, 1);
   assert.equal(captured.updateStocks.length, 0, "dry-run tidak boleh kirim ke Shopee");
   assert.equal(captured.stockMutationUpdate, null, "dry-run tidak boleh ubah stock_mutations");
+});
+
+test("SHOPEE_STOCK_PUSH=0: semua pengiriman stok ke Shopee diblokir", async () => {
+  process.env.SHOPEE_STOCK_PUSH = "0";
+  try {
+    state.accounts = [{ shop_id: "724153261", shop_name: "Shopee 1" }];
+    state.credentials = { "724153261": { access_token: "tok1", refresh_token: null } };
+    state.syncProducts = [{ product_id: 206, name: "P", stock: 5, mutation_ids: [1] }];
+    state.mappings = { 206: [{ shop_id: "724153261", shopee_item_id: 111 }] };
+
+    const s = await syncStock();
+    assert.equal(s.disabled, true);
+    assert.equal(s.synced, 0);
+
+    const r = await reconcileStock();
+    assert.equal(r.disabled, true);
+    assert.equal(r.hasMore, false);
+
+    assert.equal(captured.updateStocks.length, 0, "tidak boleh ada request update_stock");
+    assert.equal(captured.stockMutationUpdate, null, "mutasi stok tidak boleh diubah");
+  } finally {
+    delete process.env.SHOPEE_STOCK_PUSH;
+  }
 });
 
 test("reconcileStock: Shopee 2 memakai SHOPEE2_PARTNER_ID untuk sign", async () => {

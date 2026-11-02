@@ -23,6 +23,7 @@
 import pg from "pg";
 import { pathToFileURL } from "node:url";
 import { orderDayStamp, insertWithUniqueOrderId, lockOrderDay } from "../src/order-id.js";
+import { syncStock } from "../src/shopee.js";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) throw new Error("DATABASE_URL wajib di-set");
@@ -481,8 +482,22 @@ async function runImport() {
     } catch (e) { console.error("activity_log failed:", e.message); }
   }
 
-  console.log(`shopee-import: ${DRY_RUN ? "dry-run" : "done"} imported=${imported} would_import=${wouldImport} ignored=${ignored} skipped=${skipped} failed=${failed} (dari ${target.length} diproses)`);
-  return { imported, failed, ignored, skipped, would_import: wouldImport };
+  // Stok pusat sudah berubah (order Shopee memotong qty). Langsung kirim nilai
+  // terbaru ke SEMUA toko Shopee agar POS, Shopee 1, dan Shopee 2 sama tanpa
+  // menunggu timer sync. Kalau gagal, mutasi tetap pending → dicoba lagi oleh
+  // worker shopee-sync (tidak potong ganda: yang dikirim selalu qty_after).
+  let stockSync = null;
+  if (!DRY_RUN && imported > 0) {
+    try {
+      stockSync = await syncStock(null);
+    } catch (e) {
+      console.error(`shopee-import: push stok setelah import gagal: ${e.message}`);
+    }
+  }
+
+  console.log(`shopee-import: ${DRY_RUN ? "dry-run" : "done"} imported=${imported} would_import=${wouldImport} ignored=${ignored} skipped=${skipped} failed=${failed} (dari ${target.length} diproses)` +
+    (stockSync ? ` | stok terkirim ke Shopee: synced=${stockSync.synced} failed=${stockSync.failed}${stockSync.busy ? " (busy, retry di worker sync)" : ""}` : ""));
+  return { imported, failed, ignored, skipped, would_import: wouldImport, stock_sync: stockSync };
 }
 
 // Jalankan hanya bila dipanggil langsung (bukan saat di-import oleh test).
