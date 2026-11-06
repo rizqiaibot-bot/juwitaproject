@@ -1,13 +1,19 @@
 # PROJECT STATE — Juwita
 
-Terakhir diperbarui: **2 November 2026** (sesi malam).
+Terakhir diperbarui: **6 November 2026** (audit stok + refactor sinkronisasi stok, belum di-deploy).
 Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat sesi baru.
 
 ---
 
 ## 1. Kondisi stok (PALING PENTING)
 
-- `products.stock = 0` untuk **semua 1.848 produk**.
+> **Update 6 Nov 2026 (audit read-only DB):** stok POS sudah diisi lagi → **198 produk berisi, total 4.350 unit**; 1.650 produk lain masih 0. Kedua toko Shopee **masih `disconnected`**. `stock_mutations`: **4.114 `synced`, 1.408 `pending`, 1.227 `failed`** (backlog lama, TIDAK dihapus).
+>
+> Refactor sinkronisasi stok (belum di-commit/deploy): pengiriman stok **tidak lagi memakai antrean `stock_mutations`**, melainkan rekonsiliasi `products.stock` TERBARU per produk (push realtime) dan saat Connect/manual. Baris `stock_mutations` baru hanya histori terminal (`synced`) dan tidak pernah dibaca untuk push. Rencana pembersihan backlog lama menunggu persetujuan.
+
+**Catatan historis (2 Nov 2026):**
+
+- `products.stock = 0` untuk **semua 1.848 produk** (kondisi saat reset; sekarang sudah berubah, lihat update di atas).
   - Dieksekusi 2 Nov 2026 di VPS dengan `juwita-api/scripts/reset-pos-stock.mjs --apply --disconnect`.
   - 1.146 produk yang sebelumnya berisi (total 17.157 unit) di-nol-kan; 1.146 baris `stock_mutations` (`pending`, source "Reset stok POS").
 - **Shopee 1 & Shopee 2 `disconnected`**:

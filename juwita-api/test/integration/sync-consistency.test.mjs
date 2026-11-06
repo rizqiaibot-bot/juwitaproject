@@ -351,28 +351,29 @@ test("Worker import tidak berjalan ganda (advisory lock)", { skip }, async () =>
 // ============================================================
 // DATABASE → SHOPEE 1 & 2 (push stok + retry)
 // ============================================================
-test("POS & Shopee 1 → stok terbaru dikirim ke Shopee 1 DAN Shopee 2; gagal → pending → retry", { skip }, async () => {
+test("POS & Shopee 1 → stok terbaru dikirim ke Shopee 1 DAN Shopee 2; gagal tidak jadi antrean", { skip }, async () => {
   await posCheckout("ORD-20261030-500", "pos-sync", 5);
   await worker.importOrder(await mpRow(await addMpOrder(S1, "SN-SYNC", [{ item_id: ITEM_S1, qty: 2 }])));
   assert.equal(await stockOf(), 93);
 
   shopee.failStockForShop = S2; // API Shopee 2 sedang gagal
   let s = await shopeeLib.syncStock(null);
-  assert.equal(s.synced, 0);
+  assert.equal(s.synced, 1);
+  assert.equal(s.failed, 1);
   const pending = await admin.query("SELECT count(*)::int AS n FROM stock_mutations WHERE sync_status='pending'");
-  assert.equal(pending.rows[0].n, 2, "mutasi tetap di antrean retry");
+  assert.equal(pending.rows[0].n, 0, "kegagalan tidak boleh membuat antrean retry");
   assert.deepEqual(shopee.updateStocks, [{ shop_id: S1, item_id: ITEM_S1, stock: 93 }]);
 
   shopee.failStockForShop = null;
   shopee.updateStocks.length = 0;
   s = await shopeeLib.syncStock(null);
-  assert.equal(s.synced, 1);
+  assert.equal(s.synced, 2);
   assert.deepEqual(
     shopee.updateStocks.map((x) => [x.shop_id, x.item_id, x.stock]).sort(),
     [[S1, ITEM_S1, 93], [S2, ITEM_S2, 93]].sort()
   );
   const left = await admin.query("SELECT count(*)::int AS n FROM stock_mutations WHERE sync_status<>'synced'");
-  assert.equal(left.rows[0].n, 0);
+  assert.equal(left.rows[0].n, 0, "semua baris histori terminal, bukan antrean");
   // Push stok TIDAK mengubah stok pusat.
   assert.equal(await stockOf(), 93);
 });
@@ -405,7 +406,7 @@ test("Rekonsiliasi mengoreksi drift: kirim stok DB ke semua listing tanpa mutasi
   );
 });
 
-test("Push stok tidak berjalan ganda: lock dipegang → busy, mutasi tetap pending", { skip }, async () => {
+test("Push stok tidak berjalan ganda: lock dipegang → busy, tanpa antrean pending", { skip }, async () => {
   await posCheckout("ORD-20261030-600", "pos-busy", 1);
   const holder = await admin.connect();
   try {
@@ -418,7 +419,9 @@ test("Push stok tidak berjalan ganda: lock dipegang → busy, mutasi tetap pendi
     holder.release();
   }
   const s2 = await shopeeLib.syncStock(null);
-  assert.equal(s2.synced, 1);
+  assert.equal(s2.synced, 2, "satu produk × dua listing");
+  const pending = await admin.query("SELECT count(*)::int AS n FROM stock_mutations WHERE sync_status='pending'");
+  assert.equal(pending.rows[0].n, 0);
 });
 
 // ============================================================

@@ -72,13 +72,14 @@ async function main() {
       console.log(`toko Shopee diputus: ${rowCount}`);
     }
 
-    // Mutasi dicatat SEBELUM stok diubah agar qty_before/qty_after benar.
+    // Histori mutasi dicatat SEBELUM stok diubah agar qty_before/qty_after
+    // benar. Status langsung terminal: bukan antrean sinkronisasi.
     const { rowCount: mutations } = await client.query(
       `INSERT INTO stock_mutations
          (product_id, product_name, type, quantity, qty_before, qty_after, source, sync_status, created_at)
        SELECT id, name,
               CASE WHEN stock > 0 THEN 'OUT' ELSE 'IN' END,
-              ABS(stock), stock, 0, 'Reset stok POS', 'pending', now()
+              ABS(stock), stock, 0, 'Reset stok POS', 'synced', now()
        FROM products
        WHERE stock <> 0`
     );
@@ -87,7 +88,7 @@ async function main() {
     );
 
     await client.query("COMMIT");
-    console.log(`selesai: ${updated} produk di-set 0, ${mutations} mutasi stok dicatat (pending).`);
+    console.log(`selesai: ${updated} produk di-set 0, ${mutations} histori mutasi stok dicatat (terminal).`);
     console.log("Stok Shopee TIDAK diubah selama toko tetap disconnected.");
   } catch (e) {
     await client.query("ROLLBACK").catch(() => {});

@@ -15,7 +15,8 @@
 // Harga jual Shopee: product_prices (channel 'shopee:<shop_id>'), BUKAN products.price.
 // wmsstatus awal = "Baru" (masuk Picking, BUKAN langsung Siap Kirim).
 // Stok: products.stock = stock - qty (relatif, row di-lock, qty dijumlah per
-// produk) + stock_mutations (OUT, pending) — sekali per order, satu transaksi.
+// produk) + stock_mutations (OUT, langsung terminal) — sekali per order, satu
+// transaksi. Pengiriman stok ke Shopee memakai nilai TERBARU products.stock.
 // Order status dibatalkan/cancelled → TIDAK diimport.
 // Order 'failed' (mis. produk belum dimapping) dicoba ulang otomatis setelah
 // status terbaru diambil dari Shopee; tanpa status terbaru → tidak diimport.
@@ -23,7 +24,7 @@
 import pg from "pg";
 import { pathToFileURL } from "node:url";
 import { orderDayStamp, insertWithUniqueOrderId, lockOrderDay } from "../src/order-id.js";
-import { syncStock } from "../src/shopee.js";
+import { syncProductsStock } from "../src/shopee.js";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) throw new Error("DATABASE_URL wajib di-set");
@@ -366,7 +367,7 @@ export async function importOrder(row) {
         [qty, pid]
       );
       await client.query(
-        "INSERT INTO stock_mutations (product_id, product_name, type, quantity, qty_before, qty_after, source, sync_status, created_at) VALUES ($1,$2,'OUT',$3,$4,$5,$6,'pending',now())",
+        "INSERT INTO stock_mutations (product_id, product_name, type, quantity, qty_before, qty_after, source, sync_status, created_at) VALUES ($1,$2,'OUT',$3,$4,$5,$6,'synced',now())",
         [pid, product_name, qty, upd[0].qty_before, upd[0].qty_after, "Shopee: " + row.mp_order_id]
       );
     }
@@ -378,7 +379,7 @@ export async function importOrder(row) {
     if (fin.rowCount !== 1) throw new Error("order marketplace berubah saat import");
 
     await client.query("COMMIT");
-    return { status: "imported", order_sn: row.mp_order_id, internal_order_id: orderId };
+    return { status: "imported", order_sn: row.mp_order_id, internal_order_id: orderId, product_ids: productIds };
   } catch (e) {
     await client.query("ROLLBACK").catch(() => {});
     // Pakai koneksi yang sama (pool kecil). Hanya order yang belum diimport.
@@ -442,6 +443,7 @@ async function runImport() {
   await prefetchMissingDetails(target, !DRY_RUN);
 
   let imported = 0, failed = 0, wouldImport = 0, ignored = 0, skipped = 0;
+  const importedProductIds = new Set();
   for (const row of target) {
     // Retry order 'failed' HANYA dengan status terbaru dari Shopee; status lama
     // di DB bisa sudah dibatalkan → jangan potong stok berdasarkan data basi.
@@ -451,7 +453,10 @@ async function runImport() {
     }
     try {
       const r = await importOrder(row);
-      if (r.status === "imported") imported++;
+      if (r.status === "imported") {
+        imported++;
+        for (const pid of r.product_ids || []) importedProductIds.add(pid);
+      }
       else if (r.status === "skipped") {
         skipped++;
         console.log(`  [SKIP] ${r.order_sn}: ${r.reason}`);
@@ -482,21 +487,20 @@ async function runImport() {
     } catch (e) { console.error("activity_log failed:", e.message); }
   }
 
-  // Stok pusat sudah berubah (order Shopee memotong qty). Langsung kirim nilai
-  // terbaru ke SEMUA toko Shopee agar POS, Shopee 1, dan Shopee 2 sama tanpa
-  // menunggu timer sync. Kalau gagal, mutasi tetap pending → dicoba lagi oleh
-  // worker shopee-sync (tidak potong ganda: yang dikirim selalu qty_after).
+  // Stok pusat sudah berubah (order Shopee memotong qty). Kirim nilai TERBARU
+  // hanya untuk produk yang terdampak, ke SEMUA toko Shopee. Tidak ada antrean:
+  // kalau gagal, rekonsiliasi berikutnya/Connect akan mengirim stok terkini.
   let stockSync = null;
-  if (!DRY_RUN && imported > 0) {
+  if (!DRY_RUN && imported > 0 && importedProductIds.size > 0) {
     try {
-      stockSync = await syncStock(null);
+      stockSync = await syncProductsStock([...importedProductIds]);
     } catch (e) {
       console.error(`shopee-import: push stok setelah import gagal: ${e.message}`);
     }
   }
 
   console.log(`shopee-import: ${DRY_RUN ? "dry-run" : "done"} imported=${imported} would_import=${wouldImport} ignored=${ignored} skipped=${skipped} failed=${failed} (dari ${target.length} diproses)` +
-    (stockSync ? ` | stok terkirim ke Shopee: synced=${stockSync.synced} failed=${stockSync.failed}${stockSync.busy ? " (busy, retry di worker sync)" : ""}` : ""));
+    (stockSync ? ` | stok terkirim ke Shopee: synced=${stockSync.synced} failed=${stockSync.failed}${stockSync.busy ? " (busy, menyusul rekonsiliasi)" : ""}` : ""));
   return { imported, failed, ignored, skipped, would_import: wouldImport, stock_sync: stockSync };
 }
 

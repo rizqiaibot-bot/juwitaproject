@@ -16,7 +16,7 @@ import {
   PRODUCT_PRICE_READ_MENUS,
   SHOPEE_ACTION_MENUS,
 } from "./permissions.js";
-import { connectShop, disconnectShop, pullOrders, pullProducts, syncStock, syncStockOne, syncPrice, syncPriceOne, reconcileStock } from "./shopee.js";
+import { connectShop, disconnectShop, pullOrders, pullProducts, syncStock, syncStockOne, syncPrice, syncPriceOne, reconcileStock, scheduleStockPush, scheduleStockReconcile } from "./shopee.js";
 import { nextOrderNumber, formatOrderId, lockOrderDay } from "./order-id.js";
 
 const PORT = Number(process.env.PORT || 3000);
@@ -435,12 +435,9 @@ async function auditProductDeletion(client, productId) {
     blockers.push({ table: "order_items", label: "pesanan aktif", count: activeOrders });
   }
 
-  const pendingMutations = await countProductRows(
-    client, "stock_mutations", productId, " AND sync_status = 'pending'"
-  );
-  if (pendingMutations > 0) {
-    blockers.push({ table: "stock_mutations", label: "sinkronisasi stok pending", count: pendingMutations });
-  }
+  // stock_mutations TIDAK lagi menjadi blocker: mekanisme baru memakai
+  // rekonsiliasi products.stock, jadi baris histori lama tidak menghalangi
+  // penghapusan produk (histori tetap disimpan, tidak dihapus).
 
   // purchase_items.product_id masih NOT NULL + FK, jadi histori ini tidak bisa
   // dilepas tanpa mengubah skema. Blokir agar data pembelian tidak hilang.
@@ -461,7 +458,7 @@ async function auditProductDeletion(client, productId) {
     },
   };
 
-  return { blockers, plan };
+  return { blockers, plan, pending_stock_sync: 0 };
 }
 
 async function deleteProductTransactional(req, res, u) {
@@ -472,6 +469,10 @@ async function deleteProductTransactional(req, res, u) {
   const confirmed = ["1", "true", "yes"].includes(
     String(u.searchParams.get("confirm") || "").toLowerCase()
   );
+  // Parameter "mode=local" dipertahankan agar klien lama tetap kompatibel;
+  // sekarang tidak ada antrean yang perlu dibatalkan dan tidak ada request
+  // ke Shopee pada jalur hapus.
+  const localOnly = String(u.searchParams.get("mode") || "").toLowerCase() === "local";
   let client = null;
   try {
     client = await pool.connect();
@@ -486,6 +487,8 @@ async function deleteProductTransactional(req, res, u) {
     }
     const product = existing[0];
     const { blockers, plan } = await auditProductDeletion(client, id);
+    // Semua blocker yang tersisa adalah data bisnis aktif (pesanan aktif,
+    // purchase_items). Antrean sinkronisasi Shopee lama tidak memblokir.
     if (blockers.length > 0) {
       await client.query("ROLLBACK");
       return sendJson(res, 409, {
@@ -504,8 +507,14 @@ async function deleteProductTransactional(req, res, u) {
         message: "Konfirmasi diperlukan untuk menghapus produk secara permanen.",
         product: { id: Number(product.id), name: product.name, sku: product.sku || "" },
         plan,
+        local_delete_available: false,
+        pending_stock_sync: 0,
       });
     }
+
+    // Tidak ada antrean sinkronisasi yang perlu dibatalkan. Baris histori
+    // stock_mutations tetap disimpan apa adanya (tidak dihapus).
+    const cancelledMutations = 0;
 
     // Historis: pertahankan baris, lepas product_id bila kolomnya nullable.
     // order_items/activity_log/warehouse_receiving menyimpan snapshot nama
@@ -594,10 +603,18 @@ async function deleteProductTransactional(req, res, u) {
     return sendJson(res, 200, {
       data: deleted,
       deletion: {
+        mode: localOnly ? "local" : "standard",
+        shopee_sync_skipped: localOnly,
+        // Dipertahankan untuk kompatibilitas klien lama; mekanisme baru tidak
+        // pernah membatalkan antrean sehingga nilainya selalu 0.
+        cancelled_stock_mutations: cancelledMutations,
         removed_shopee_mappings: removedMappings,
         removed_product_prices: removedPrices,
         cleared_references: cleared,
         preserved_history: plan.history,
+        warning: localOnly
+          ? "Produk dihapus dari Juwita One. Listing Shopee tidak diubah dan tidak akan menerima pembaruan stok dari produk ini."
+          : null,
       },
     });
   } catch (err) {
@@ -839,7 +856,9 @@ async function ensureProductPosPrice(row) {
   }
 }
 
-// Catat mutation stok (pending) agar worker sync mengirim ke SEMUA mapping Shopee.
+// Catat histori perubahan stok. Status langsung terminal ('synced') karena
+// tabel ini BUKAN antrean sinkronisasi lagi: pengiriman ke Shopee memakai
+// rekonsiliasi stok terbaru (products.stock), tidak pernah membaca baris ini.
 // TIDAK boleh ada jalur ubah products.stock yang melewati fungsi ini.
 async function recordProductStockMutationWithClient(client, productId, productName, qtyBefore, qtyAfter, source) {
   if (qtyAfter === qtyBefore) return;
@@ -847,7 +866,7 @@ async function recordProductStockMutationWithClient(client, productId, productNa
   const quantity = Math.abs(qtyAfter - qtyBefore);
   await client.query(
     `INSERT INTO stock_mutations (product_id, product_name, type, quantity, qty_before, qty_after, source, sync_status, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,'pending',now())`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,'synced',now())`,
     [productId, productName, type, quantity, qtyBefore, qtyAfter, source]
   );
 }
@@ -942,6 +961,9 @@ async function handleDataWrite(req, res, table, method) {
           }
         }
         await client.query("COMMIT");
+        // Kirim stok produk baru (jika sudah terhubung ke listing) sebagai nilai
+        // terbaru; tanpa antrean dan tanpa menunggu worker.
+        scheduleStockPush(inserted.map((row) => row.id));
       } else {
         const result = await pool.query(
           `INSERT INTO ${table} (${colList}) VALUES ${valueList} RETURNING *`,
@@ -1098,6 +1120,8 @@ async function handleDataWrite(req, res, table, method) {
         );
       }
       await client.query("COMMIT");
+      // Realtime: kirim stok terbaru produk yang berubah ke semua listingnya.
+      scheduleStockPush(updated.map((row) => row.id));
     } else {
       const result = await pool.query(
         `UPDATE ${table} SET ${setList}${where} RETURNING *`,
@@ -1144,6 +1168,13 @@ async function handleOrdersPost(req, res) {
     client = await pool.connect();
     await client.query("BEGIN");
     if (m) await lockOrderDay(client, m[1]);
+    // Batas histori stok sebelum RPC. RPC sync_offline_order (belum diubah
+    // tanpa migrasi) masih menulis baris 'pending'; baris BARU itu dinormalkan
+    // menjadi terminal di transaksi yang sama agar tidak menjadi antrean.
+    const { rows: watermarkRows } = await client.query(
+      "SELECT COALESCE(MAX(id), 0) AS id FROM stock_mutations"
+    );
+    const mutationWatermark = Number(watermarkRows[0] && watermarkRows[0].id) || 0;
     const callRpc = async (orderId) => {
       const { rows } = await client.query(
         `SELECT sync_offline_order($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) AS result`,
@@ -1162,7 +1193,18 @@ async function handleOrdersPost(req, res) {
       n = Math.max(await nextOrderNumber(client, m[1]), n + 1);
       result = await callRpc(formatOrderId(m[1], n));
     }
+    // Baris histori stok baru dari RPC bukan antrean: langsung terminal.
+    const { rows: touchedStock } = await client.query(
+      "SELECT DISTINCT product_id FROM stock_mutations WHERE id > $1",
+      [mutationWatermark]
+    );
+    await client.query(
+      "UPDATE stock_mutations SET sync_status = 'synced', shopee_sync_at = now() WHERE id > $1 AND sync_status = 'pending'",
+      [mutationWatermark]
+    );
     await client.query("COMMIT");
+    // Kirim stok terbaru produk yang berubah (bukan qty lama dari baris histori).
+    scheduleStockPush(touchedStock.map((r) => r.product_id));
     sendJson(res, 200, { data: result });
   } catch (err) {
     if (client) await client.query("ROLLBACK").catch(() => {});
@@ -1309,7 +1351,7 @@ async function handleGudangReceive(req, res, purchaseId) {
         `INSERT INTO stock_mutations (
            product_id, product_name, type, quantity,
            qty_before, qty_after, source, sync_status, created_at
-         ) VALUES ($1,$2,'IN',$3,$4,$5,$6,'pending',now())`,
+         ) VALUES ($1,$2,'IN',$3,$4,$5,$6,'synced',now())`,
         [
           product.id,
           product.name || item.product_name || null,
@@ -1344,6 +1386,8 @@ async function handleGudangReceive(req, res, purchaseId) {
       [receivingStatus, purchaseId]
     );
     await client.query("COMMIT");
+    // Realtime: stok produk yang diterima langsung dikirim (nilai terbaru).
+    scheduleStockPush(received.map((row) => row.product_id));
     return sendJson(res, 200, {
       data: { ok: true, purchase_id: Number(purchaseId), receiving_status: receivingStatus, received },
     });
@@ -1479,7 +1523,7 @@ async function handleStockAdjustment(req, res) {
       `INSERT INTO stock_mutations (
          product_id, product_name, type, quantity,
          qty_before, qty_after, source, sync_status, created_at
-       ) VALUES ($1,$2,$3,$4::numeric,$5::numeric,$6::numeric,$7,'pending',now())
+       ) VALUES ($1,$2,$3,$4::numeric,$5::numeric,$6::numeric,$7,'synced',now())
        RETURNING id`,
       [
         product.id,
@@ -1492,6 +1536,8 @@ async function handleStockAdjustment(req, res) {
       ]
     );
     await client.query("COMMIT");
+    // Realtime: kirim stok terbaru hasil penyesuaian ke listing Shopee.
+    scheduleStockPush(product.id);
     return sendJson(res, 200, {
       data: {
         ok: true,
@@ -1516,7 +1562,10 @@ async function handleStockAdjustment(req, res) {
   }
 }
 
-// --- Retry mutasi stok gagal (Gudang/Persediaan) ---
+// --- Tindak lanjut mutasi stok lama (Gudang/Persediaan) ---
+// Mekanisme baru tidak punya antrean retry. Tombol ini hanya memicu pengiriman
+// stok TERBARU products.stock ke listing produk tersebut, lalu menutup baris
+// histori lama sebagai terminal (tidak dihapus).
 async function handleStockMutationRetry(req, res, mutationId) {
   if (!/^[1-9]\d*$/.test(String(mutationId || ""))) {
     return sendJson(res, 400, { error: "invalid_mutation_id" });
@@ -1524,18 +1573,19 @@ async function handleStockMutationRetry(req, res, mutationId) {
   try {
     const { rows } = await pool.query(
       `UPDATE stock_mutations m
-          SET sync_status = 'pending', shopee_sync_at = NULL
-        WHERE m.id = $1 AND m.sync_status = 'failed'
+          SET sync_status = 'synced', shopee_sync_at = now()
+        WHERE m.id = $1 AND m.sync_status IN ('pending','failed')
           AND EXISTS (SELECT 1 FROM products p WHERE p.id = m.product_id)
         RETURNING id, product_id, sync_status`,
       [mutationId]
     );
     if (!rows.length) {
-      return sendJson(res, 404, { error: "mutation_not_found_or_not_failed" });
+      return sendJson(res, 404, { error: "mutation_not_found_or_not_pending" });
     }
-    return sendJson(res, 200, { data: rows[0] });
+    scheduleStockPush(rows[0].product_id);
+    return sendJson(res, 200, { data: { ...rows[0], pushed: "latest_stock" } });
   } catch (err) {
-    console.error("stock mutation retry failed:", err.message);
+    console.error("stock mutation follow-up failed:", err.message);
     return sendJson(res, 500, { error: "internal_error" });
   }
 }
@@ -1902,8 +1952,28 @@ async function handleRpc(req, res, name) {
       if (!checkMenuAccess(req.user, "gudang")) return sendJson(res, 403, { error: "forbidden" });
       const { data } = await readJsonBody(req, 64 * 1024);
       const opnameId = data && data.p_opname_id ? String(data.p_opname_id) : "";
-      const { rows } = await pool.query("SELECT close_opname($1) AS result", [opnameId]);
-      return sendJson(res, 200, { data: rows[0].result });
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const { rows: wm } = await client.query("SELECT COALESCE(MAX(id), 0) AS id FROM stock_mutations");
+        const watermark = Number(wm[0] && wm[0].id) || 0;
+        const { rows } = await client.query("SELECT close_opname($1) AS result", [opnameId]);
+        // Baris histori stok dari fungsi DB bukan antrean → terminal.
+        await client.query(
+          "UPDATE stock_mutations SET sync_status = 'synced', shopee_sync_at = now() WHERE id > $1 AND sync_status = 'pending'",
+          [watermark]
+        );
+        await client.query("COMMIT");
+        // Opname bisa menyesuaikan stok banyak produk sekaligus. Rekonsiliasi
+        // penuh di background (jarang) mengirim nilai terbaru, tanpa antrean.
+        scheduleStockReconcile(null);
+        return sendJson(res, 200, { data: rows[0].result });
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
     }
     if (name === "accounting_sync_pos") {
       if (!checkMenuAccess(req.user, "akuntansi")) return sendJson(res, 403, { error: "forbidden" });
@@ -2001,56 +2071,14 @@ async function handleMe(req, res) {
 }
 
 // ============================================================
-// PUSH STOK REALTIME — setelah request yang bisa mengubah stok (POS, Gudang,
-// Persediaan, Order) sukses, kirim mutasi pending ke Shopee 1 & 2 dalam ~1 detik,
-// tanpa menunggu timer worker. Hanya MENGIRIM products.stock (qty_after);
-// tidak mengubah stok. Lock push stok tetap mencegah dua push bersamaan.
-// REALTIME_STOCK_PUSH=0 untuk mematikan.
+// PUSH STOK REALTIME — bersifat per-produk (scheduleStockPush di shopee.js).
+// Handler yang mengubah stok mendaftarkan product_id-nya sendiri; antrean
+// penggabungan hanya di memori proses, BUKAN tabel stock_mutations.
+// Selalu mengirim nilai TERBARU products.stock; tidak mengubah stok.
+// REALTIME_STOCK_PUSH=0 / SHOPEE_STOCK_PUSH=0 untuk mematikan.
 // ============================================================
-let stockPushTimer = null;
-let stockPushRunning = false;
-let stockPushAgain = false;
-
-function scheduleStockPush(delayMs = 1000) {
-  if (process.env.NODE_ENV === "test" || process.env.REALTIME_STOCK_PUSH === "0") return;
-  if (stockPushRunning) { stockPushAgain = true; return; }
-  if (stockPushTimer) return;
-  stockPushTimer = setTimeout(runStockPush, delayMs);
-}
-
-async function runStockPush() {
-  stockPushTimer = null;
-  stockPushRunning = true;
-  let retryDelay = 0;
-  try {
-    const r = await syncStock(null);
-    // Lock dipegang worker → coba lagi sebentar lagi (sekali).
-    if (r && r.busy) retryDelay = 5000;
-  } catch (err) {
-    console.error("realtime stock push failed:", err.message);
-  } finally {
-    stockPushRunning = false;
-    if (stockPushAgain) { stockPushAgain = false; scheduleStockPush(); }
-    else if (retryDelay) scheduleStockPush(retryDelay);
-  }
-}
-
-function mayChangeStock(method, pathname) {
-  if (method === "GET" || method === "HEAD" || method === "OPTIONS") return false;
-  return pathname === "/api/orders" ||
-    pathname.startsWith("/api/orders/") ||
-    pathname.startsWith("/api/gudang/") ||
-    pathname.startsWith("/api/persediaan/") ||
-    pathname.startsWith("/api/stock-mutations/") ||
-    pathname.startsWith("/api/rpc/") ||
-    pathname.startsWith("/api/data/");
-}
-
 const server = http.createServer(async (req, res) => {
   const { pathname } = new URL(req.url, "http://localhost");
-  if (mayChangeStock(req.method, pathname)) {
-    res.on("finish", () => { if (res.statusCode < 300) scheduleStockPush(); });
-  }
   if (req.method === "POST" && pathname === "/api/auth/login") {
     return handleLogin(req, res);
   }

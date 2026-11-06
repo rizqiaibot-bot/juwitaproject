@@ -58,6 +58,8 @@ const fakeState = {
   pendingMutations: 0,
   reusedMutationProductId: null,
   attendanceRow: null,
+  failDeleteAfterCancel: false,
+  failCancelConstraint: false,
 };
 const fakeRefs = {
   order_items: 0,
@@ -75,10 +77,13 @@ function resetDeleteFake() {
   fakeState.activeOrderItems = 0;
   fakeState.pendingMutations = 0;
   fakeState.reusedMutationProductId = null;
+  fakeState.failDeleteAfterCancel = false;
+  fakeState.failCancelConstraint = false;
   for (const key of [
     "deletedProduct", "removedMappings", "removedPrices",
     "clearedOrderItems", "clearedActivityLog", "clearedReceiving",
     "clearedRacks", "snapshottedMutations", "historyDeletes",
+    "cancelledMutations", "tx",
   ]) {
     delete captured[key];
   }
@@ -219,6 +224,16 @@ class FakePool {
         if (sql.includes("JOIN orders o ON o.orderid = oi.orderid")) {
           return { rows: [{ count: fakeState.activeOrderItems || 0 }] };
         }
+        if (sql.includes("COALESCE(MAX(id), 0) AS id FROM stock_mutations")) {
+          return { rows: [{ id: 0 }] };
+        }
+        if (sql.startsWith("SELECT DISTINCT product_id FROM stock_mutations WHERE id > $1")) {
+          return { rows: [{ product_id: 1 }] };
+        }
+        if (sql.startsWith("UPDATE stock_mutations SET sync_status = 'synced'")) {
+          captured.mutationStatusUpdate = params;
+          return { rowCount: 0, rows: [] };
+        }
         if (sql.includes("FROM stock_mutations WHERE product_id = $1 AND sync_status = 'pending'")) {
           return { rows: [{ count: fakeState.pendingMutations || 0 }] };
         }
@@ -241,6 +256,16 @@ class FakePool {
         if (sql.startsWith("UPDATE warehouse_racks SET product_id = NULL")) {
           captured.clearedRacks = fakeRefs.warehouse_racks || 0;
           return { rowCount: fakeRefs.warehouse_racks || 0, rows: [] };
+        }
+        if (sql.includes("sync_status = 'cancelled'") && sql.includes("WHERE product_id = $1")) {
+          if (fakeState.failCancelConstraint) {
+            const err = new Error("check constraint violated");
+            err.code = "23514";
+            err.constraint = "stock_mutations_sync_status_check";
+            throw err;
+          }
+          captured.cancelledMutations = fakeState.pendingMutations || 0;
+          return { rowCount: fakeState.pendingMutations || 0, rows: [] };
         }
         if (sql.startsWith("UPDATE stock_mutations SET product_name = COALESCE")) {
           captured.snapshottedMutations = fakeRefs.stock_mutations || 0;
@@ -270,6 +295,7 @@ class FakePool {
           return { rows: [] };
         }
         if (sql.includes("DELETE FROM products WHERE id = $1 RETURNING *")) {
+          if (fakeState.failDeleteAfterCancel) throw new Error("forced product delete failure");
           captured.deletedProduct = params;
           return { rows: [PRODUCT_ROW] };
         }
@@ -316,7 +342,10 @@ class FakePool {
         }
         if (sql.startsWith("UPDATE products SET") && sql.includes("RETURNING *")) {
           captured.productPatch = params;
-          return { rows: [{ ...PRODUCT_ROW, stock: params[0] }] };
+          if (/SET stock = \$2 WHERE id = \$1/.test(sql)) {
+            return { rows: [{ ...PRODUCT_ROW, stock: params[1] }] };
+          }
+          return { rows: [{ ...PRODUCT_ROW }] };
         }
         if (sql.includes("UPDATE purchase_items SET qty_received = qty_received + $1 WHERE id = $2")) {
           captured.itemUpdate = params;
@@ -325,6 +354,7 @@ class FakePool {
         if (sql.includes("INSERT INTO stock_mutations")) {
           if (fakeState.failStockMutation) throw new Error("forced stock mutation failure");
           captured.mutation = params;
+          captured.mutationSql = sql;
           captured.mutationCount = (captured.mutationCount || 0) + 1;
           return { rows: [{ id: 99 }] };
         }
@@ -474,6 +504,20 @@ test("Matriks edit produk: modal, stok, dan harga ditegakkan backend", async () 
   }
 });
 
+test("PATCH stok mencatat histori terminal tanpa antrean Shopee", async () => {
+  resetDeleteFake();
+  captured.mutationCount = 0;
+  delete captured.mutationSql;
+  const r = await call("/api/data/products?id=1", "PATCH", "pembelian-id", { stock: 4 });
+  assert.equal(r.status, 200);
+  assert.equal(captured.mutationCount, 1);
+  assert.match(captured.mutationSql, /'synced'/, "baris histori langsung terminal");
+  assert.doesNotMatch(captured.mutationSql, /'pending'/, "tidak boleh membuat antrean");
+  assert.equal(captured.mutation[2], "OUT");
+  assert.equal(captured.mutation[3], 3);
+  assert.equal(captured.mutationStatusUpdate, undefined, "tidak ada antrean yang diubah");
+});
+
 test("Katalog dapat memakai seluruh aksi utama Katalog", async () => {
   resetDeleteFake();
   const list = await call("/api/products", "GET", "katalog-id");
@@ -553,19 +597,16 @@ test("Katalog boleh DELETE produk; Pricing tidak", async () => {
 test("Delete produk mengembalikan alasan referensi yang spesifik", async () => {
   resetDeleteFake();
   fakeState.activeOrderItems = 2;
-  fakeState.pendingMutations = 1;
+  fakeState.pendingMutations = 1; // mutasi lama TIDAK boleh jadi blocker
   const r = await call("/api/data/products?id=1&confirm=1", "DELETE", "katalog-id", {});
   assert.equal(r.status, 409);
   assert.equal(r.data.error, "product_in_use");
   assert.deepEqual(
     r.data.references.map((x) => ({ table: x.table, count: x.count })),
-    [
-      { table: "order_items", count: 2 },
-      { table: "stock_mutations", count: 1 },
-    ]
+    [{ table: "order_items", count: 2 }]
   );
   assert.match(r.data.message, /pesanan aktif \(2\)/);
-  assert.match(r.data.message, /sinkronisasi stok pending \(1\)/);
+  assert.doesNotMatch(r.data.message, /sinkronisasi stok pending/);
   assert.equal(captured.deletedProduct, undefined);
   resetDeleteFake();
 });
@@ -617,15 +658,97 @@ test("Pesanan aktif memblokir penghapusan produk", async () => {
   resetDeleteFake();
 });
 
-test("Mutasi stok pending memblokir penghapusan produk", async () => {
+test("Mutasi stok pending lama TIDAK memblokir penghapusan produk", async () => {
   resetDeleteFake();
   fakeState.pendingMutations = 1;
+  fakeRefs.stock_mutations = 4;
   const r = await call("/api/data/products?id=1&confirm=1", "DELETE", "katalog-id", {});
+  assert.equal(r.status, 200, "antrean sinkronisasi lama tidak boleh memblokir");
+  assert.equal(captured.snapshottedMutations, 4, "histori tetap disimpan");
+  assert.equal(captured.historyDeletes, undefined, "histori tidak boleh dihapus");
+  assert.deepEqual(captured.deletedProduct, ["1"]);
+  resetDeleteFake();
+});
+
+test("Pratinjau hapus: pending lama tidak ditawarkan sebagai hapus lokal", async () => {
+  resetDeleteFake();
+  fakeState.pendingMutations = 3;
+  fakeRefs.stock_mutations = 5;
+  fakeRefs.product_shopee_mapping = 2;
+
+  const preview = await call("/api/data/products?id=1", "DELETE", "katalog-id", {});
+  assert.equal(preview.status, 409);
+  assert.equal(preview.data.error, "confirmation_required");
+  assert.equal(preview.data.local_delete_available, false);
+  assert.equal(preview.data.pending_stock_sync, 0);
+  assert.equal(preview.data.plan.shopee_mappings, 2);
+  assert.equal(captured.deletedProduct, undefined);
+  assert.equal(captured.cancelledMutations, undefined);
+
+  delete captured.tx; // hanya catat transaksi penghapusan (bukan preview)
+  const deleted = await call(
+    "/api/data/products?id=1&confirm=1&mode=local", "DELETE", "katalog-id", {}
+  );
+  assert.equal(deleted.status, 200);
+  assert.equal(captured.cancelledMutations, undefined, "tidak ada pembatalan antrean");
+  assert.equal(captured.removedMappings, 2);
+  assert.equal(captured.snapshottedMutations, 5);
+  assert.equal(captured.historyDeletes, undefined, "histori mutasi tidak boleh dihapus");
+  assert.deepEqual(captured.deletedProduct, ["1"]);
+  assert.deepEqual(captured.tx, ["BEGIN", "COMMIT"]);
+  assert.equal(deleted.data.deletion.mode, "local");
+  assert.equal(deleted.data.deletion.cancelled_stock_mutations, 0);
+  resetDeleteFake();
+});
+
+test("Hapus lokal tetap diblokir pesanan aktif dan purchase_items", async () => {
+  resetDeleteFake();
+  fakeState.pendingMutations = 2;
+  fakeState.activeOrderItems = 1;
+  let r = await call("/api/data/products?id=1&confirm=1&mode=local", "DELETE", "katalog-id", {});
   assert.equal(r.status, 409);
   assert.equal(r.data.error, "product_in_use");
-  assert.equal(r.data.references[0].table, "stock_mutations");
-  assert.equal(r.data.references[0].label, "sinkronisasi stok pending");
+  assert.equal(r.data.references.some((x) => x.table === "order_items"), true);
+  assert.equal(captured.cancelledMutations, undefined);
   assert.equal(captured.deletedProduct, undefined);
+
+  resetDeleteFake();
+  fakeState.pendingMutations = 2;
+  fakeRefs.purchase_items = 1;
+  r = await call("/api/data/products?id=1&confirm=1&mode=local", "DELETE", "katalog-id", {});
+  assert.equal(r.status, 409);
+  assert.equal(r.data.error, "product_in_use");
+  assert.equal(r.data.references.some((x) => x.table === "purchase_items"), true);
+  assert.equal(captured.cancelledMutations, undefined);
+  assert.equal(captured.deletedProduct, undefined);
+  resetDeleteFake();
+});
+
+test("Penghapusan produk gagal di tengah tetap rollback tanpa efek samping", async () => {
+  resetDeleteFake();
+  fakeState.pendingMutations = 2;
+  fakeState.failDeleteAfterCancel = true;
+
+  const r = await call("/api/data/products?id=1&confirm=1&mode=local", "DELETE", "katalog-id", {});
+  assert.equal(r.status, 500);
+  assert.equal(r.data.error, "internal_error");
+  assert.equal(captured.cancelledMutations, undefined, "tidak ada pembatalan antrean");
+  assert.deepEqual(captured.tx, ["BEGIN", "ROLLBACK"]);
+  assert.equal(captured.deletedProduct, undefined);
+  resetDeleteFake();
+});
+
+test("Penghapusan produk tidak mengubah status baris stock_mutations", async () => {
+  resetDeleteFake();
+  fakeState.pendingMutations = 1;
+  fakeState.failCancelConstraint = true; // legacy: tidak boleh lagi menyentuh constraint cancelled
+  fakeRefs.stock_mutations = 2;
+
+  const r = await call("/api/data/products?id=1&confirm=1&mode=local", "DELETE", "katalog-id", {});
+  assert.equal(r.status, 200);
+  assert.equal(captured.cancelledMutations, undefined);
+  assert.equal(captured.snapshottedMutations, 2);
+  assert.deepEqual(captured.deletedProduct, ["1"]);
   resetDeleteFake();
 });
 
