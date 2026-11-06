@@ -358,8 +358,8 @@ async function handleDataGet(req, res, table) {
   }
 }
 
-// Tabel yang merujuk product_id. Produk yang masih dirujuk TIDAK boleh
-// dihapus agar mapping Shopee, stok, harga, dan transaksi historis tetap utuh.
+// Tabel yang merujuk product_id (dipakai endpoint lepas mapping Shopee).
+// Produk yang masih dirujuk TIDAK boleh dilepas mapping-nya.
 const PRODUCT_DELETE_REFERENCES = [
   ["order_items", "riwayat transaksi"],
   ["purchase_items", "data pembelian"],
@@ -390,40 +390,216 @@ function productDeleteBlockMessage(refs) {
   return refs.map((r) => `${r.label} (${r.count})`).join(", ");
 }
 
+async function productTableExists(client, table) {
+  const { rows } = await client.query("SELECT to_regclass($1) AS t", [table]);
+  return !!(rows[0] && rows[0].t);
+}
+
+async function countProductRows(client, table, productId, extraWhere = "") {
+  if (!(await productTableExists(client, table))) return 0;
+  const { rows } = await client.query(
+    `SELECT count(*)::int AS count FROM ${table} WHERE product_id = $1${extraWhere}`,
+    [productId]
+  );
+  return Number(rows[0] && rows[0].count) || 0;
+}
+
+async function countActiveOrderItems(client, productId) {
+  if (!(await productTableExists(client, "order_items"))) return 0;
+  // Tanpa tabel orders, seluruh order_items dianggap aktif (aman: blokir).
+  if (!(await productTableExists(client, "orders"))) {
+    return countProductRows(client, "order_items", productId);
+  }
+  const { rows } = await client.query(
+    `SELECT count(DISTINCT oi.orderid)::int AS count
+       FROM order_items oi
+       JOIN orders o ON o.orderid = oi.orderid
+      WHERE oi.product_id = $1
+        AND (
+          COALESCE(o.wmsstatus, '') NOT IN ('Selesai', 'Batal')
+          OR COALESCE(o.paystatus, '') NOT IN ('Lunas', 'Batal')
+        )`,
+    [productId]
+  );
+  return Number(rows[0] && rows[0].count) || 0;
+}
+
+// Audit sebelum hapus:
+// - blockers: data yang masih aktif dan tidak boleh ditinggalkan.
+// - plan: data turunan yang akan dihapus/dipertahankan (untuk konfirmasi UI).
+async function auditProductDeletion(client, productId) {
+  const blockers = [];
+
+  const activeOrders = await countActiveOrderItems(client, productId);
+  if (activeOrders > 0) {
+    blockers.push({ table: "order_items", label: "pesanan aktif", count: activeOrders });
+  }
+
+  const pendingMutations = await countProductRows(
+    client, "stock_mutations", productId, " AND sync_status = 'pending'"
+  );
+  if (pendingMutations > 0) {
+    blockers.push({ table: "stock_mutations", label: "sinkronisasi stok pending", count: pendingMutations });
+  }
+
+  // purchase_items.product_id masih NOT NULL + FK, jadi histori ini tidak bisa
+  // dilepas tanpa mengubah skema. Blokir agar data pembelian tidak hilang.
+  const purchaseItems = await countProductRows(client, "purchase_items", productId);
+  if (purchaseItems > 0) {
+    blockers.push({ table: "purchase_items", label: "data pembelian", count: purchaseItems });
+  }
+
+  const plan = {
+    shopee_mappings: await countProductRows(client, "product_shopee_mapping", productId),
+    product_prices: await countProductRows(client, "product_prices", productId),
+    history: {
+      order_items: await countProductRows(client, "order_items", productId),
+      stock_mutations: await countProductRows(client, "stock_mutations", productId),
+      activity_log: await countProductRows(client, "activity_log", productId),
+      warehouse_receiving: await countProductRows(client, "warehouse_receiving", productId),
+      warehouse_racks: await countProductRows(client, "warehouse_racks", productId),
+    },
+  };
+
+  return { blockers, plan };
+}
+
 async function deleteProductTransactional(req, res, u) {
   const id = u.searchParams.get("id");
   if (!/^[1-9]\d*$/.test(id || "")) {
     return sendJson(res, 400, { error: "invalid_product_id" });
   }
+  const confirmed = ["1", "true", "yes"].includes(
+    String(u.searchParams.get("confirm") || "").toLowerCase()
+  );
   let client = null;
   try {
     client = await pool.connect();
     await client.query("BEGIN");
     const { rows: existing } = await client.query(
-      "SELECT id FROM products WHERE id = $1 FOR UPDATE",
+      "SELECT id, name, coalesce(sku, '') AS sku FROM products WHERE id = $1 FOR UPDATE",
       [id]
     );
     if (existing.length === 0) {
       await client.query("ROLLBACK");
       return sendJson(res, 404, { error: "product_not_found" });
     }
-    const refs = await productDeleteReferences(client, id);
-    if (refs.length > 0) {
+    const product = existing[0];
+    const { blockers, plan } = await auditProductDeletion(client, id);
+    if (blockers.length > 0) {
       await client.query("ROLLBACK");
-      const mappingOnly = refs.every((r) => r.table === "product_shopee_mapping");
       return sendJson(res, 409, {
         error: "product_in_use",
-        message: "Produk tidak dapat dihapus karena masih terhubung dengan: " + productDeleteBlockMessage(refs) + ".",
-        references: refs,
-        can_detach_shopee_mapping: mappingOnly,
+        message: "Produk tidak dapat dihapus karena masih terhubung dengan: " + productDeleteBlockMessage(blockers) + ".",
+        references: blockers,
       });
     }
+
+    // Tahap pratinjau: belum ada data yang diubah. UI wajib menampilkan
+    // konfirmasi sebelum memanggil ulang dengan ?confirm=1.
+    if (!confirmed) {
+      await client.query("ROLLBACK");
+      return sendJson(res, 409, {
+        error: "confirmation_required",
+        message: "Konfirmasi diperlukan untuk menghapus produk secara permanen.",
+        product: { id: Number(product.id), name: product.name, sku: product.sku || "" },
+        plan,
+      });
+    }
+
+    // Historis: pertahankan baris, lepas product_id bila kolomnya nullable.
+    // order_items/activity_log/warehouse_receiving menyimpan snapshot nama
+    // (activity_log juga SKU) sehingga laporan lama tetap terbaca.
+    const cleared = {};
+    if (await productTableExists(client, "order_items")) {
+      const r = await client.query(
+        `UPDATE order_items
+            SET product_id = NULL,
+                product_name = COALESCE(NULLIF(btrim(product_name), ''), $2)
+          WHERE product_id = $1`,
+        [id, product.name]
+      );
+      cleared.order_items = Number(r.rowCount) || 0;
+    }
+    if (await productTableExists(client, "activity_log")) {
+      const r = await client.query(
+        `UPDATE activity_log
+            SET product_id = NULL,
+                product_name = COALESCE(NULLIF(btrim(product_name), ''), $2),
+                product_sku = COALESCE(NULLIF(btrim(product_sku), ''), $3)
+          WHERE product_id = $1`,
+        [id, product.name, product.sku || null]
+      );
+      cleared.activity_log = Number(r.rowCount) || 0;
+    }
+    if (await productTableExists(client, "warehouse_receiving")) {
+      const r = await client.query(
+        `UPDATE warehouse_receiving
+            SET product_id = NULL,
+                product_name = COALESCE(NULLIF(btrim(product_name), ''), $2)
+          WHERE product_id = $1`,
+        [id, product.name]
+      );
+      cleared.warehouse_receiving = Number(r.rowCount) || 0;
+    }
+    if (await productTableExists(client, "warehouse_racks")) {
+      // Rak menyimpan penempatan saat ini (bukan histori); kosongkan agar
+      // tampilan gudang tidak menunjuk produk yang sudah tidak ada.
+      const r = await client.query(
+        "UPDATE warehouse_racks SET product_id = NULL, filled = 0 WHERE product_id = $1",
+        [id]
+      );
+      cleared.warehouse_racks = Number(r.rowCount) || 0;
+    }
+
+    // stock_mutations.product_id masih NOT NULL. Baris histori tidak dihapus;
+    // snapshot nama/SKU diisi agar tetap terbaca setelah produk hilang.
+    if (await productTableExists(client, "stock_mutations")) {
+      await client.query(
+        `UPDATE stock_mutations
+            SET product_name = COALESCE(NULLIF(btrim(product_name), ''), $2),
+                shopee_sku = COALESCE(NULLIF(btrim(shopee_sku), ''), $3)
+          WHERE product_id = $1`,
+        [id, product.name, product.sku || null]
+      );
+    }
+
+    // Harga channel saat ini bukan histori; hapus eksplisit agar tidak
+    // bergantung pada ON DELETE CASCADE.
+    let removedPrices = 0;
+    if (await productTableExists(client, "product_prices")) {
+      const r = await client.query(
+        "DELETE FROM product_prices WHERE product_id = $1",
+        [id]
+      );
+      removedPrices = Number(r.rowCount) || 0;
+    }
+
+    // Mapping Shopee hanya dihapus di jalur yang sudah dikonfirmasi.
+    // Listing di Shopee tidak disentuh; ini murni mapping lokal.
+    let removedMappings = 0;
+    if (await productTableExists(client, "product_shopee_mapping")) {
+      const r = await client.query(
+        "DELETE FROM product_shopee_mapping WHERE product_id = $1",
+        [id]
+      );
+      removedMappings = Number(r.rowCount) || 0;
+    }
+
     const { rows: deleted } = await client.query(
       "DELETE FROM products WHERE id = $1 RETURNING *",
       [id]
     );
     await client.query("COMMIT");
-    return sendJson(res, 200, { data: deleted });
+    return sendJson(res, 200, {
+      data: deleted,
+      deletion: {
+        removed_shopee_mappings: removedMappings,
+        removed_product_prices: removedPrices,
+        cleared_references: cleared,
+        preserved_history: plan.history,
+      },
+    });
   } catch (err) {
     if (client) {
       try { await client.query("ROLLBACK"); } catch {}
@@ -433,7 +609,6 @@ async function deleteProductTransactional(req, res, u) {
         error: "product_in_use",
         message: "Produk tidak dapat dihapus karena masih terhubung dengan data lain.",
         references: [],
-        can_detach_shopee_mapping: false,
       });
     }
     console.error("data DELETE products failed:", err.message);
@@ -681,6 +856,21 @@ async function recordProductStockMutation(productId, productName, qtyBefore, qty
   return recordProductStockMutationWithClient(pool, productId, productName, qtyBefore, qtyAfter, source);
 }
 
+// stock_mutations.product_id masih NOT NULL dan tetap menyimpan ID produk yang
+// sudah dihapus. Produk baru tidak boleh memakai ulang ID itu agar histori stok
+// tidak berpindah ke produk lain.
+async function nextProductIdAfterHistory(requestedId) {
+  const { rows } = await pool.query(
+    `SELECT GREATEST(
+              (SELECT COALESCE(MAX(id), 0) FROM products),
+              (SELECT COALESCE(MAX(product_id), 0) FROM stock_mutations)
+            ) + 1 AS next_id
+      WHERE EXISTS (SELECT 1 FROM stock_mutations WHERE product_id = $1)`,
+    [requestedId]
+  );
+  return rows.length ? Number(rows[0].next_id) : null;
+}
+
 async function handleDataWrite(req, res, table, method) {
   if (!DATA_TABLES.has(table)) return sendJson(res, 404, { error: "not_found" });
   const { error, data } = await readJsonBody(req, 2 * 1024 * 1024);
@@ -703,6 +893,18 @@ async function handleDataWrite(req, res, table, method) {
       !(r.stock !== null && r.stock !== "" && Number.isFinite(Number(r.stock)) && Number(r.stock) >= 0)
     )) {
       return sendJson(res, 400, { error: "invalid_stock" });
+    }
+    if (table === "products") {
+      try {
+        for (const row of rows) {
+          if (row.id == null) continue;
+          const safeId = await nextProductIdAfterHistory(row.id);
+          if (safeId) row.id = safeId;
+        }
+      } catch (err) {
+        console.error("product id history guard failed:", err.message);
+        return sendJson(res, 500, { error: "internal_error" });
+      }
     }
     if (table === "app_users" && rows.some((r) => String(r.role || "").toLowerCase() === "owner")) {
       return sendJson(res, 403, { error: "forbidden", message: "Role owner tidak dapat dibuat lewat API" });
@@ -1321,9 +1523,10 @@ async function handleStockMutationRetry(req, res, mutationId) {
   }
   try {
     const { rows } = await pool.query(
-      `UPDATE stock_mutations
+      `UPDATE stock_mutations m
           SET sync_status = 'pending', shopee_sync_at = NULL
-        WHERE id = $1 AND sync_status = 'failed'
+        WHERE m.id = $1 AND m.sync_status = 'failed'
+          AND EXISTS (SELECT 1 FROM products p WHERE p.id = m.product_id)
         RETURNING id, product_id, sync_status`,
       [mutationId]
     );

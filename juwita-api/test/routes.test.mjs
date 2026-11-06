@@ -54,6 +54,9 @@ const captured = {};
 const fakeState = {
   stockProductFound: true,
   failStockMutation: false,
+  activeOrderItems: 0,
+  pendingMutations: 0,
+  reusedMutationProductId: null,
 };
 const fakeRefs = {
   order_items: 0,
@@ -63,7 +66,22 @@ const fakeRefs = {
   warehouse_racks: 0,
   activity_log: 0,
   product_shopee_mapping: 0,
+  product_prices: 0,
 };
+
+function resetDeleteFake() {
+  for (const key of Object.keys(fakeRefs)) fakeRefs[key] = 0;
+  fakeState.activeOrderItems = 0;
+  fakeState.pendingMutations = 0;
+  fakeState.reusedMutationProductId = null;
+  for (const key of [
+    "deletedProduct", "removedMappings", "removedPrices",
+    "clearedOrderItems", "clearedActivityLog", "clearedReceiving",
+    "clearedRacks", "snapshottedMutations", "historyDeletes",
+  ]) {
+    delete captured[key];
+  }
+}
 
 const PRODUCT_ROW = {
   id: 1, name: "Produk Test", category: "Test", price: 1000, modal: 500,
@@ -113,6 +131,12 @@ class FakePool {
     if (sql.includes("SELECT to_regclass('product_prices') AS t")) {
       return { rows: [{ t: "product_prices" }] };
     }
+    if (sql.includes("AS next_id")) {
+      const used = String(fakeState.reusedMutationProductId) === String(params[0]);
+      if (!used) return { rows: [] };
+      const nextId = Math.max(Number(PRODUCT_ROW.id), Number(fakeState.reusedMutationProductId)) + 1;
+      return { rows: [{ next_id: String(nextId) }] };
+    }
     if (sql.startsWith("INSERT INTO products")) {
       captured.insertedProduct = params;
       return { rows: [PRODUCT_ROW] };
@@ -147,8 +171,8 @@ class FakePool {
           captured.tx.push(sql);
           return { rows: [] };
         }
-        if (sql.includes("SELECT id FROM products WHERE id = $1 FOR UPDATE")) {
-          return { rows: [{ id: 1 }] };
+        if (sql.includes("SELECT id, name, coalesce(sku, '') AS sku FROM products WHERE id = $1 FOR UPDATE")) {
+          return { rows: [{ id: 1, name: "Produk Test", sku: "TST-0001" }] };
         }
         if (sql.includes("SELECT id, name FROM products WHERE id = $1 FOR UPDATE")) {
           return { rows: [{ id: 1, name: "Produk Test" }] };
@@ -170,9 +194,49 @@ class FakePool {
         if (sql.includes("SELECT to_regclass('product_shopee_mapping') AS t")) {
           return { rows: [{ t: "product_shopee_mapping" }] };
         }
+        if (sql.includes("JOIN orders o ON o.orderid = oi.orderid")) {
+          return { rows: [{ count: fakeState.activeOrderItems || 0 }] };
+        }
+        if (sql.includes("FROM stock_mutations WHERE product_id = $1 AND sync_status = 'pending'")) {
+          return { rows: [{ count: fakeState.pendingMutations || 0 }] };
+        }
         const countMatch = sql.match(/SELECT count\(\*\)::int AS count FROM (\w+) WHERE product_id = \$1/);
         if (countMatch) {
           return { rows: [{ count: fakeRefs[countMatch[1]] || 0 }] };
+        }
+        if (sql.startsWith("UPDATE order_items SET product_id = NULL")) {
+          captured.clearedOrderItems = fakeRefs.order_items || 0;
+          return { rowCount: fakeRefs.order_items || 0, rows: [] };
+        }
+        if (sql.startsWith("UPDATE activity_log SET product_id = NULL")) {
+          captured.clearedActivityLog = fakeRefs.activity_log || 0;
+          return { rowCount: fakeRefs.activity_log || 0, rows: [] };
+        }
+        if (sql.startsWith("UPDATE warehouse_receiving SET product_id = NULL")) {
+          captured.clearedReceiving = fakeRefs.warehouse_receiving || 0;
+          return { rowCount: fakeRefs.warehouse_receiving || 0, rows: [] };
+        }
+        if (sql.startsWith("UPDATE warehouse_racks SET product_id = NULL")) {
+          captured.clearedRacks = fakeRefs.warehouse_racks || 0;
+          return { rowCount: fakeRefs.warehouse_racks || 0, rows: [] };
+        }
+        if (sql.startsWith("UPDATE stock_mutations SET product_name = COALESCE")) {
+          captured.snapshottedMutations = fakeRefs.stock_mutations || 0;
+          return { rowCount: fakeRefs.stock_mutations || 0, rows: [] };
+        }
+        if (sql.startsWith("DELETE FROM stock_mutations")
+          || sql.startsWith("DELETE FROM order_items")
+          || sql.startsWith("DELETE FROM activity_log")
+          || sql.startsWith("DELETE FROM warehouse_receiving")
+          || sql.startsWith("DELETE FROM warehouse_racks")) {
+          captured.historyDeletes = (captured.historyDeletes || 0) + 1;
+          return { rowCount: 0, rows: [] };
+        }
+        if (sql.includes("DELETE FROM product_prices WHERE product_id = $1")) {
+          const removed = fakeRefs.product_prices || 0;
+          fakeRefs.product_prices = 0;
+          captured.removedPrices = removed;
+          return { rowCount: removed, rows: [] };
         }
         if (sql.includes("DELETE FROM product_shopee_mapping WHERE product_id = $1")) {
           const removed = fakeRefs.product_shopee_mapping || 0;
@@ -184,6 +248,7 @@ class FakePool {
           return { rows: [] };
         }
         if (sql.includes("DELETE FROM products WHERE id = $1 RETURNING *")) {
+          captured.deletedProduct = params;
           return { rows: [PRODUCT_ROW] };
         }
         if (sql.includes("FROM purchases WHERE id = $1 FOR UPDATE")) {
@@ -387,8 +452,7 @@ test("Matriks edit produk: modal, stok, dan harga ditegakkan backend", async () 
 });
 
 test("Katalog dapat memakai seluruh aksi utama Katalog", async () => {
-  fakeRefs.order_items = 0;
-  fakeRefs.product_shopee_mapping = 0;
+  resetDeleteFake();
   const list = await call("/api/products", "GET", "katalog-id");
   assert.equal(list.status, 200);
 
@@ -406,8 +470,35 @@ test("Katalog dapat memakai seluruh aksi utama Katalog", async () => {
   const modal = await call("/api/data/products?id=1", "PATCH", "katalog-id", { modal: 750 });
   assert.equal(modal.status, 200);
 
-  const deleted = await call("/api/data/products?id=1", "DELETE", "katalog-id", {});
+  const preview = await call("/api/data/products?id=1", "DELETE", "katalog-id", {});
+  assert.equal(preview.status, 409);
+  assert.equal(preview.data.error, "confirmation_required");
+  assert.equal(captured.deletedProduct, undefined, "pratinjau tidak boleh menghapus");
+
+  const deleted = await call("/api/data/products?id=1&confirm=1", "DELETE", "katalog-id", {});
   assert.equal(deleted.status, 200);
+  assert.deepEqual(captured.deletedProduct, ["1"]);
+});
+
+test("Produk baru tidak memakai ulang ID yang masih tercatat di histori mutasi", async () => {
+  resetDeleteFake();
+  fakeState.reusedMutationProductId = 2;
+  const created = await call("/api/data/products", "POST", "katalog-id", {
+    id: 2, name: "Produk Baru", category: "Test", price: 1000,
+    modal: 500, stock: 0, sku: "BARU-2",
+  });
+  assert.equal(created.status, 200);
+  assert.equal(captured.insertedProduct[0], 3, "ID harus digeser ke atas histori");
+  resetDeleteFake();
+
+  // ID yang tidak tercatat di histori tetap dipakai apa adanya.
+  const normal = await call("/api/data/products", "POST", "katalog-id", {
+    id: 2, name: "Produk Biasa", category: "Test", price: 1000,
+    modal: 500, stock: 0, sku: "BIASA-2",
+  });
+  assert.equal(normal.status, 200);
+  assert.equal(captured.insertedProduct[0], 2);
+  resetDeleteFake();
 });
 
 test("Aksi Katalog tanpa menu Katalog ditolak backend", async () => {
@@ -429,44 +520,138 @@ test("Aksi Katalog tanpa menu Katalog ditolak backend", async () => {
 });
 
 test("Katalog boleh DELETE produk; Pricing tidak", async () => {
+  resetDeleteFake();
   const denied = await call("/api/data/products?id=1", "DELETE", "pricing-id", {});
   assert.equal(denied.status, 403);
-  const allowed = await call("/api/data/products?id=1", "DELETE", "katalog-id", {});
+  const allowed = await call("/api/data/products?id=1&confirm=1", "DELETE", "katalog-id", {});
   assert.equal(allowed.status, 200);
 });
 
 test("Delete produk mengembalikan alasan referensi yang spesifik", async () => {
-  fakeRefs.order_items = 2;
-  fakeRefs.stock_mutations = 1;
-  const r = await call("/api/data/products?id=1", "DELETE", "katalog-id", {});
+  resetDeleteFake();
+  fakeState.activeOrderItems = 2;
+  fakeState.pendingMutations = 1;
+  const r = await call("/api/data/products?id=1&confirm=1", "DELETE", "katalog-id", {});
   assert.equal(r.status, 409);
   assert.equal(r.data.error, "product_in_use");
-  assert.equal(r.data.can_detach_shopee_mapping, false);
   assert.deepEqual(
     r.data.references.map((x) => ({ table: x.table, count: x.count })),
-    [{ table: "order_items", count: 2 }, { table: "stock_mutations", count: 1 }]
+    [
+      { table: "order_items", count: 2 },
+      { table: "stock_mutations", count: 1 },
+    ]
   );
-  assert.match(r.data.message, /riwayat transaksi \(2\)/);
-  fakeRefs.order_items = 0;
-  fakeRefs.stock_mutations = 0;
+  assert.match(r.data.message, /pesanan aktif \(2\)/);
+  assert.match(r.data.message, /sinkronisasi stok pending \(1\)/);
+  assert.equal(captured.deletedProduct, undefined);
+  resetDeleteFake();
 });
 
-test("Mapping Shopee dilepas hanya jika tidak ada referensi lain", async () => {
-  fakeRefs.product_shopee_mapping = 2;
-  const blocked = await call("/api/products/1/shopee-mapping", "DELETE", "pricing-id", {});
-  assert.equal(blocked.status, 403);
+test("Hapus produk mempertahankan histori dan melepas product_id yang nullable", async () => {
+  resetDeleteFake();
+  fakeRefs.order_items = 5;
+  fakeRefs.stock_mutations = 3;
+  fakeRefs.activity_log = 4;
+  fakeRefs.warehouse_receiving = 1;
+  fakeRefs.warehouse_racks = 1;
+  fakeRefs.product_shopee_mapping = 1;
+  fakeRefs.product_prices = 2;
 
-  const mappingOnly = await call("/api/data/products?id=1", "DELETE", "katalog-id", {});
-  assert.equal(mappingOnly.status, 409);
-  assert.equal(mappingOnly.data.can_detach_shopee_mapping, true);
+  const preview = await call("/api/data/products?id=1", "DELETE", "katalog-id", {});
+  assert.equal(preview.status, 409);
+  assert.equal(preview.data.error, "confirmation_required");
+  assert.deepEqual(preview.data.plan.history, {
+    order_items: 5,
+    stock_mutations: 3,
+    activity_log: 4,
+    warehouse_receiving: 1,
+    warehouse_racks: 1,
+  });
+
+  const deleted = await call("/api/data/products?id=1&confirm=1", "DELETE", "katalog-id", {});
+  assert.equal(deleted.status, 200);
+  assert.equal(captured.clearedOrderItems, 5);
+  assert.equal(captured.clearedActivityLog, 4);
+  assert.equal(captured.clearedReceiving, 1);
+  assert.equal(captured.clearedRacks, 1);
+  assert.equal(captured.snapshottedMutations, 3);
+  assert.equal(captured.removedMappings, 1);
+  assert.equal(captured.removedPrices, 2);
+  assert.equal(captured.historyDeletes, undefined, "histori tidak boleh dihapus");
+  assert.deepEqual(captured.deletedProduct, ["1"], "hanya produk yang diminta yang dihapus");
+  resetDeleteFake();
+});
+
+test("Pesanan aktif memblokir penghapusan produk", async () => {
+  resetDeleteFake();
+  fakeState.activeOrderItems = 1;
+  const r = await call("/api/data/products?id=1&confirm=1", "DELETE", "katalog-id", {});
+  assert.equal(r.status, 409);
+  assert.equal(r.data.error, "product_in_use");
+  assert.equal(r.data.references[0].table, "order_items");
+  assert.equal(r.data.references[0].label, "pesanan aktif");
+  assert.equal(captured.deletedProduct, undefined);
+  resetDeleteFake();
+});
+
+test("Mutasi stok pending memblokir penghapusan produk", async () => {
+  resetDeleteFake();
+  fakeState.pendingMutations = 1;
+  const r = await call("/api/data/products?id=1&confirm=1", "DELETE", "katalog-id", {});
+  assert.equal(r.status, 409);
+  assert.equal(r.data.error, "product_in_use");
+  assert.equal(r.data.references[0].table, "stock_mutations");
+  assert.equal(r.data.references[0].label, "sinkronisasi stok pending");
+  assert.equal(captured.deletedProduct, undefined);
+  resetDeleteFake();
+});
+
+test("Data pembelian memblokir penghapusan produk", async () => {
+  resetDeleteFake();
+  fakeRefs.purchase_items = 1;
+  const r = await call("/api/data/products?id=1&confirm=1", "DELETE", "katalog-id", {});
+  assert.equal(r.status, 409);
+  assert.equal(r.data.error, "product_in_use");
+  assert.equal(r.data.references[0].table, "purchase_items");
+  assert.equal(r.data.references[0].label, "data pembelian");
+  assert.equal(captured.deletedProduct, undefined);
+  resetDeleteFake();
+});
+
+test("Mapping Shopee dilepas setelah konfirmasi hapus produk", async () => {
+  resetDeleteFake();
+  fakeRefs.product_shopee_mapping = 2;
+  fakeRefs.product_prices = 1;
+
+  const denied = await call("/api/products/1/shopee-mapping", "DELETE", "pricing-id", {});
+  assert.equal(denied.status, 403);
+
+  const preview = await call("/api/data/products?id=1", "DELETE", "katalog-id", {});
+  assert.equal(preview.status, 409);
+  assert.equal(preview.data.error, "confirmation_required");
+  assert.equal(preview.data.plan.shopee_mappings, 2);
+  assert.equal(captured.deletedProduct, undefined);
+  assert.equal(captured.removedMappings, undefined);
+
+  const deleted = await call("/api/data/products?id=1&confirm=1", "DELETE", "katalog-id", {});
+  assert.equal(deleted.status, 200);
+  assert.equal(deleted.data.deletion.removed_shopee_mappings, 2);
+  assert.equal(deleted.data.deletion.removed_product_prices, 1);
+  assert.equal(captured.removedMappings, 2);
+  assert.equal(captured.removedPrices, 1);
+  assert.deepEqual(captured.deletedProduct, ["1"]);
+  resetDeleteFake();
+});
+
+test("Endpoint lepas mapping Shopee tetap bekerja", async () => {
+  resetDeleteFake();
+  fakeRefs.product_shopee_mapping = 2;
 
   const detached = await call("/api/products/1/shopee-mapping", "DELETE", "katalog-id", {});
   assert.equal(detached.status, 200);
   assert.equal(detached.data.data.removed_mappings, 2);
   assert.equal(captured.removedMappings, 2);
-
-  const afterDetach = await call("/api/data/products?id=1", "DELETE", "katalog-id", {});
-  assert.equal(afterDetach.status, 200);
+  resetDeleteFake();
 });
 
 test("Detach mapping ditolak jika masih ada riwayat transaksi", async () => {
