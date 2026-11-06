@@ -1600,7 +1600,80 @@ async function handleEmployeesPost(req, res) {
 // Identitas diambil dari req.user (JWT → app_users), waktu dari server
 // (NOW() AT TIME ZONE 'Asia/Jakarta'). Foto = data URL (base64) selfie
 // langsung dari kamera. Cegah absen ganda via UNIQUE(employee_id, work_date).
+//
+// Geofence: absen (dengan foto maupun tanpa foto) hanya boleh dilakukan di
+// area toko. Titik pusat & radius dapat diatur lewat environment, tanpa
+// mengubah skema database. Validasi dilakukan di server (bukan hanya UI).
 const ATTENDANCE_PHOTO_MAX = 2 * 1024 * 1024; // batas panjang string data URL
+
+function attendanceEnvNumber(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === null || String(raw).trim() === "") return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+const ATTENDANCE_STORE_LAT = (() => {
+  const v = attendanceEnvNumber("ATTENDANCE_STORE_LAT", -6.2589796);
+  return v >= -90 && v <= 90 ? v : -6.2589796;
+})();
+
+const ATTENDANCE_STORE_LNG = (() => {
+  const v = attendanceEnvNumber("ATTENDANCE_STORE_LNG", 106.9813076);
+  return v >= -180 && v <= 180 ? v : 106.9813076;
+})();
+
+const ATTENDANCE_STORE_RADIUS_M = (() => {
+  const v = attendanceEnvNumber("ATTENDANCE_STORE_RADIUS_M", 100);
+  return v > 0 && v <= 5000 ? v : 100;
+})();
+
+// Jarak permukaan bumi (meter) antara dua koordinat — rumus Haversine.
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+// Validasi koordinat dari klien. Mengembalikan salah satu:
+//   { ok:true, latitude, longitude, accuracy }
+//   { ok:false, error:"location_required" }
+//   { ok:false, error:"outside_store_area", distanceM, radiusM }
+function normalizeAttendanceLocation(data) {
+  const readNum = (v) => {
+    if (typeof v === "number") return Number.isFinite(v) ? v : NaN;
+    if (typeof v === "string" && v.trim() !== "") {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : NaN;
+    }
+    return NaN;
+  };
+  const latitude = readNum(data && data.latitude);
+  const longitude = readNum(data && data.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+      latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return { ok: false, error: "location_required" };
+  }
+  const accuracyRaw = readNum(data && data.accuracy);
+  const accuracy = Number.isFinite(accuracyRaw) && accuracyRaw >= 0 ? accuracyRaw : null;
+  const distanceM = haversineMeters(
+    latitude, longitude, ATTENDANCE_STORE_LAT, ATTENDANCE_STORE_LNG
+  );
+  if (distanceM > ATTENDANCE_STORE_RADIUS_M) {
+    return {
+      ok: false,
+      error: "outside_store_area",
+      distanceM: Math.ceil(distanceM),
+      radiusM: ATTENDANCE_STORE_RADIUS_M,
+    };
+  }
+  return { ok: true, latitude, longitude, accuracy, distanceM };
+}
 
 // Validasi KETAT: seluruh string wajib data URL gambar + base64 murni.
 // Menolak payload yang menyelipkan kutip/< > (vektor stored XSS).
@@ -1642,6 +1715,20 @@ async function handleAttendanceCheck(req, res, kind) {
         { error: norm.tooLarge ? "photo_too_large" : "invalid_photo" });
     }
     const photo = norm.photo; // null = tanpa foto
+
+    // Wajib berada di area toko — berlaku untuk selfie maupun tanpa foto.
+    // Klien boleh mengirim angka/string; server tetap sumber kebenaran.
+    const loc = normalizeAttendanceLocation(data);
+    if (!loc.ok) {
+      if (loc.error === "outside_store_area") {
+        return sendJson(res, 422, {
+          error: "outside_store_area",
+          distance_m: loc.distanceM,
+          radius_m: loc.radiusM,
+        });
+      }
+      return sendJson(res, 400, { error: "location_required" });
+    }
 
     const userId = req.user.id;
     const name = req.user.name || req.user.phone || "?";
@@ -1698,6 +1785,17 @@ async function handleAttendanceCheck(req, res, kind) {
     console.error("attendance check failed:", err.message);
     return sendJson(res, 500, { error: "internal_error" });
   }
+}
+
+// Konfigurasi geofence untuk UI Presensi (bukan rahasia: titik toko publik).
+async function handleAttendanceConfig(req, res) {
+  return sendJson(res, 200, {
+    data: {
+      latitude: ATTENDANCE_STORE_LAT,
+      longitude: ATTENDANCE_STORE_LNG,
+      radius_m: ATTENDANCE_STORE_RADIUS_M,
+    },
+  });
 }
 
 async function handleAttendanceMe(req, res) {
@@ -2020,6 +2118,11 @@ const server = http.createServer(async (req, res) => {
     const user = await requireAuth(req, res);
     if (!user) return;
     return handleAttendanceCheck(req, res, "out");
+  }
+  if (req.method === "GET" && pathname === "/api/attendance/config") {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    return handleAttendanceConfig(req, res);
   }
   if (req.method === "GET" && pathname === "/api/attendance/me") {
     const user = await requireAuth(req, res);

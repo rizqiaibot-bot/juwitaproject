@@ -57,6 +57,8 @@ Worker Shopee (pull order, import order, sync stok/harga) dijalankan oleh timer 
 | `SHOPEE_PARTNER_ID` / `SHOPEE_PARTNER_KEY` / `SHOPEE_SHOP_ID` | Kredensial Shopee 1 |
 | `SHOPEE2_PARTNER_ID` / `SHOPEE2_PARTNER_KEY` / `SHOPEE2_SHOP_ID` | Kredensial Shopee 2 |
 | `SHOPEE_STOCK_PUSH` | `0` = matikan semua pengiriman stok ke Shopee |
+| `ATTENDANCE_STORE_LAT` / `ATTENDANCE_STORE_LNG` | Titik pusat geofence presensi (default `-6.2589796` / `106.9813076` — Juwita Fresh & Frozen) |
+| `ATTENDANCE_STORE_RADIUS_M` | Radius maksimal absen dari toko dalam meter (default `100`) |
 
 
 ## Daftar Fitur

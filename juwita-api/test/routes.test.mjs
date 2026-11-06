@@ -57,6 +57,7 @@ const fakeState = {
   activeOrderItems: 0,
   pendingMutations: 0,
   reusedMutationProductId: null,
+  attendanceRow: null,
 };
 const fakeRefs = {
   order_items: 0,
@@ -126,7 +127,28 @@ class FakePool {
       return { rows: [{ orderid: params[0], wmsstatus: "Packing" }] };
     }
     if (sql.includes("FROM public.attendance_clock")) {
-      return { rows: [] };
+      return { rows: fakeState.attendanceRow ? [{ ...fakeState.attendanceRow }] : [] };
+    }
+    if (sql.startsWith("INSERT INTO public.attendance_clock")) {
+      if (fakeState.attendanceRow) return { rows: [] }; // konflik UNIQUE(employee_id, work_date)
+      fakeState.attendanceRow = {
+        id: 1,
+        work_date: "2026-11-06",
+        check_in_at: "2026-11-06T08:00:00.000Z",
+        check_out_at: null,
+      };
+      return { rows: [{ ...fakeState.attendanceRow }] };
+    }
+    if (sql.startsWith("UPDATE public.attendance_clock SET check_in_at")) {
+      if (!fakeState.attendanceRow || fakeState.attendanceRow.check_in_at) return { rows: [] };
+      fakeState.attendanceRow.check_in_at = "2026-11-06T08:00:00.000Z";
+      return { rows: [{ ...fakeState.attendanceRow }] };
+    }
+    if (sql.startsWith("UPDATE public.attendance_clock SET check_out_at")) {
+      if (!fakeState.attendanceRow || !fakeState.attendanceRow.check_in_at ||
+          fakeState.attendanceRow.check_out_at) return { rows: [] };
+      fakeState.attendanceRow.check_out_at = "2026-11-06T17:00:00.000Z";
+      return { rows: [{ ...fakeState.attendanceRow }] };
     }
     if (sql.includes("SELECT to_regclass('product_prices') AS t")) {
       return { rows: [{ t: "product_prices" }] };
@@ -328,6 +350,7 @@ process.env.NODE_ENV = "test";
 for (const key of [
   "SHOPEE_PARTNER_ID", "SHOPEE_PARTNER_KEY", "SHOPEE_SHOP_ID",
   "SHOPEE2_PARTNER_ID", "SHOPEE2_PARTNER_KEY", "SHOPEE2_SHOP_ID",
+  "ATTENDANCE_STORE_LAT", "ATTENDANCE_STORE_LNG", "ATTENDANCE_STORE_RADIUS_M",
 ]) {
   delete process.env[key];
 }
@@ -739,6 +762,50 @@ test("HR boleh rekap presensi, Penjualan tidak", async () => {
   assert.equal(denied.status, 403);
   const allowed = await call("/api/attendance/rekap?year=2026&month=0", "GET", "hr-id");
   assert.equal(allowed.status, 200);
+});
+
+test("Presensi: absen wajib di area toko (termasuk tanpa foto)", async () => {
+  fakeState.attendanceRow = null;
+
+  const cfg = await call("/api/attendance/config", "GET", "hr-id");
+  assert.equal(cfg.status, 200);
+  assert.equal(cfg.data.data.radius_m, 100);
+
+  const missing = await call("/api/attendance/checkin", "POST", "hr-id", { photo: null });
+  assert.equal(missing.status, 400);
+  assert.equal(missing.data.error, "location_required");
+
+  const invalid = await call("/api/attendance/checkin", "POST", "hr-id", {
+    photo: null, latitude: "bukan-angka", longitude: 106.9813076,
+  });
+  assert.equal(invalid.status, 400);
+  assert.equal(invalid.data.error, "location_required");
+
+  const outside = await call("/api/attendance/checkin", "POST", "hr-id", {
+    photo: null, latitude: -6.3, longitude: 106.9813076, accuracy: 10,
+  });
+  assert.equal(outside.status, 422);
+  assert.equal(outside.data.error, "outside_store_area");
+  assert.equal(outside.data.radius_m, 100);
+  assert.ok(outside.data.distance_m > 100);
+
+  const inside = await call("/api/attendance/checkin", "POST", "hr-id", {
+    photo: null, latitude: -6.2585296, longitude: 106.9813076, accuracy: 12,
+  });
+  assert.equal(inside.status, 200);
+  assert.ok(inside.data.data.check_in_at);
+
+  const outOutside = await call("/api/attendance/checkout", "POST", "hr-id", {
+    photo: null, latitude: -6.3, longitude: 106.9813076,
+  });
+  assert.equal(outOutside.status, 422);
+  assert.equal(outOutside.data.error, "outside_store_area");
+
+  const outInside = await call("/api/attendance/checkout", "POST", "hr-id", {
+    photo: null, latitude: -6.2585296, longitude: 106.9813076, accuracy: 12,
+  });
+  assert.equal(outInside.status, 200);
+  assert.ok(outInside.data.data.check_out_at);
 });
 
 test("Marketplace: aksi tanpa menu ditolak sebelum memanggil Shopee", async () => {
