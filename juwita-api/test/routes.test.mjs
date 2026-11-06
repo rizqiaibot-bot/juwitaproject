@@ -12,6 +12,16 @@ const USERS = {
     id: "owner-id", phone: "081000000001", full_name: "Owner Test",
     role: "owner", role_label: "Owner", menus: [], status: "ACTIVE",
   },
+  "7901fd69-9393-4fea-92d3-f6827a172a2a": {
+    id: "7901fd69-9393-4fea-92d3-f6827a172a2a", phone: "089601790213",
+    full_name: "Rizkin", role: "owner", role_label: "Owner",
+    menus: [], status: "ACTIVE",
+  },
+  "447a17c8-75c9-472e-8922-4f6a222f53f0": {
+    id: "447a17c8-75c9-472e-8922-4f6a222f53f0", phone: "081213368689",
+    full_name: "Bos Warsito Broiler", role: "hr", role_label: "HR",
+    menus: ["hr"], status: "ACTIVE",
+  },
   "katalog-id": {
     id: "katalog-id", phone: "081000000002", full_name: "Katalog Test",
     role: "staf", role_label: "Staf", menus: ["katalog"], status: "ACTIVE",
@@ -131,7 +141,7 @@ class FakePool {
       captured.packing = params;
       return { rows: [{ orderid: params[0], wmsstatus: "Packing" }] };
     }
-    if (sql.includes("FROM public.attendance_clock")) {
+    if (sql.includes("FROM public.attendance_clock") || sql.includes("FROM attendance_clock")) {
       return { rows: fakeState.attendanceRow ? [{ ...fakeState.attendanceRow }] : [] };
     }
     if (sql.startsWith("INSERT INTO public.attendance_clock")) {
@@ -381,6 +391,7 @@ for (const key of [
   "SHOPEE_PARTNER_ID", "SHOPEE_PARTNER_KEY", "SHOPEE_SHOP_ID",
   "SHOPEE2_PARTNER_ID", "SHOPEE2_PARTNER_KEY", "SHOPEE2_SHOP_ID",
   "ATTENDANCE_STORE_LAT", "ATTENDANCE_STORE_LNG", "ATTENDANCE_STORE_RADIUS_M",
+  "ATTENDANCE_PHOTO_VIEWER_IDS",
 ]) {
   delete process.env[key];
 }
@@ -929,6 +940,51 @@ test("Presensi: absen wajib di area toko (termasuk tanpa foto)", async () => {
   });
   assert.equal(outInside.status, 200);
   assert.ok(outInside.data.data.check_out_at);
+});
+
+test("Foto presensi hanya untuk Rizkin dan Bos Warsito Broiler", async () => {
+  const photo = "data:image/jpeg;base64,AAAA";
+  const rizkinId = "7901fd69-9393-4fea-92d3-f6827a172a2a";
+  const bosId = "447a17c8-75c9-472e-8922-4f6a222f53f0";
+  fakeState.attendanceRow = {
+    id: 9,
+    employee_id: "hr-id",
+    employee_name: "HR Test",
+    work_date: "2026-11-06",
+    check_in_at: "2026-11-06T08:00:00.000Z",
+    check_out_at: null,
+    check_in_photo: photo,
+    check_out_photo: null,
+    has_check_in_photo: true,
+    has_check_out_photo: false,
+  };
+
+  // HR lain & owner lain: jam tetap terlihat, isi foto disensor.
+  for (const userId of ["hr-id", "owner-id"]) {
+    const r = await call("/api/attendance/rekap?year=2026&month=10", "GET", userId);
+    assert.equal(r.status, 200);
+    assert.equal(r.data.can_view_photos, false);
+    assert.equal(r.data.data[0].check_in_photo, null);
+    assert.equal(r.data.data[0].has_check_in_photo, true);
+  }
+
+  // Dua akun yang diizinkan: foto asli diterima.
+  for (const userId of [rizkinId, bosId]) {
+    const r = await call("/api/attendance/rekap?year=2026&month=10", "GET", userId);
+    assert.equal(r.status, 200);
+    assert.equal(r.data.can_view_photos, true);
+    assert.equal(r.data.data[0].check_in_photo, photo);
+  }
+
+  // Jalur data generik (monitor Presensi) tidak boleh membocorkan foto.
+  const hrData = await call("/api/data/attendance_clock?limit=10", "GET", "hr-id");
+  assert.equal(hrData.status, 200);
+  assert.equal(hrData.data.data[0].check_in_photo, undefined);
+  assert.equal(hrData.data.data[0].has_check_in_photo, true);
+
+  const rizkinData = await call("/api/data/attendance_clock?limit=10", "GET", rizkinId);
+  assert.equal(rizkinData.status, 200);
+  assert.equal(rizkinData.data.data[0].check_in_photo, photo);
 });
 
 test("Marketplace: aksi tanpa menu ditolak sebelum memanggil Shopee", async () => {

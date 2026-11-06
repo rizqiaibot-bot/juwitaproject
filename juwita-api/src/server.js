@@ -326,8 +326,9 @@ function tableName(pathname) {
   return pathname.replace(/^\/api\/data\//, "");
 }
 
-async function handleDataGet(req, res, table) {
+async function handleDataGet(req, res, table, user) {
   if (!DATA_TABLES.has(table)) return sendJson(res, 404, { error: "not_found" });
+  const restrictedAttendancePhotos = table === "attendance_clock" && !canViewAttendancePhotos(user);
   const u = new URL(req.url, "http://localhost");
   const filters = [];
   const params = [];
@@ -345,12 +346,26 @@ async function handleDataGet(req, res, table) {
   const order = orderCol && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(orderCol)
     ? ` ORDER BY ${orderCol} ${orderDir}`
     : "";
-  const readCols = TABLE_READ_COLUMNS[table] || "*";
+  // Foto presensi bukan data publik: pembaca tanpa izin hanya menerima
+  // penanda ada/tidaknya foto, bukan isi data URL-nya.
+  const readCols = restrictedAttendancePhotos
+    ? `id, employee_id, employee_name, work_date, check_in_at, check_out_at,
+       created_at, updated_at,
+       (check_in_photo IS NOT NULL)  AS has_check_in_photo,
+       (check_out_photo IS NOT NULL) AS has_check_out_photo`
+    : (TABLE_READ_COLUMNS[table] || "*");
   try {
     const { rows } = await pool.query(
       `SELECT ${readCols} FROM ${table}${where}${order} LIMIT $${idx++} OFFSET $${idx++}`,
       [...params, limit, offset]
     );
+    if (restrictedAttendancePhotos) {
+      // Pertahanan berlapis: jangan pernah kirim kolom foto ke klien terbatas.
+      for (const row of rows) {
+        delete row.check_in_photo;
+        delete row.check_out_photo;
+      }
+    }
     sendJson(res, 200, { data: rows });
   } catch (err) {
     console.error(`data GET ${table} failed:`, err.message);
@@ -1678,6 +1693,25 @@ const ATTENDANCE_STORE_RADIUS_M = (() => {
   return v > 0 && v <= 5000 ? v : 100;
 })();
 
+// Hanya akun ini yang boleh melihat ISI foto presensi (data URL).
+// Default: Rizkin (owner) & Bos Warsito Broiler (HR). Bisa dioverride lewat
+// ATTENDANCE_PHOTO_VIEWER_IDS (daftar UUID dipisah koma) tanpa ubah kode.
+const DEFAULT_ATTENDANCE_PHOTO_VIEWER_IDS = [
+  "7901fd69-9393-4fea-92d3-f6827a172a2a", // Rizkin
+  "447a17c8-75c9-472e-8922-4f6a222f53f0", // Bos Warsito Broiler
+];
+
+const ATTENDANCE_PHOTO_VIEWER_IDS = new Set(
+  (process.env.ATTENDANCE_PHOTO_VIEWER_IDS || DEFAULT_ATTENDANCE_PHOTO_VIEWER_IDS.join(","))
+    .split(",")
+    .map((v) => v.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+function canViewAttendancePhotos(user) {
+  return !!user && ATTENDANCE_PHOTO_VIEWER_IDS.has(String(user.id || "").toLowerCase());
+}
+
 // Jarak permukaan bumi (meter) antara dua koordinat — rumus Haversine.
 function haversineMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -1865,7 +1899,8 @@ async function handleAttendanceMe(req, res) {
   }
 }
 
-// Rekap presensi bulanan (HR/owner): TANPA foto (ringan untuk tabel rekap).
+// Rekap presensi bulanan (HR/owner). Isi foto hanya untuk akun yang berhak;
+// pembaca lain tetap menerima jam + penanda ada/tidaknya foto.
 // month = 0-11 (mengikuti indeks bulan di frontend).
 async function handleAttendanceRekap(req, res) {
   try {
@@ -1876,20 +1911,32 @@ async function handleAttendanceRekap(req, res) {
         !Number.isInteger(month) || month < 0 || month > 11) {
       return sendJson(res, 400, { error: "invalid_period" });
     }
+    const canSeePhotos = canViewAttendancePhotos(req.user);
+    // Jangan pernah mengambil isi foto dari DB bila akun tidak berhak.
+    const photoSelect = canSeePhotos
+      ? "check_in_photo, check_out_photo"
+      : "NULL::text AS check_in_photo, NULL::text AS check_out_photo";
     const { rows } = await pool.query(
       `SELECT employee_id, employee_name,
               work_date::text AS work_date,
               check_in_at, check_out_at,
               (check_in_photo IS NOT NULL)  AS has_check_in_photo,
               (check_out_photo IS NOT NULL) AS has_check_out_photo,
-              check_in_photo, check_out_photo
+              ${photoSelect}
          FROM public.attendance_clock
         WHERE work_date >= make_date($1, $2, 1)
           AND work_date <  (make_date($1, $2, 1) + INTERVAL '1 month')
         ORDER BY work_date ASC, check_in_at ASC`,
       [year, month + 1]
     );
-    return sendJson(res, 200, { data: rows });
+    const data = rows.map((r) => ({
+      ...r,
+      has_check_in_photo: r.has_check_in_photo ?? (r.check_in_photo != null),
+      has_check_out_photo: r.has_check_out_photo ?? (r.check_out_photo != null),
+      check_in_photo: canSeePhotos ? r.check_in_photo : null,
+      check_out_photo: canSeePhotos ? r.check_out_photo : null,
+    }));
+    return sendJson(res, 200, { data, can_view_photos: canSeePhotos });
   } catch (err) {
     console.error("attendance rekap failed:", err.message);
     return sendJson(res, 500, { error: "internal_error" });
@@ -2224,7 +2271,7 @@ const server = http.createServer(async (req, res) => {
       req.method === "DELETE" ? "delete" : null;
     if (!op) return sendJson(res, 405, { error: "method_not_allowed" });
     if (!checkTableAccess(user, table, op)) return sendJson(res, 403, { error: "forbidden" });
-    if (req.method === "GET") return handleDataGet(req, res, table);
+    if (req.method === "GET") return handleDataGet(req, res, table, user);
     if (req.method === "POST") return handleDataWrite(req, res, table, "POST");
     if (req.method === "PATCH") return handleDataWrite(req, res, table, "PATCH");
     if (req.method === "DELETE") return handleDataWrite(req, res, table, "DELETE");

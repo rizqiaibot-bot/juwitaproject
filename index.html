@@ -3100,7 +3100,7 @@
             <div class="page-header">
                 <div>
                     <h1>Presensi</h1>
-                    <div class="page-header-desc">Absen masuk &amp; pulang dengan selfie di area toko</div>
+                    <div class="page-header-desc">Absen masuk &amp; pulang dengan foto kamera depan (selfie) atau belakang di area toko</div>
                 </div>
                 <span id="attendanceClockText" style="font-size:0.78rem;color:var(--text-muted);"></span>
             </div>
@@ -3125,8 +3125,10 @@
 
                 <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:12px 0 4px;">
                     <button class="aksi-btn" type="button" id="btnAttendanceCam" onclick="attendanceStartCamera()" style="padding:8px 16px;"><i class="fas fa-camera"></i> Nyalakan Kamera</button>
+                    <button class="aksi-btn" type="button" id="btnAttendanceSwitchCam" onclick="attendanceSwitchCamera()" style="padding:8px 16px;"><i class="fas fa-camera-rotate"></i> Kamera Belakang</button>
                     <button class="aksi-btn" type="button" id="btnAbsenTanpaFoto" onclick="attendanceUseNoPhoto()" style="padding:8px 16px;display:none;"><i class="fas fa-user-slash"></i> Lanjutkan Tanpa Foto</button>
                 </div>
+                <div id="attendanceCamMode" style="font-size:0.7rem;color:var(--text-muted);text-align:center;margin-bottom:6px;">Kamera depan (selfie)</div>
                 <div id="attendanceNoPhotoHint" style="display:none;font-size:0.72rem;color:#f59e0b;text-align:center;margin-bottom:6px;"><i class="fas fa-triangle-exclamation"></i> Mode tanpa foto aktif — absen tetap tercatat tanpa selfie.</div>
 
                 <div id="attendanceToday" style="margin:14px 0;font-size:0.82rem;color:var(--text-primary);min-height:20px;"></div>
@@ -7655,7 +7657,7 @@
         let attendanceClockList = [];
 
         // Muat data presensi selfie (attendance_clock) untuk bulan terpilih.
-        // month = 0-11. Tanpa foto (ringan). Butuh menu HR / owner.
+        // month = 0-11. Foto hanya disertakan untuk akun yang berhak; butuh menu HR / owner.
         async function loadAttendanceClockMonth(year, month) {
             let rows = [];
             try {
@@ -7714,8 +7716,15 @@
         // Sel foto Detail Rekap: thumbnail presensi bila ada (via properti DOM, aman),
         // atau "Tanpa Foto". Klik thumbnail → buka lightbox ukuran besar.
         // "Tanpa Foto" (tidak valid/kosong) TIDAK bisa diklik.
+        // Akun lain hanya melihat "-" (tanpa info ada/tidaknya foto tersimpan).
         function rekapFotoTd(photoUrl) {
             const td = document.createElement("td");
+            if (!attendanceCanViewPhotos()) {
+                td.textContent = "-";
+                td.style.color = "var(--text-muted)";
+                td.style.fontSize = "0.72rem";
+                return td;
+            }
             const safe = attendanceSafePhoto(photoUrl);
             if (!safe) {
                 td.textContent = "Tanpa Foto";
@@ -9232,6 +9241,7 @@
         let attendanceCamGen = 0;        // token utk membatalkan getUserMedia yang usang
         let attendanceCamStarting = false;
         let attendanceNoPhotoMode = false; // alur "Lanjutkan Tanpa Foto" (kamera ditolak/tidak ada)
+        let attendanceFacingMode = "user"; // "user" = kamera depan (selfie), "environment" = belakang
 
         // Geofence presensi. Nilai awal = default server; lalu disegarkan dari
         // GET /api/attendance/config. Validasi tetap dilakukan server.
@@ -9244,6 +9254,19 @@
             if (!currentUser) return false;
             if (String(currentUser.role || "").toLowerCase() === "owner") return true;
             return Array.isArray(currentUser.menus) && currentUser.menus.includes("hr");
+        }
+
+        // Hanya akun ini yang boleh melihat isi foto presensi yang TERSIMPAN.
+        // Selama absen, semua pengguna tetap bisa melihat preview kamera.
+        // Server tetap memegang keputusan akhir (allowlist ATTENDANCE_PHOTO_VIEWER_IDS).
+        const ATTENDANCE_PHOTO_VIEWER_IDS = [
+            "7901fd69-9393-4fea-92d3-f6827a172a2a", // Rizkin (owner)
+            "447a17c8-75c9-472e-8922-4f6a222f53f0"  // Bos Warsito Broiler (HR)
+        ];
+
+        function attendanceCanViewPhotos() {
+            if (!currentUser) return false;
+            return ATTENDANCE_PHOTO_VIEWER_IDS.indexOf(String(currentUser.id || "").toLowerCase()) !== -1;
         }
 
         // Tanggal hari ini menurut zona Asia/Jakarta (YYYY-MM-DD).
@@ -9289,14 +9312,51 @@
             if (btn) btn.style.display = show ? "inline-flex" : "none";
         }
 
+        // Tampilkan/sembunyikan kontrol kamera saat mode tanpa foto aktif.
+        function attendanceSetCameraControlsVisible(show) {
+            ["btnAttendanceCam", "btnAttendanceSwitchCam", "attendanceCamMode"].forEach(function (id) {
+                const el = document.getElementById(id);
+                if (el) el.style.display = show ? "" : "none";
+            });
+        }
+
+        // Perbarui label kamera aktif, tombol ganti, dan efek cermin preview.
+        function attendanceUpdateCameraUI() {
+            const video = document.getElementById("attendanceVideo");
+            if (video) {
+                // Kamera depan dicerminkan seperti selfie; kamera belakang tidak.
+                video.style.transform = attendanceFacingMode === "user" ? "scaleX(-1)" : "none";
+            }
+            const mode = document.getElementById("attendanceCamMode");
+            if (mode) {
+                mode.textContent = attendanceFacingMode === "user"
+                    ? "Kamera depan (selfie)"
+                    : "Kamera belakang";
+            }
+            const btn = document.getElementById("btnAttendanceSwitchCam");
+            if (btn) {
+                btn.innerHTML = attendanceFacingMode === "user"
+                    ? '<i class="fas fa-camera-rotate"></i> Kamera Belakang'
+                    : '<i class="fas fa-camera-rotate"></i> Kamera Depan';
+            }
+        }
+
+        // Ganti kamera depan <-> belakang. Stream lama dihentikan lebih dulu.
+        function attendanceSwitchCamera() {
+            if (attendanceCamStarting) return;
+            attendanceFacingMode = attendanceFacingMode === "user" ? "environment" : "user";
+            attendanceUpdateCameraUI();
+            attendanceStopCamera();
+            attendanceStartCamera();
+        }
+
         // Pilih alur tanpa foto (dipakai bila kamera ditolak/tidak tersedia).
         function attendanceUseNoPhoto() {
             attendanceNoPhotoMode = true;
             attendanceOfferNoPhoto(false);
             const hint = document.getElementById("attendanceNoPhotoHint");
             if (hint) hint.style.display = "block";
-            const camBtn = document.getElementById("btnAttendanceCam");
-            if (camBtn) camBtn.style.display = "none";
+            attendanceSetCameraControlsVisible(false);
             attendanceShowCamMsg("Mode tanpa foto aktif. Pilih <b>Absen Masuk</b> atau <b>Absen Pulang</b>.", false);
         }
 
@@ -9305,8 +9365,7 @@
             attendanceOfferNoPhoto(false);
             const hint = document.getElementById("attendanceNoPhotoHint");
             if (hint) hint.style.display = "none";
-            const camBtn = document.getElementById("btnAttendanceCam");
-            if (camBtn) camBtn.style.display = "";
+            attendanceSetCameraControlsVisible(true);
         }
 
         function attendanceErrText(e) {
@@ -9478,10 +9537,14 @@
 
             attendanceCamStarting = true;
             const gen = ++attendanceCamGen;
-            attendanceShowCamMsg("Meminta izin kamera…", false);
-            console.log("[presensi] minta getUserMedia; secureContext=", window.isSecureContext, "ua=", navigator.userAgent);
+            attendanceUpdateCameraUI();
+            attendanceShowCamMsg("Meminta izin kamera " + (attendanceFacingMode === "user" ? "depan" : "belakang") + "…", false);
+            console.log("[presensi] minta getUserMedia; facingMode=", attendanceFacingMode, "secureContext=", window.isSecureContext, "ua=", navigator.userAgent);
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: attendanceFacingMode } },
+                    audio: false
+                });
                 if (gen !== attendanceCamGen) { // sudah keluar dari halaman Presensi
                     stream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} });
                     return;
@@ -9491,6 +9554,7 @@
                 video.setAttribute("webkit-playsinline", "true");
                 video.muted = true;
                 video.srcObject = stream;
+                attendanceUpdateCameraUI(); // cermin hanya untuk kamera depan
                 try {
                     await video.play();
                 } catch (playErr) {
@@ -9500,12 +9564,12 @@
                 }
                 const msg = document.getElementById("attendanceCamMsg");
                 if (msg) msg.style.display = "none";
-                attendanceResetNoPhotoMode(); // kamera berhasil → kembali ke alur selfie
-                console.log("[presensi] kamera aktif ", video.videoWidth + "x" + video.videoHeight);
+                attendanceResetNoPhotoMode(); // kamera berhasil → kembali ke alur foto
+                console.log("[presensi] kamera aktif ", attendanceFacingMode, video.videoWidth + "x" + video.videoHeight);
             } catch (e) {
                 if (gen !== attendanceCamGen) return;
                 console.warn("[presensi] getUserMedia gagal:", e && e.name, e && e.message);
-                attendanceShowCamMsg("Kamera gagal: <b>" + escCam(attendanceErrText(e)) + "</b><br>Ketuk <b>Nyalakan Kamera</b> untuk mencoba lagi.", true);
+                attendanceShowCamMsg("Kamera gagal: <b>" + escCam(attendanceErrText(e)) + "</b><br>Ketuk <b>Nyalakan Kamera</b> atau ganti <b>Kamera Depan/Belakang</b>.", true);
             } finally {
                 attendanceCamStarting = false;
             }
@@ -9599,8 +9663,7 @@
                     }
                     else showToast("Gagal menyimpan absen");
                 } else {
-                    const label = kind === "in" ? "Absen masuk" : "Absen pulang";
-                    showToast(photo ? (label + " tersimpan") : (label + " tersimpan (tanpa foto)"));
+                    showToast(kind === "in" ? "Check-in berhasil" : "Check-out berhasil");
                 }
                 await attendanceLoadToday();
                 if (attendanceCanViewAll()) renderAttendanceMonitor();
@@ -9624,8 +9687,15 @@
         }
 
         // Sel foto: src di-set lewat PROPERTI DOM (bukan innerHTML) → aman dari Stored XSS.
+        // Akun lain hanya melihat "-" (tanpa info ada/tidaknya foto tersimpan).
         function attendancePhotoCell(src, alt) {
             const td = document.createElement("td");
+            if (!attendanceCanViewPhotos()) {
+                td.textContent = "-";
+                td.style.color = "var(--text-muted)";
+                td.style.fontSize = "0.72rem";
+                return td;
+            }
             const safe = attendanceSafePhoto(src);
             if (!safe) {
                 td.textContent = "Tanpa Foto";
@@ -9682,6 +9752,8 @@
         }
 
         function attendanceInit() {
+            attendanceFacingMode = "user"; // mulai dengan kamera depan (selfie)
+            attendanceUpdateCameraUI();
             attendanceResetNoPhotoMode();
             attendanceStartCamera();
             attendanceLoadToday();
@@ -9695,6 +9767,8 @@
 
         function attendanceLeave() {
             attendanceStopCamera();
+            attendanceFacingMode = "user";
+            attendanceUpdateCameraUI();
             attendanceResetNoPhotoMode();
             if (attendanceClockTimer) { clearInterval(attendanceClockTimer); attendanceClockTimer = null; }
         }

@@ -59,6 +59,7 @@ Worker Shopee (pull order, import order, sync stok/harga) dijalankan oleh timer 
 | `SHOPEE_STOCK_PUSH` | `0` = matikan semua pengiriman stok ke Shopee |
 | `ATTENDANCE_STORE_LAT` / `ATTENDANCE_STORE_LNG` | Titik pusat geofence presensi (default `-6.2589796` / `106.9813076` — Juwita Fresh & Frozen) |
 | `ATTENDANCE_STORE_RADIUS_M` | Radius maksimal absen dari toko dalam meter (default `100`) |
+| `ATTENDANCE_PHOTO_VIEWER_IDS` | Daftar UUID user (dipisah koma) yang boleh melihat isi foto presensi. Default: akun **Rizkin** & **Bos Warsito Broiler** |
 
 
 ## Daftar Fitur
