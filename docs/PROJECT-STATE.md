@@ -5,6 +5,23 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ---
 
+## 0. PENGINGAT SESI TERAKHIR (7 Nov 2026)
+
+Yang dikerjakan & di-deploy di sesi terakhir (semua sudah commit + push, `main` bersih):
+
+1. **Barcode POS** — sheet baru "Database Produk" (`1P5pIc-Qoj1FCkCP2GnYwvGdx6NqKLg79`):
+   - 46 barcode diisi ke produk lama (2 H1 + 44 H3 aman).
+   - **853 produk baru diimport** (553 dengan barcode valid, 300 tanpa), stok 0, id mulai 2308, SKU `SH-…`. Total produk sekarang **2.711** (1.787 dengan barcode, **924 tanpa**).
+   - Masih tertunda: 18 H3 ragu + 38 H4 (laporan `Downloads\barcode-review-2026-11-07.csv`) dan frozen food yang tidak ada di sheet.
+2. **Radius presensi: 100 m → 20 m** (server + frontend + test + docs). Kalau terlalu ketat, set `ATTENDANCE_STORE_RADIUS_M` di env VPS atau naikkan default.
+3. **Rekap Penjualan**: Bulanan = global saja (tanpa ITEM, tanpa detail transaksi, breakdown POS/kasir); Harian = lengkap. Print ungu, judul mengikuti mode, dan mencetak SEMUA transaksi periode. Polling live sudah pakai pagination penuh (item terjual tidak lagi 0).
+4. **Kata "Supabase" dibersihkan** dari seluruh kode (sudah VPS Biznet).
+5. Presensi sebelumnya: geofence + kamera depan/belakang + pembatas akses foto (Rizkin & Bos Warsito Broiler).
+
+Commit terakhir: `a5b1fe3`. Deploy otomatis via GitHub Actions (push `main` → rsync + restart `juwita-api.service`).
+
+---
+
 ## 1. Kondisi stok (PALING PENTING)
 
 > **Update 6 Nov 2026 (audit read-only DB):** stok POS sudah diisi lagi → **198 produk berisi, total 4.350 unit**; 1.650 produk lain masih 0. Kedua toko Shopee **masih `disconnected`**. `stock_mutations`: **4.114 `synced`, 1.408 `pending`, 1.227 `failed`** (backlog lama, TIDAK dihapus).
