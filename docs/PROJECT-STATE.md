@@ -1,6 +1,6 @@
 # PROJECT STATE — Juwita
 
-Terakhir diperbarui: **6 November 2026** (audit stok + refactor sinkronisasi stok, belum di-deploy).
+Terakhir diperbarui: **7 November 2026** (import 853 produk + isi 46 barcode dari sheet; radius presensi 100 → 20 m).
 Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat sesi baru.
 
 ---
@@ -37,9 +37,14 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ## 2. Progres barcode
 
-Sumber: Google Sheet **"Database Produk"**
+> **Update 7 Nov 2026:** memakai sheet baru **"Database Produk"** `https://docs.google.com/spreadsheets/d/1P5pIc-Qoj1FCkCP2GnYwvGdx6NqKLg79` (1 tab). Hasil:
+> - **46 barcode diisi** ke produk lama: 2 H1 + 44 H3 (barcode EAN valid, merek & ukuran sama). H2 dilewati (barcode `UKBEN` palsu).
+> - **853 produk baru diimport** dari sheet (553 dengan barcode valid, 300 tanpa), stok 0, id mulai 2308, SKU `SH-<kode item>`. Skrip: `juwita-api/scripts/import-new-products.mjs`.
+> - Total produk: **2.711**. Dengan barcode: **1.787**. Tanpa barcode: **924** (sebagian besar frozen food yang tidak ada di sheet).
+
+Sumber lama: Google Sheet **"Database Produk"**
 `https://docs.google.com/spreadsheets/d/18R4x0KQX29Cwsr5NieCZ_NaUVvB9t6EHS13nlUbxQuA` (tab `gid=820631729`).
-Salinan lokal: `data/barcode-source-2026-11-02.csv` (tidak di-commit).
+Salinan lokal: `data/barcode-source-2026-11-07.csv` (tidak di-commit).
 
 Aturan yang disepakati user: **"jangan kira-kira, harus benar"** → hanya cocokkan nama yang identik.
 
@@ -48,10 +53,10 @@ Sudah dipasang **2 Nov 2026**: **33 produk / 22 barcode unik**
 - H2 = 12 produk (beda hanya kata promosi: FRESH, HALAL, ALL VARIAN, PENGIRIMAN CEPAT, ...)
 
 Sisa:
-- **802 produk tanpa barcode** (1.046 sudah punya).
-- **130 kandidat** belum dipasang: H3 = 86 (ada kata tambahan, bisa beda varian), H4 = 44 (ukuran/isi beda).
-  Laporan: `C:\Users\rizqi\Downloads\barcode-review.csv` (bisa hilang → generate ulang dengan skrip di bawah).
-- **672 produk tidak ada di sheet sama sekali** — sheet mayoritas katalog minimarket (YAKULT, AQUA, SASA, dll), database POS mayoritas frozen food. Kemungkinan ada sheet/tab lain untuk frozen food.
+- **924 produk tanpa barcode** (1.787 sudah punya).
+- Kandidat belum dipasang (dari sheet 7 Nov): 18 H3 ragu (beda varian / barcode mencurigakan) + 38 H4 (ukuran/isi beda).
+  Laporan: `C:\Users\rizqi\Downloads\barcode-review-2026-11-07.csv` (bisa hilang → generate ulang dengan skrip di bawah).
+- Sebagian besar produk tanpa barcode adalah **frozen food yang tidak ada di sheet** — sheet mayoritas katalog minimarket (YAKULT, AQUA, SASA, dll). Kemungkinan ada sheet/tab lain untuk frozen food.
 
 Cara mengulang pencocokan (tidak menulis DB, hanya menghasilkan SQL + laporan):
 
