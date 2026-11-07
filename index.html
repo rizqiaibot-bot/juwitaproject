@@ -4636,6 +4636,48 @@
             return !!currentUser && canReadOrders();
         }
 
+        // Fetch polling dengan pagination penuh. Tanpa pagination, Supabase hanya
+        // mengembalikan batch terbatas (default) sehingga menimpa ordersData dengan
+        // data terpotong → order lama hilang dari daftar/rekap.
+        async function fetchAllOrdersLight() {
+            const all = [];
+            let from = 0;
+            while (true) {
+                const { data, error } = await sb
+                    .from('orders')
+                    .select('orderid,date,channel,customer,total,paystatus,wmsstatus,courier,resi,shop_id,picked_at,picked_by,packed_at,packed_by,shipped_at,shipped_by,payment_method,bayar,kembalian,kasir')
+                    .order('orderid', { ascending: true })
+                    .range(from, from + 999);
+                if (error) return { data: null, error };
+                const rows = data || [];
+                all.push(...rows);
+                if (rows.length < 1000) break;
+                from += 1000;
+            }
+            return { data: all, error: null };
+        }
+
+        // Idem untuk order_items: "Item Terjual" di Rekap Penjualan butuh SEMUA
+        // baris. Fetch terpotong membuat item terjual tampil 0 untuk periode yang
+        // order-items-nya tidak ikut ter-fetch.
+        async function fetchAllOrderItemsLight() {
+            const all = [];
+            let from = 0;
+            while (true) {
+                const { data, error } = await sb
+                    .from('order_items')
+                    .select('id,orderid,product_id,product_name,qty,price,subtotal')
+                    .order('id', { ascending: true })
+                    .range(from, from + 999);
+                if (error) return { data: null, error };
+                const rows = data || [];
+                all.push(...rows);
+                if (rows.length < 1000) break;
+                from += 1000;
+            }
+            return { data: all, error: null };
+        }
+
         async function refreshOrdersLight() {
             if (!(await isOrdersPollAllowed())) {
                 stopOrdersRefresh();
@@ -4650,12 +4692,8 @@
             ordersRefreshInFlight = true;
             try {
                 const [oRes, oiRes] = await Promise.all([
-                    sb.from('orders')
-                        .select('orderid,date,channel,customer,total,paystatus,wmsstatus,courier,resi,shop_id,picked_at,picked_by,packed_at,packed_by,shipped_at,shipped_by,payment_method,bayar,kembalian,kasir')
-                        .order('date', { ascending: false }),
-                    sb.from('order_items')
-                        .select('id,orderid,product_id,product_name,qty,price,subtotal')
-                        .order('id')
+                    fetchAllOrdersLight(),
+                    fetchAllOrderItemsLight()
                 ]);
                 if (oRes.error) throw oRes.error;
                 if (oiRes.error) throw oiRes.error;
