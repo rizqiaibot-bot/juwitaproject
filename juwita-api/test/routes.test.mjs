@@ -903,7 +903,7 @@ test("Presensi: absen wajib di area toko (termasuk tanpa foto)", async () => {
 
   const cfg = await call("/api/attendance/config", "GET", "hr-id");
   assert.equal(cfg.status, 200);
-  assert.equal(cfg.data.data.radius_m, 100);
+  assert.equal(cfg.data.data.radius_m, 20);
 
   const missing = await call("/api/attendance/checkin", "POST", "hr-id", { photo: null });
   assert.equal(missing.status, 400);
@@ -920,11 +920,11 @@ test("Presensi: absen wajib di area toko (termasuk tanpa foto)", async () => {
   });
   assert.equal(outside.status, 422);
   assert.equal(outside.data.error, "outside_store_area");
-  assert.equal(outside.data.radius_m, 100);
-  assert.ok(outside.data.distance_m > 100);
+  assert.equal(outside.data.radius_m, 20);
+  assert.ok(outside.data.distance_m > 20);
 
   const inside = await call("/api/attendance/checkin", "POST", "hr-id", {
-    photo: null, latitude: -6.2585296, longitude: 106.9813076, accuracy: 12,
+    photo: null, latitude: -6.2588296, longitude: 106.9813076, accuracy: 12,
   });
   assert.equal(inside.status, 200);
   assert.ok(inside.data.data.check_in_at);
@@ -936,7 +936,7 @@ test("Presensi: absen wajib di area toko (termasuk tanpa foto)", async () => {
   assert.equal(outOutside.data.error, "outside_store_area");
 
   const outInside = await call("/api/attendance/checkout", "POST", "hr-id", {
-    photo: null, latitude: -6.2585296, longitude: 106.9813076, accuracy: 12,
+    photo: null, latitude: -6.2588296, longitude: 106.9813076, accuracy: 12,
   });
   assert.equal(outInside.status, 200);
   assert.ok(outInside.data.data.check_out_at);

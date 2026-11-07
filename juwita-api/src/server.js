@@ -1689,8 +1689,8 @@ const ATTENDANCE_STORE_LNG = (() => {
 })();
 
 const ATTENDANCE_STORE_RADIUS_M = (() => {
-  const v = attendanceEnvNumber("ATTENDANCE_STORE_RADIUS_M", 100);
-  return v > 0 && v <= 5000 ? v : 100;
+  const v = attendanceEnvNumber("ATTENDANCE_STORE_RADIUS_M", 20);
+  return v > 0 && v <= 5000 ? v : 20;
 })();
 
 // Hanya akun ini yang boleh melihat ISI foto presensi (data URL).

@@ -9342,7 +9342,7 @@
 
         // Geofence presensi. Nilai awal = default server; lalu disegarkan dari
         // GET /api/attendance/config. Validasi tetap dilakukan server.
-        let attendanceStore = { latitude: -6.2589796, longitude: 106.9813076, radius_m: 100 };
+        let attendanceStore = { latitude: -6.2589796, longitude: 106.9813076, radius_m: 20 };
         let attendanceLocation = null;      // { latitude, longitude, accuracy, distance_m, inside }
         let attendanceLocationError = null;
         let attendanceLocationPromise = null;
