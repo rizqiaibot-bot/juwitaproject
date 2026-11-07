@@ -2392,11 +2392,11 @@
             <div class="stats-row">
                 <div class="stat-item active"><div><div class="stat-number" id="rekapOmzet">-</div><div class="stat-label">Total Omzet</div></div><div class="stat-icon-wrapper"><i class="fas fa-coins"></i></div></div>
                 <div class="stat-item"><div><div class="stat-number" id="rekapTransaksi">-</div><div class="stat-label">Total Transaksi</div></div><div class="stat-icon-wrapper"><i class="fas fa-receipt"></i></div></div>
-                <div class="stat-item"><div><div class="stat-number" id="rekapItem">-</div><div class="stat-label">Item Terjual</div></div><div class="stat-icon-wrapper"><i class="fas fa-box"></i></div></div>
+                <div class="stat-item" id="rekapItemCard"><div><div class="stat-number" id="rekapItem">-</div><div class="stat-label">Item Terjual</div></div><div class="stat-icon-wrapper"><i class="fas fa-box"></i></div></div>
             </div>
             <div id="rekapSyncInfo" style="font-size:0.72rem;color:var(--text-muted);margin:-6px 0 4px;">Sinkron terakhir: -</div>
             <div id="rekapRangeInfo" style="font-size:0.72rem;color:var(--text-muted);margin:0 0 12px;">Transaksi pertama: - &middot; Terakhir: -</div>
-            <div class="table-wrapper"><table><thead><tr><th>CHANNEL</th><th>OMZET</th><th>TRANSAKSI</th><th>ITEM</th></tr></thead><tbody id="rekapTableBody"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Memuat data...</td></tr></tbody></table></div>
+            <div class="table-wrapper"><table><thead><tr><th>CHANNEL</th><th>OMZET</th><th>TRANSAKSI</th><th id="rekapThItem">ITEM</th></tr></thead><tbody id="rekapTableBody"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Memuat data...</td></tr></tbody></table></div>
             <!-- ===== BREAKDOWN PEMBAYARAN POS ===== -->
             <div id="posBreakdownSection" style="margin-top:20px;">
                 <div style="font-size:0.9rem;font-weight:800;margin-bottom:10px;color:var(--text-primary);"><i class="fas fa-wallet" style="color:var(--primary);margin-right:6px;"></i>Breakdown Pembayaran POS</div>
@@ -2418,7 +2418,7 @@
                     <tbody id="rekapKasirBody"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted);">Memuat data...</td></tr></tbody>
                 </table></div>
             </div>
-            <div class="table-wrapper" style="margin-top:16px;">
+            <div class="table-wrapper" id="rekapDetailSection" style="margin-top:16px;">
                 <table>
                     <thead><tr><th>ORDER ID</th><th>CHANNEL</th><th>TANGGAL &amp; JAM</th><th>TOTAL</th><th>STATUS</th></tr></thead>
                     <tbody id="rekapDetailBody"><tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">-</td></tr></tbody>
@@ -4538,6 +4538,10 @@
             renderWarehouseShipping();
             renderWarehouseRacks();
             renderWarehouseOpnameList();
+            // Rekap Penjualan: render ulang bila halamannya aktif supaya data yang
+            // baru selesai dimuat langsung tampil (bukan nol / tampilan lama).
+            const rekapPage = document.getElementById("page-rekap-penjualan");
+            if (rekapPage && rekapPage.classList.contains("active-page")) renderRekapPenjualan();
         }
 
         // ============================================================
@@ -8180,6 +8184,7 @@
             const area = document.getElementById("rekapPrintArea");
             if (!area) return;
             const period = rekapPenjualanPeriodLabel();
+            const showDetail = rekapPenjualanMode === "hari";
             const txt = function (id) { const el = document.getElementById(id); return el ? el.textContent : "-"; };
             const rowsHtml = function (id) { const el = document.getElementById(id); return el && el.innerHTML ? el.innerHTML : ""; };
             const esc = function (s) { return String(s == null ? "" : s); };
@@ -8204,20 +8209,23 @@
                 '<div class="rp-summary">' +
                     '<div>Total Omzet: <span>' + txt("rekapOmzet") + '</span></div>' +
                     '<div>Total Transaksi: <span>' + txt("rekapTransaksi") + '</span></div>' +
-                    '<div>Item Terjual: <span>' + txt("rekapItem") + '</span></div>' +
+                    (showDetail ? '<div>Item Terjual: <span>' + txt("rekapItem") + '</span></div>' : '') +
                 '</div>' +
                 '<h3>Ringkasan Channel</h3>' +
-                '<table><thead><tr><th>Channel</th><th>Omzet</th><th>Transaksi</th><th>Item</th></tr></thead>' +
+                '<table><thead><tr><th>Channel</th><th>Omzet</th><th>Transaksi</th>' +
+                    (showDetail ? '<th>Item</th>' : '') + '</tr></thead>' +
                 '<tbody>' + rowsHtml("rekapTableBody") + '</tbody></table>' +
-                '<h3>Breakdown Pembayaran POS</h3>' +
-                '<table><thead><tr><th>Metode</th><th>Nominal</th></tr></thead><tbody>' + payRows + '</tbody></table>' +
-                (otherText ? '<div class="rp-muted">' + esc(otherText) + '</div>' : '') +
-                '<h3>Per Kasir (POS)</h3>' +
-                '<table><thead><tr><th>Kasir</th><th>Trx</th><th>Omzet</th><th>Cash</th><th>QRIS</th><th>EDC</th><th>Transfer</th><th>Piutang</th></tr></thead>' +
-                '<tbody>' + rowsHtml("rekapKasirBody") + '</tbody></table>' +
-                '<h3>Detail Transaksi</h3>' +
-                '<table class="rp-detail"><thead><tr><th>Order ID</th><th>Channel</th><th>Tanggal &amp; Jam</th><th>Total</th><th>Status</th></tr></thead>' +
-                '<tbody>' + rowsHtml("rekapDetailBody") + '</tbody></table>';
+                (showDetail
+                    ? '<h3>Breakdown Pembayaran POS</h3>' +
+                      '<table><thead><tr><th>Metode</th><th>Nominal</th></tr></thead><tbody>' + payRows + '</tbody></table>' +
+                      (otherText ? '<div class="rp-muted">' + esc(otherText) + '</div>' : '') +
+                      '<h3>Per Kasir (POS)</h3>' +
+                      '<table><thead><tr><th>Kasir</th><th>Trx</th><th>Omzet</th><th>Cash</th><th>QRIS</th><th>EDC</th><th>Transfer</th><th>Piutang</th></tr></thead>' +
+                      '<tbody>' + rowsHtml("rekapKasirBody") + '</tbody></table>' +
+                      '<h3>Detail Transaksi</h3>' +
+                      '<table class="rp-detail"><thead><tr><th>Order ID</th><th>Channel</th><th>Tanggal &amp; Jam</th><th>Total</th><th>Status</th></tr></thead>' +
+                      '<tbody>' + rowsHtml("rekapDetailBody") + '</tbody></table>'
+                    : '');
 
             // window.print() — dialog browser: pilih printer atau "Save as PDF".
             window.print();
@@ -8383,6 +8391,22 @@
         function renderRekapPenjualan() {
             initRekapPenjualanControls();
 
+            // Mode Bulanan = ringkasan global saja: tanpa kolom ITEM dan tanpa
+            // rincian transaksi berhalaman. Rincian + item terjual ada di mode Harian.
+            const showDetail = rekapPenjualanMode === "hari";
+            const itemCard = document.getElementById("rekapItemCard");
+            if (itemCard) itemCard.style.display = showDetail ? "" : "none";
+            const thItem = document.getElementById("rekapThItem");
+            if (thItem) thItem.style.display = showDetail ? "" : "none";
+            const detailSection = document.getElementById("rekapDetailSection");
+            if (detailSection) detailSection.style.display = showDetail ? "" : "none";
+            const detailPager = document.getElementById("rekapDetailPager");
+            if (detailPager) detailPager.style.display = showDetail ? "" : "none";
+            const posBreakdown = document.getElementById("posBreakdownSection");
+            if (posBreakdown) posBreakdown.style.display = showDetail ? "" : "none";
+            const posKasir = document.getElementById("posKasirSection");
+            if (posKasir) posKasir.style.display = showDetail ? "" : "none";
+
             // Label toko Shopee yang jelas (sesuai identitas toko).
             const SHOPEE_LABELS = {
                 "724153261": "Shopee 1 — Juwita Fresh and Frozen",
@@ -8417,6 +8441,8 @@
                 r.item += itemQtyByOrder[o.orderId] || 0;
             });
 
+            // Breakdown per channel (POS / Shopee 1 / Shopee 2) selalu ditampilkan,
+            // termasuk channel yang 0 transaksi.
             const rows = groupOrder.map(function (label) {
                 const r = channelAgg[label] || { omzet: 0, transaksi: 0, item: 0 };
                 return { label: label, omzet: r.omzet, transaksi: r.transaksi, item: r.item };
@@ -8452,34 +8478,42 @@
 
             const tbody = document.getElementById("rekapTableBody");
             if (tbody) {
+                const colspan = showDetail ? 4 : 3;
+                const itemTd = function (n) { return showDetail ? '<td>' + n + '</td>' : ''; };
                 if (!periodOrders.length) {
-                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Tidak ada transaksi pada periode ini</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="' + colspan + '" style="text-align:center;padding:24px;color:var(--text-muted);">Tidak ada transaksi pada periode ini</td></tr>';
                 } else {
                     tbody.innerHTML = rows.map(r => `<tr>
                         <td><strong>${r.label}</strong></td>
                         <td>${fmt(r.omzet)}</td>
                         <td>${r.transaksi}</td>
-                        <td>${r.item}</td>
+                        ${itemTd(r.item)}
                     </tr>`).join('') + `<tr style="font-weight:800;background:var(--bg-primary);">
                         <td>TOTAL</td>
                         <td>${fmt(totalOmzet)}</td>
                         <td>${totalTransaksi}</td>
-                        <td>${totalItem}</td>
+                        ${itemTd(totalItem)}
                     </tr>`;
                 }
             }
 
-            // Detail khusus POS: breakdown pembayaran + per kasir (mengikuti periode yang sama).
-            const posOrders = periodOrders.filter(x => x.channel === "POS1" || x.channel === "POS2");
-            renderRekapPosBreakdown(posOrders);
-            renderRekapPosKasir(posOrders);
+            // Detail khusus POS (breakdown pembayaran + per kasir) = bagian
+            // rincian, hanya dirender di mode Harian.
+            if (showDetail) {
+                const posOrders = periodOrders.filter(x => x.channel === "POS1" || x.channel === "POS2");
+                renderRekapPosBreakdown(posOrders);
+                renderRekapPosKasir(posOrders);
+            }
 
-            // Rincian detail transaksi — paginasi (20/halaman), urut waktu transaksi asli terbaru→terlama.
-            rekapDetailSorted = periodOrders.slice().sort(function (a, b) {
-                return (fmtOrderDate(b) || "").localeCompare(fmtOrderDate(a) || "");
-            });
-            rekapDetailPage = 1;
-            renderRekapDetailPage();
+            // Rincian detail transaksi hanya di mode Harian (paginasi 20/halaman),
+            // urut waktu transaksi asli terbaru→terlama.
+            if (showDetail) {
+                rekapDetailSorted = periodOrders.slice().sort(function (a, b) {
+                    return (fmtOrderDate(b) || "").localeCompare(fmtOrderDate(a) || "");
+                });
+                rekapDetailPage = 1;
+                renderRekapDetailPage();
+            }
         }
 
         function renderPosHistory() {
