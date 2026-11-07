@@ -8243,8 +8243,11 @@
             const otherNote = document.getElementById("posPayOtherNote");
             const otherText = (otherNote && otherNote.style.display !== "none") ? otherNote.textContent : "";
 
+            // Judul cetak mengikuti mode: Bulanan / Harian (warna ungu via CSS print).
+            const modeLabel = rekapPenjualanMode === "hari" ? "Harian" : "Bulanan";
+
             area.innerHTML =
-                '<h2>Juwita One — Rekap Penjualan</h2>' +
+                '<h2>Juwita One — Rekap Penjualan ' + esc(modeLabel) + '</h2>' +
                 '<div class="rp-period">Periode: ' + esc(period) + '</div>' +
                 '<div class="rp-summary">' +
                     '<div>Total Omzet: <span>' + txt("rekapOmzet") + '</span></div>' +
