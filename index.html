@@ -8229,6 +8229,26 @@
             const rowsHtml = function (id) { const el = document.getElementById(id); return el && el.innerHTML ? el.innerHTML : ""; };
             const esc = function (s) { return String(s == null ? "" : s); };
 
+            // Baris detail transaksi untuk CETAK: SEMUA transaksi periode (bukan
+            // hanya halaman aktif di layar). Markup sama dengan layar supaya CSS
+            // print .rp-detail tetap berlaku.
+            const detailRowsHtml = function () {
+                const fmt = function (n) { return Number(n || 0).toLocaleString('id-ID'); };
+                if (!rekapDetailSorted || !rekapDetailSorted.length) {
+                    return '<tr><td colspan="5" style="text-align:center;padding:24px;">Tidak ada transaksi</td></tr>';
+                }
+                return rekapDetailSorted.map(function (o) {
+                    const badge = o.payStatus === "Lunas" ? "badge-lunas" : o.payStatus === "Batal" ? "badge-batal" : "badge-belum";
+                    return '<tr>' +
+                        '<td><strong>' + esc(o.orderId) + '</strong></td>' +
+                        '<td>' + rekapChannelBadge(o) + '</td>' +
+                        '<td>' + esc(fmtRekapWib(o)) + '</td>' +
+                        '<td>' + fmt(o.total) + '</td>' +
+                        '<td><span class="badge-status ' + badge + '">' + esc(o.payStatus || '-') + '</span></td>' +
+                    '</tr>';
+                }).join('');
+            };
+
             const payRows = [
                 ["CASH", txt("posPayCash")],
                 ["QRIS", txt("posPayQris")],
@@ -8267,7 +8287,7 @@
                       '<tbody>' + rowsHtml("rekapKasirBody") + '</tbody></table>' +
                       '<h3>Detail Transaksi</h3>' +
                       '<table class="rp-detail"><thead><tr><th>Order ID</th><th>Channel</th><th>Tanggal &amp; Jam</th><th>Total</th><th>Status</th></tr></thead>' +
-                      '<tbody>' + rowsHtml("rekapDetailBody") + '</tbody></table>'
+                      '<tbody>' + detailRowsHtml() + '</tbody></table>'
                     : '');
 
             // window.print() — dialog browser: pilih printer atau "Save as PDF".
