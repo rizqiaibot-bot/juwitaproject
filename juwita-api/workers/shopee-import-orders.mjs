@@ -1,6 +1,6 @@
 // ============================================================
 // Worker lokal: Shopee IMPORT orders (marketplace_orders → orders)
-// VPS, bukan Supabase. Jalankan via systemd timer (setelah pull).
+// VPS. Jalankan via systemd timer (setelah pull).
 //   DATABASE_URL         (dari .juwita-one-api.env)
 //   SHOPEE_PARTNER_ID, SHOPEE_PARTNER_KEY, SHOPEE_SHOP_ID
 //   SHOPEE2_PARTNER_ID, SHOPEE2_PARTNER_KEY, SHOPEE2_SHOP_ID

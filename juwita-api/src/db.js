@@ -2,7 +2,7 @@ import pg from "pg";
 
 const { Pool } = pg;
 
-// bigint (OID 20) → Number agar konsisten dengan respons Supabase (JSON number),
+// bigint (OID 20) → Number agar konsisten dengan respons API (JSON number),
 // sehingga perbandingan id di frontend (number) tetap bekerja. ID produk/order
 // di Juwita kecil (jauh di bawah 2^53) sehingga aman.
 pg.types.setTypeParser(20, (val) => {

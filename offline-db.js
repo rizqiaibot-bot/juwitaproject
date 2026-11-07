@@ -1,7 +1,7 @@
 // ============================================================
 // Juwita Offline DB — IndexedDB helper (native, tanpa library)
 // Digunakan POS offline: simpan transaksi ke antrean lokal,
-// lalu disinkronkan ke Supabase via RPC sync_offline_order.
+// lalu disinkronkan ke server via RPC sync_offline_order.
 // ============================================================
 (function (window) {
   "use strict";

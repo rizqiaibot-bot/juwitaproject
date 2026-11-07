@@ -1,5 +1,5 @@
 // ============================================================
-// Worker lokal: Shopee pull orders (VPS, bukan Supabase Edge Function)
+// Worker lokal: Shopee pull orders (VPS)
 // Jalankan via systemd timer / cron. Baca credential dari env.
 //   DATABASE_URL         (dari .juwita-one-api.env)
 //   SHOPEE_PARTNER_ID, SHOPEE_PARTNER_KEY, SHOPEE_SHOP_ID

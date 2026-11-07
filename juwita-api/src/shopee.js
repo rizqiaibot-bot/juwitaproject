@@ -1,5 +1,5 @@
 // ============================================================
-// Modul Shopee lokal — pengganti Edge Functions Supabase.
+// Modul Shopee lokal — pengganti Edge Function cloud lama.
 // Kredensial partner dibaca dari env (SHOPEE_PARTNER_ID/KEY untuk Shopee 1,
 // SHOPEE2_PARTNER_ID/KEY untuk Shopee 2),
 // access_token/refresh_token dari marketplace_credentials (PostgreSQL lokal),

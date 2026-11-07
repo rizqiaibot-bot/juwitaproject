@@ -1,7 +1,7 @@
 // ============================================================
 // JUWITA ONE — KONFIGURASI TERPUSAT
 // ============================================================
-// Backend mandiri di VPS Biznet (bukan Supabase).
+// Backend mandiri di VPS Biznet (PostgreSQL lokal).
 // API_BASE_URL kosong = same-origin (nginx mem-proxy /api).
 // JANGAN menaruh secret/service_role key di file ini (file ini publik).
 // ============================================================

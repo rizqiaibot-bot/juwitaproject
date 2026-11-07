@@ -3912,7 +3912,7 @@
     <!-- ===== JAVASCRIPT ===== -->
     <script>
         // ============================================================
-        // CLIENT LOKAL (VPS) — tanpa Supabase Cloud
+        // CLIENT LOKAL (VPS)
         // ============================================================
         const API_BASE_URL = (window.JUWITA_CONFIG && window.JUWITA_CONFIG.API_BASE_URL) || "";
         const JUWITA_TOKEN_KEY = "juwita_token";
@@ -3940,9 +3940,8 @@
         let sb = null;
 
         // ============================================================
-        // DATA LOKAL — pengganti Supabase JS (sb). Semua akses tabel/RPC
-        // diterjemahkan ke API lokal (PostgreSQL lokal). Tidak ada
-        // dependency Supabase Cloud.
+        // DATA LOKAL — client "sb" (query mirip SDK lama) diterjemahkan
+        // ke API lokal (PostgreSQL lokal). Tanpa dependency cloud eksternal.
         // ============================================================
         function makeLocalDb() {
             function qsOf(state) {
@@ -4019,7 +4018,7 @@
 
         let products = [];
         // productsLoaded: products berhasil diambil dari API (array, bisa kosong).
-        // dataLoading: initSupabaseData sedang berjalan (cegah fetch ganda).
+        // dataLoading: initLocalData sedang berjalan (cegah fetch ganda).
         let productsLoaded = false;
         let dataLoading = false;
 
@@ -4095,7 +4094,7 @@
             ensureOrdersPolling();
             // Pastikan data (produk POS, dll.) di-load SETELAH auth tersedia,
             // agar tidak bergantung pada fetch sebelum login yang gagal (401).
-            initSupabaseData(true);
+            initLocalData(true);
         }
 
         function hasPrivilege(priv) {
@@ -4235,9 +4234,9 @@
         }
 
         // ============================================================
-        // SUPABASE DATA LOADING
+        // DATA LOADING
         // ============================================================
-        // Supabase membatasi response 1000 row/request; muat SEMUA produk
+        // API membatasi response 1000 row/request; muat SEMUA produk
         // dengan pagination .range() sampai jumlah row < 1000.
         async function fetchAllProducts() {
             const all = [];
@@ -4457,7 +4456,7 @@
         window.loadStockMutations = loadStockMutations;
         window.submitStockAdjustment = submitStockAdjustment;
 
-        async function initSupabaseData(force) {
+        async function initLocalData(force) {
             if (dataLoading) return;
             if (!currentUser) return;
             if (productsLoaded && !force) return;
@@ -4501,15 +4500,15 @@
                             });
                         }
                     } catch (attErr) {
-                        console.warn("Supabase: attendance_records belum tersedia (jalankan migration)", attErr.message);
+                        console.warn("Data: attendance_records belum tersedia (jalankan migration)", attErr.message);
                     }
                 }
                 if (canReadWarehouse() && (wRecRes.error || wRackRes.error || wOpRes.error)) {
                     seedWarehouseData();
                 }
-                console.log("Supabase: data loaded");
+                console.log("Data: loaded");
             } catch (err) {
-                console.warn("Supabase: using local data fallback", err.message);
+                console.warn("Data: fallback data lokal", err.message);
             }
             dataLoading = false;
             // Harga per channel hanya untuk menu yang berhak.
@@ -4551,7 +4550,7 @@
         // LIVE REFRESH ORDER (POLLING RINGAN 30 DETIK)
         // Tujuan: transaksi Shopee hasil scheduler muncul di halaman
         // Penjualan Juwita One TANPA reload (F5).
-        // Hanya fetch orders + order_items (bukan initSupabaseData penuh).
+        // Hanya fetch orders + order_items (bukan initLocalData penuh).
         // Aman untuk POS: TIDAK menyentuh cart/stock/currentPage/idempotency.
         // ============================================================
         function mapOrderRowToView(o) {
@@ -4631,12 +4630,12 @@
         }
 
         // Polling hanya boleh jalan setelah sesi authenticated. Auth memakai
-        // session Supabase aktif (client sb) — tanpa service-role key/secret.
+        // sesi login aktif (client lokal) — tanpa service-role key/secret.
         async function isOrdersPollAllowed() {
             return !!currentUser && canReadOrders();
         }
 
-        // Fetch polling dengan pagination penuh. Tanpa pagination, Supabase hanya
+        // Fetch polling dengan pagination penuh. Tanpa pagination, API hanya
         // mengembalikan batch terbatas (default) sehingga menimpa ordersData dengan
         // data terpotong → order lama hilang dari daftar/rekap.
         async function fetchAllOrdersLight() {
@@ -6219,7 +6218,7 @@
             const deleted = Array.isArray(deletedPayload) ? deletedPayload : (deletedPayload ? [deletedPayload] : []);
             if (deleted.length === 0) {
                 showToast("Produk tidak ditemukan atau sudah dihapus");
-                await initSupabaseData(true);
+                await initLocalData(true);
                 return;
             }
             products = products.filter(p => p.id !== id);
@@ -6371,7 +6370,7 @@
                 }
                 if (data && data.ok && data.item_id) {
                     showToast("Publish berhasil. Item ID Shopee: " + data.item_id);
-                    await initSupabaseData(true);
+                    await initLocalData(true);
                 } else {
                     showToast("Publish gagal: " + ((data && data.error) ? data.error : "Unknown error"));
                 }
@@ -10353,7 +10352,7 @@
                     if (pendingPhotoData !== null) updates.imageicon = pendingPhotoData;
                     const { error: upErr } = await sb.from('products').update(updates).eq('id', editingProductId);
                     if (upErr) {
-                        console.error("Supabase update product error:", upErr.message);
+                        console.error("Update product error:", upErr.message);
                         showToast("Gagal menyimpan perubahan: " + upErr.message);
                         return;
                     }
@@ -10400,7 +10399,7 @@
                     shopee_sku
                 };
 
-                // INSERT ke Supabase — id produk diambil dari MAX(id) di tabel (bukan array lokal).
+                // INSERT produk — id diambil dari MAX(id) di tabel (bukan array lokal).
                 // Retry maks 5x bila tabrakan pkey (error 23505): ambil MAX(id) terbaru lalu coba lagi.
                 let saved = null;
                 let lastInsErr = null;
@@ -10411,7 +10410,7 @@
                         .order('id', { ascending: false })
                         .limit(1);
                     if (maxErr) {
-                        console.error("Supabase max product id error:", maxErr.message);
+                        console.error("Max product id error:", maxErr.message);
                         showToast("Gagal menyimpan produk: " + maxErr.message);
                         return;
                     }
@@ -10424,14 +10423,14 @@
                         break;
                     }
                     if (insErr.code !== '23505') {
-                        console.error("Supabase insert product error:", insErr.message);
+                        console.error("Insert product error:", insErr.message);
                         showToast("Gagal menyimpan produk: " + insErr.message);
                         return;
                     }
                     lastInsErr = insErr;
                 }
                 if (!saved) {
-                    console.error("Supabase insert product error (retry habis):", lastInsErr ? lastInsErr.message : "duplicate product id");
+                    console.error("Insert product error (retry habis):", lastInsErr ? lastInsErr.message : "duplicate product id");
                     showToast("Gagal menyimpan produk: " + (lastInsErr ? lastInsErr.message : "duplicate product id"));
                     return;
                 }
@@ -10596,8 +10595,8 @@
                 if (ok) closePhoneLogin();
             });
 
-            // --- LOAD DATA FROM SUPABASE ---
-            initSupabaseData();
+            // --- LOAD DATA ---
+            initLocalData();
             ensureOrdersPolling();
 
             // --- OFFLINE POS INIT ---

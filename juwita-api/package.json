@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Backend API Juwita One (mandiri, tanpa Supabase)",
+  "description": "Backend API Juwita One (mandiri di VPS Biznet)",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
