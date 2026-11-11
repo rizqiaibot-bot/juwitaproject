@@ -4466,26 +4466,37 @@
             renderProducts(currentSearch, posCategory);
             const empty = { data: [], error: null };
             try {
-                // Produk dimuat & ditampilkan LEBIH DULU supaya grid POS cepat
-                // muncul, tanpa menunggu orders/order_items/gudang selesai dimuat.
                 const pPromise = canReadProducts() ? fetchAllProducts() : Promise.resolve(empty);
-                if (canReadProducts()) {
-                    pPromise.then(function (pRes) {
+                const oPromise = canReadOrders() ? fetchAllOrders() : Promise.resolve(empty);
+                const oiPromise = canReadOrders() ? fetchAllOrderItems() : Promise.resolve(empty);
+                // Grid POS dirender BEGITU produk + orders + order_items siap —
+                // urutan "sering terjual" sudah benar sejak awal sehingga produk
+                // TIDAK berubah-ubah, tanpa menunggu data gudang/harga/absensi.
+                Promise.all([pPromise, oPromise, oiPromise]).then(function (parts) {
+                    const pRes = parts[0], oRes = parts[1], oiRes = parts[2];
+                    if (canReadProducts()) {
                         if (pRes.data != null) {
                             products = pRes.data;
                             productsLoaded = true;
-                            renderProducts(currentSearch, posCategory);
                         }
-                    }).catch(function () {});
-                }
+                    } else {
+                        products = [];
+                        productsLoaded = true;
+                    }
+                    if (canReadOrders()) {
+                        ordersData = (oRes.data && oRes.data.length > 0) ? oRes.data.map(mapOrderRowToView) : [];
+                        orderItemsData = (oiRes.data && oiRes.data.length > 0) ? oiRes.data : [];
+                    }
+                    renderProducts(currentSearch, posCategory);
+                }).catch(function () {});
                 const [pRes, oRes, kRes, wRecRes, wRackRes, wOpRes, oiRes] = await Promise.all([
                     pPromise,
-                    canReadOrders() ? fetchAllOrders() : Promise.resolve(empty),
+                    oPromise,
                     canReadAppUsers() ? sb.from('karyawan').select('*') : Promise.resolve(empty),
                     canReadWarehouse() ? sb.from('warehouse_receiving').select('*').order('received_date', { ascending: false }) : Promise.resolve(empty),
                     canReadWarehouse() ? sb.from('warehouse_racks').select('*') : Promise.resolve(empty),
                     canReadWarehouse() ? sb.from('warehouse_opname').select('*').order('session_date', { ascending: false }) : Promise.resolve(empty),
-                    canReadOrders() ? fetchAllOrderItems() : Promise.resolve(empty)
+                    oiPromise
                 ]);
                 if (canReadProducts()) {
                     if (pRes.data != null) { products = pRes.data; productsLoaded = true; }

@@ -9,7 +9,7 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 **Percepat load produk di POS (`index.html`):**
 - Grid produk sebelumnya menunggu SEMUA data (orders, order_items, gudang, harga) selesai baru dirender.
-- Sekarang: produk dirender begitu 1 request produk selesai (tidak menunggu sisanya).
+- Sekarang: grid dirender begitu **produk + orders + order_items** siap (urutan "sering terjual" langsung benar, produk tidak berubah-ubah di layar), tanpa menunggu gudang/harga/absensi.
 - Pagination fetch 1.000 → **5.000 baris** (produk 2→1 request, orders 4→1, order_items 6→2; polling live ikut ringan).
 - `computeShopeeQtyMap` di-memoize (dihitung ulang hanya saat data diganti, bukan tiap render).
 - Belum ada perubahan server (limit API maksimal sudah 5000 dari dulu).
