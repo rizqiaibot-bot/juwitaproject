@@ -4246,12 +4246,12 @@
                     .from('products')
                     .select('*')
                     .order('id', { ascending: true })
-                    .range(from, from + 999);
+                    .range(from, from + 4999);
                 if (error) return { data: null, error };
                 const rows = data || [];
                 all.push(...rows);
-                if (rows.length < 1000) break;
-                from += 1000;
+                if (rows.length < 5000) break;
+                from += 5000;
             }
             return { data: all, error: null };
         }
@@ -4268,12 +4268,12 @@
                     .from('orders')
                     .select('*')
                     .order('orderid', { ascending: true })
-                    .range(from, from + 999);
+                    .range(from, from + 4999);
                 if (error) return { data: null, error };
                 const rows = data || [];
                 all.push(...rows);
-                if (rows.length < 1000) break;
-                from += 1000;
+                if (rows.length < 5000) break;
+                from += 5000;
             }
             all.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
             return { data: all, error: null };
@@ -4289,12 +4289,12 @@
                     .from('order_items')
                     .select('*')
                     .order('id', { ascending: true })
-                    .range(from, from + 999);
+                    .range(from, from + 4999);
                 if (error) return { data: null, error };
                 const rows = data || [];
                 all.push(...rows);
-                if (rows.length < 1000) break;
-                from += 1000;
+                if (rows.length < 5000) break;
+                from += 5000;
             }
             return { data: all, error: null };
         }
@@ -4466,8 +4466,20 @@
             renderProducts(currentSearch, posCategory);
             const empty = { data: [], error: null };
             try {
+                // Produk dimuat & ditampilkan LEBIH DULU supaya grid POS cepat
+                // muncul, tanpa menunggu orders/order_items/gudang selesai dimuat.
+                const pPromise = canReadProducts() ? fetchAllProducts() : Promise.resolve(empty);
+                if (canReadProducts()) {
+                    pPromise.then(function (pRes) {
+                        if (pRes.data != null) {
+                            products = pRes.data;
+                            productsLoaded = true;
+                            renderProducts(currentSearch, posCategory);
+                        }
+                    }).catch(function () {});
+                }
                 const [pRes, oRes, kRes, wRecRes, wRackRes, wOpRes, oiRes] = await Promise.all([
-                    canReadProducts() ? fetchAllProducts() : Promise.resolve(empty),
+                    pPromise,
                     canReadOrders() ? fetchAllOrders() : Promise.resolve(empty),
                     canReadAppUsers() ? sb.from('karyawan').select('*') : Promise.resolve(empty),
                     canReadWarehouse() ? sb.from('warehouse_receiving').select('*').order('received_date', { ascending: false }) : Promise.resolve(empty),
@@ -4646,12 +4658,12 @@
                     .from('orders')
                     .select('orderid,date,channel,customer,total,paystatus,wmsstatus,courier,resi,shop_id,picked_at,picked_by,packed_at,packed_by,shipped_at,shipped_by,payment_method,bayar,kembalian,kasir')
                     .order('orderid', { ascending: true })
-                    .range(from, from + 999);
+                    .range(from, from + 4999);
                 if (error) return { data: null, error };
                 const rows = data || [];
                 all.push(...rows);
-                if (rows.length < 1000) break;
-                from += 1000;
+                if (rows.length < 5000) break;
+                from += 5000;
             }
             return { data: all, error: null };
         }
@@ -4667,12 +4679,12 @@
                     .from('order_items')
                     .select('id,orderid,product_id,product_name,qty,price,subtotal')
                     .order('id', { ascending: true })
-                    .range(from, from + 999);
+                    .range(from, from + 4999);
                 if (error) return { data: null, error };
                 const rows = data || [];
                 all.push(...rows);
-                if (rows.length < 1000) break;
-                from += 1000;
+                if (rows.length < 5000) break;
+                from += 5000;
             }
             return { data: all, error: null };
         }
@@ -5193,7 +5205,15 @@
         // data lokal DB — TIDAK memanggil API Shopee. Order yang dibatalkan
         // (CANCELLED/FAILED/IN_CANCEL/TO_RETURN) tidak pernah masuk orders,
         // jadi cukup filter channel='Shopee'.
+        let _shopeeQtyCacheOrders = null;
+        let _shopeeQtyCacheItems = null;
+        let _shopeeQtyCache = null;
+        // Memo: peta qty dihitung ulang hanya bila ordersData/orderItemsData
+        // diganti (init/polling). Render produk jadi tidak mengulang loop besar.
         function computeShopeeQtyMap() {
+            if (_shopeeQtyCache && _shopeeQtyCacheOrders === ordersData && _shopeeQtyCacheItems === orderItemsData) {
+                return _shopeeQtyCache;
+            }
             const qty = {};
             const shopeeIds = new Set();
             for (let i = 0; i < ordersData.length; i++) {
@@ -5206,6 +5226,9 @@
                 if (!pid) continue;
                 qty[pid] = (qty[pid] || 0) + (Number(oi.qty) || 0);
             }
+            _shopeeQtyCacheOrders = ordersData;
+            _shopeeQtyCacheItems = orderItemsData;
+            _shopeeQtyCache = qty;
             return qty;
         }
 

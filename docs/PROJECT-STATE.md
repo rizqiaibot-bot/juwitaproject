@@ -1,11 +1,33 @@
 # PROJECT STATE — Juwita
 
-Terakhir diperbarui: **7 November 2026** (import 853 produk + isi 46 barcode dari sheet; radius presensi 100 → 20 m).
+Terakhir diperbarui: **11 November 2026** (percepat load tampilan produk di POS; UNDO import Google Sheet 7 Nov).
 Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat sesi baru.
 
 ---
 
-## 0. PENGINGAT SESI TERAKHIR (7 Nov 2026)
+## 0. PENGINGAT SESI TERAKHIR (11 Nov 2026)
+
+**Percepat load produk di POS (`index.html`):**
+- Grid produk sebelumnya menunggu SEMUA data (orders, order_items, gudang, harga) selesai baru dirender.
+- Sekarang: produk dirender begitu 1 request produk selesai (tidak menunggu sisanya).
+- Pagination fetch 1.000 → **5.000 baris** (produk 2→1 request, orders 4→1, order_items 6→2; polling live ikut ringan).
+- `computeShopeeQtyMap` di-memoize (dihitung ulang hanya saat data diganti, bukan tiap render).
+- Belum ada perubahan server (limit API maksimal sudah 5000 dari dulu).
+
+---
+
+## 0a. PENGINGAT SESI SEBELUMNYA (9 Nov 2026)
+
+**UNDO import Google Sheet 7 Nov (atas permintaan user, "tertumpuk" di POS):**
+- **845 produk `SH-` (id 2308–3160) dihapus** dari DB — semua stok 0, nol referensi di semua tabel (sudah diaudit).
+- **47 barcode di produk lama dikosongkan** (2 H1 + 45 H3 dari sheet; sebelumnya memang kosong).
+- **10 produk `JFF-` (dibuat 8 Nov, ada stok 92 unit + mapping Shopee 2) TIDAK disentuh.**
+- Backup: `/tmp/juwita_products_backup_20261109_114230_undo.dump` + `/tmp/juwita_sh_products_20261109_114230_undo.csv` (di VPS). Skrip: `data/undo-sheet-import.sh` (belum di-commit).
+- Kondisi sekarang: **1.856 produk** total (1.232 dengan barcode, 624 tanpa). File `barcode-review-2026-11-07.csv` di Downloads masih berlaku untuk kandidat H3/H4 bila ingin dipasang lagi.
+
+---
+
+## 0b. PENGINGAT SESI SEBELUMNYA (7 Nov 2026)
 
 Yang dikerjakan & di-deploy di sesi terakhir (semua sudah commit + push, `main` bersih):
 
@@ -54,10 +76,20 @@ Commit terakhir: `a5b1fe3`. Deploy otomatis via GitHub Actions (push `main` → 
 
 ## 2. Progres barcode
 
+> **Update 9 Nov 2026 (UNDO):** hasil import sheet 7 Nov sudah dibatalkan atas permintaan user ("tertumpuk" di POS):
+> - **845 produk `SH-` dihapus**; **47 barcode di produk lama dikosongkan** (2 H1 + 45 H3). 10 produk `JFF-` (8 Nov, manual + Shopee 2) tetap.
+> - Kondisi sekarang: **1.856 produk** total — **1.232 dengan barcode**, **624 tanpa barcode**.
+> - Kalau suatu saat mau import lagi, skrip tetap ada: `juwita-api/scripts/import-new-products.mjs`; review kandidat lama di `Downloads\barcode-review-2026-11-07.csv`.
+
+<details>
+<summary>Riwayat 7 Nov 2026 (sudah di-undo) — klik untuk buka</summary>
+
 > **Update 7 Nov 2026:** memakai sheet baru **"Database Produk"** `https://docs.google.com/spreadsheets/d/1P5pIc-Qoj1FCkCP2GnYwvGdx6NqKLg79` (1 tab). Hasil:
 > - **46 barcode diisi** ke produk lama: 2 H1 + 44 H3 (barcode EAN valid, merek & ukuran sama). H2 dilewati (barcode `UKBEN` palsu).
 > - **853 produk baru diimport** dari sheet (553 dengan barcode valid, 300 tanpa), stok 0, id mulai 2308, SKU `SH-<kode item>`. Skrip: `juwita-api/scripts/import-new-products.mjs`.
 > - Total produk: **2.711**. Dengan barcode: **1.787**. Tanpa barcode: **924** (sebagian besar frozen food yang tidak ada di sheet).
+
+</details>
 
 Sumber lama: Google Sheet **"Database Produk"**
 `https://docs.google.com/spreadsheets/d/18R4x0KQX29Cwsr5NieCZ_NaUVvB9t6EHS13nlUbxQuA` (tab `gid=820631729`).
@@ -70,7 +102,7 @@ Sudah dipasang **2 Nov 2026**: **33 produk / 22 barcode unik**
 - H2 = 12 produk (beda hanya kata promosi: FRESH, HALAL, ALL VARIAN, PENGIRIMAN CEPAT, ...)
 
 Sisa:
-- **924 produk tanpa barcode** (1.787 sudah punya).
+- **624 produk tanpa barcode** (1.232 sudah punya).
 - Kandidat belum dipasang (dari sheet 7 Nov): 18 H3 ragu (beda varian / barcode mencurigakan) + 38 H4 (ukuran/isi beda).
   Laporan: `C:\Users\rizqi\Downloads\barcode-review-2026-11-07.csv` (bisa hilang → generate ulang dengan skrip di bawah).
 - Sebagian besar produk tanpa barcode adalah **frozen food yang tidak ada di sheet** — sheet mayoritas katalog minimarket (YAKULT, AQUA, SASA, dll). Kemungkinan ada sheet/tab lain untuk frozen food.
