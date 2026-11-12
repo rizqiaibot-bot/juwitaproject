@@ -823,19 +823,30 @@ test("Detach mapping ditolak jika masih ada riwayat transaksi", async () => {
   fakeRefs.order_items = 0;
 });
 
-test("Gudang boleh membuka endpoint opname, Katalog tidak", async () => {
-  const denied = await call("/api/gudang/opname", "POST", "katalog-id", { zone: "A" });
-  assert.equal(denied.status, 403);
+test("Endpoint opname gudang terbuka untuk semua karyawan aktif (menu general)", async () => {
+  // Karyawan NONAKTIF ditolak sebelum otorisasi menu.
+  const inactive = await call("/api/gudang/opname", "POST", "off-id", { zone: "A" });
+  assert.equal(inactive.status, 401);
+  // Karyawan tanpa menu gudang (katalog) tetap lolos guard → body invalid 400.
+  const general = await call("/api/gudang/opname", "POST", "katalog-id", {});
+  assert.equal(general.status, 400);
   const allowed = await call("/api/gudang/opname", "POST", "gudang-id", {});
   assert.equal(allowed.status, 400); // guard lolos, body invalid
 });
 
 test("Gudang menerima PO: stok, modal, item, status, dan mutasi konsisten", async () => {
   Object.keys(captured).forEach((k) => delete captured[k]);
-  const denied = await call("/api/gudang/purchases/5/receive", "POST", "katalog-id", {
+  // Menu gudang general: karyawan tanpa menu gudang (katalog) juga boleh.
+  const general = await call("/api/gudang/purchases/5/receive", "POST", "katalog-id", {
     items: [{ purchase_item_id: 11, qty: 3 }],
   });
-  assert.equal(denied.status, 403);
+  assert.equal(general.status, 200);
+  // Karyawan NONAKTIF tetap ditolak.
+  const denied = await call("/api/gudang/purchases/5/receive", "POST", "off-id", {
+    items: [{ purchase_item_id: 11, qty: 3 }],
+  });
+  assert.equal(denied.status, 401);
+  delete captured.tx; // mulai bersih untuk panggilan utama di bawah
 
   const r = await call("/api/gudang/purchases/5/receive", "POST", "gudang-id", {
     items: [{ purchase_item_id: 11, qty: 3 }],
@@ -872,10 +883,16 @@ test("Gudang penerimaan menolak item duplikat", async () => {
 
 test("Gudang picking/packing memakai endpoint tervalidasi, bukan update orders bebas", async () => {
   Object.keys(captured).forEach((k) => delete captured[k]);
-  const denied = await call("/api/orders/ORD-1", "PATCH", "katalog-id", { p_action: "pick" });
-  assert.equal(denied.status, 403);
+  // Karyawan NONAKTIF ditolak sebelum otorisasi menu.
+  const inactive = await call("/api/orders/ORD-1", "PATCH", "off-id", { p_action: "pick" });
+  assert.equal(inactive.status, 401);
   const invalid = await call("/api/orders/ORD-1", "PATCH", "gudang-id", { p_action: "hapus" });
   assert.equal(invalid.status, 400);
+
+  // Menu gudang general: karyawan tanpa menu gudang (katalog) juga boleh pick.
+  const generalPick = await call("/api/orders/ORD-1", "PATCH", "katalog-id", { p_action: "pick" });
+  assert.equal(generalPick.status, 200);
+  assert.equal(generalPick.data.data.wmsstatus, "Dipick");
 
   const picked = await call("/api/orders/ORD-1", "PATCH", "gudang-id", {
     p_action: "pick", p_petugas: "PALSU",

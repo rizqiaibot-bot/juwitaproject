@@ -46,10 +46,12 @@ test("owner memiliki akses penuh", () => {
   assert.equal(checkProductColumns(owner, ["price", "stock", "unknown"], "update"), true);
 });
 
-test("tanpa menu ditolak (default-deny)", () => {
+test("tanpa menu: default-deny kecuali operasi menu general (gudang)", () => {
   for (const table of Object.keys(DATA_TABLE_ACCESS)) {
     for (const op of ["read", "create", "update", "delete"]) {
-      assert.equal(checkTableAccess(noMenu, table, op), false, `${table}.${op}`);
+      const rule = DATA_TABLE_ACCESS[table][op];
+      const isGeneral = Array.isArray(rule) && rule.includes("gudang");
+      assert.equal(checkTableAccess(noMenu, table, op), isGeneral, `${table}.${op}`);
     }
   }
   assert.equal(checkTableAccess(noMenu, "table_tidak_ada", "read"), false);
@@ -125,7 +127,8 @@ test("matriks tabel operasional per menu", () => {
   assert.equal(allow(penjualan, "orders", "read"), true);
   assert.equal(allow(penjualan, "order_items", "read"), true);
   assert.equal(deny(penjualan, "products", "update"), true);
-  assert.equal(deny(penjualan, "suppliers", "read"), true);
+  // suppliers/purchases read memuat menu gudang (general) → boleh semua karyawan.
+  assert.equal(allow(penjualan, "suppliers", "read"), true);
 
   assert.equal(allow(katalog, "products", "create"), true);
   assert.equal(allow(katalog, "products", "update"), true);
@@ -150,7 +153,8 @@ test("matriks tabel operasional per menu", () => {
   assert.equal(allow(pricing, "products", "read"), true);
   assert.equal(allow(pricing, "products", "update"), true);
   assert.equal(deny(pricing, "products", "delete"), true);
-  assert.equal(deny(pricing, "stock_mutations", "read"), true);
+  // stock_mutations read memuat menu gudang (general) → boleh semua karyawan.
+  assert.equal(allow(pricing, "stock_mutations", "read"), true);
 
   assert.equal(allow(akuntansi, "accounting_transactions", "create"), true);
   assert.equal(allow(akuntansi, "accounting_transactions", "delete"), true);
@@ -166,7 +170,7 @@ test("matriks tabel operasional per menu", () => {
   assert.equal(deny(pengaturan, "marketplace_config", "update"), true);
 });
 
-test("read produk/harga dibatasi menu pembaca", () => {
+test("read produk: semua karyawan aktif bisa baca (menu gudang general)", () => {
   assert.equal(checkTableAccess(pos, "products", "read"), true);
   assert.equal(checkTableAccess(penjualan, "products", "read"), true);
   assert.equal(checkTableAccess(katalog, "products", "read"), true);
@@ -174,9 +178,9 @@ test("read produk/harga dibatasi menu pembaca", () => {
   assert.equal(checkTableAccess(pembelian, "products", "read"), true);
   assert.equal(checkTableAccess(gudang, "products", "read"), true);
   assert.equal(checkTableAccess(pricing, "products", "read"), true);
-  assert.equal(checkTableAccess(hr, "products", "read"), false);
-  assert.equal(checkTableAccess(pengaturan, "products", "read"), false);
-  assert.equal(checkTableAccess(akuntansi, "products", "read"), false);
+  assert.equal(checkTableAccess(hr, "products", "read"), true);
+  assert.equal(checkTableAccess(pengaturan, "products", "read"), true);
+  assert.equal(checkTableAccess(akuntansi, "products", "read"), true);
 });
 
 test("gudang: baca PO, tulis PO generik ditolak, order generik ditolak", () => {
@@ -199,7 +203,8 @@ test("HR: presensi/jadwal, bukan akun/role", () => {
   assert.equal(checkTableAccess(hr, "app_users", "read"), true);
   assert.equal(checkTableAccess(hr, "app_users", "update"), false);
   assert.equal(checkTableAccess(hr, "app_users", "delete"), false);
-  assert.equal(checkTableAccess(hr, "products", "read"), false);
+  // produk read memuat menu gudang (general) → boleh semua karyawan.
+  assert.equal(checkTableAccess(hr, "products", "read"), true);
 });
 
 test("pengaturan hanya administratif owner; read config terbatas", () => {
@@ -207,7 +212,8 @@ test("pengaturan hanya administratif owner; read config terbatas", () => {
   assert.equal(checkTableAccess(pengaturan, "app_users", "update"), false);
   assert.equal(checkTableAccess(pengaturan, "marketplace_config", "read"), true);
   assert.equal(checkTableAccess(pengaturan, "marketplace_config", "update"), false);
-  assert.equal(checkTableAccess(pengaturan, "products", "read"), false);
+  // produk read memuat menu gudang (general) → boleh semua karyawan.
+  assert.equal(checkTableAccess(pengaturan, "products", "read"), true);
 });
 
 test("akuntansi: transaksi CRUD, akun read-only", () => {

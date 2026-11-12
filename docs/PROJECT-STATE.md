@@ -1,11 +1,31 @@
 # PROJECT STATE — Juwita
 
-Terakhir diperbarui: **11 November 2026** (percepat load tampilan produk di POS; UNDO import Google Sheet 7 Nov).
+Terakhir diperbarui: **12 November 2026** (menu gudang general untuk semua karyawan + push pengiriman ke Shopee saat "Kirim").
 Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat sesi baru.
 
 ---
 
-## 0. PENGINGAT SESI TERAKHIR (11 Nov 2026)
+## 0. PENGINGAT SESI TERAKHIR (12 Nov 2026)
+
+**1. Menu GUDANG = general (semua karyawan aktif):**
+- `permissions.js`: `GENERAL_MENUS = ["gudang"]`; `checkTableAccess` mengizinkan operasi apa pun yang daftar menunya memuat gudang (mis. read orders/order_items/produk/PO/stock_mutations/warehouse_*); operasi menu lain tetap menu-bound (stok update, retry mutasi, aksi Shopee TIDAK ikut general).
+- `server.js`: `checkMenuAccess` — gudang lolos untuk semua karyawan aktif.
+- `index.html`: `getMenuPermissions`/`hasAnyMenu` mengenal `GENERAL_MENUS`; karyawan tanpa menu apa pun diarahkan ke halaman gudang (`defaultPageForMenu(... || "gudang")` → Penerimaan).
+- Test disesuaikan (84 lulus). Karyawan NONAKTIF tetap ditolak (401).
+
+**2. Push pengiriman ke Shopee (alur penuh pick/pack/ship):**
+- Aksi **Kirim** (`record_warehouse_action('ship')`) pada order channel Shopee kini otomatis memanggil `pushShipment` (`shopee.js`): `logistics/get_shipping_parameter` → `logistics/ship_order`.
+  - Channel **non-integrated** (kurir sendiri): kirim `non_integrated.tracking_number = resi` → status Shopee ikut berubah (LOGISTICS_PICKUP_DONE → SHIPPED).
+  - Channel **pickup**: pakai alamat `default_address` + slot pertama (boleh kosong).
+  - Channel **dropoff**: belum otomatis → `needs_manual` (atur di Seller Centre).
+- Gagal push TIDAK membatalkan status lokal 'Dikirim'; hasilnya masuk `activity_log` (event `ORDER_SHIP`, direction OUT) dan muncul sebagai toast di HP.
+- Kill switch: `SHOPEE_SHIP_PUSH=0` (default aktif). Tidak dipakai saat NODE_ENV=test.
+- Catatan: pick/pack TIDAK bisa dipush ke Shopee karena Shopee tidak punya status picking/packing — hanya pengiriman yang ada padanannya.
+- **Commit + deploy dilakukan 12 Nov 2026, dengan instruksi user: toko Shopee TETAP `disconnected`, JANGAN Connect sampai ada arahan.** Token masih invalid; push pengiriman akan gagal aman ("disconnected/token tidak tersedia") sampai Connect lagi.
+
+---
+
+## 0a. PENGINGAT SESI SEBELUMNYA (11 Nov 2026)
 
 **Percepat load produk di POS (`index.html`):**
 - Grid produk sebelumnya menunggu SEMUA data (orders, order_items, gudang, harga) selesai baru dirender.
@@ -16,7 +36,7 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ---
 
-## 0a. PENGINGAT SESI SEBELUMNYA (9 Nov 2026)
+## 0b. PENGINGAT SESI SEBELUMNYA (9 Nov 2026)
 
 **UNDO import Google Sheet 7 Nov (atas permintaan user, "tertumpuk" di POS):**
 - **845 produk `SH-` (id 2308–3160) dihapus** dari DB — semua stok 0, nol referensi di semua tabel (sudah diaudit).
@@ -27,7 +47,7 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ---
 
-## 0b. PENGINGAT SESI SEBELUMNYA (7 Nov 2026)
+## 0c. PENGINGAT SESI SEBELUMNYA (7 Nov 2026)
 
 Yang dikerjakan & di-deploy di sesi terakhir (semua sudah commit + push, `main` bersih):
 

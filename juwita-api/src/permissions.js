@@ -19,6 +19,12 @@ export const MENU_TOKENS = Object.freeze([
   "pengaturan",
 ]);
 
+// Menu yang otomatis dimiliki SEMUA karyawan aktif tanpa perlu dicentang di
+// Pengaturan → Karyawan. Saat ini: gudang (picking/packing/pengiriman harus
+// bisa dikerjakan dari HP oleh karyawan mana pun). Akses menulis tetap dibatasi
+// operasi yang memang milik menu gudang (tidak meluas ke menu lain).
+export const GENERAL_MENUS = Object.freeze(["gudang"]);
+
 export const MARKETPLACE_READ_MENUS = Object.freeze([
   "pengaturan",
   "penjualan",
@@ -228,6 +234,10 @@ export function checkTableAccess(user, table, op) {
   if (!rule) return false; // default-deny
   const allowed = rule[op];
   if (!Array.isArray(allowed) || allowed.length === 0) return false;
+  // Menu general: operasi yang diizinkan untuk menu gudang otomatis berlaku
+  // untuk semua karyawan aktif (contoh: baca orders/order_items/produk untuk
+  // picking-packing). Operasi milik menu lain tetap menu-bound.
+  if (allowed.some((m) => GENERAL_MENUS.includes(m))) return true;
   return userHasAnyMenu(user, allowed);
 }
 

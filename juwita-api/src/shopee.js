@@ -1202,3 +1202,113 @@ export async function syncPriceOne(productId, channel) {
   }
   return { ok: r.ok, skipped: !!r.skipped, error: r.ok ? null : r.error };
 }
+
+// ============================================================
+// PENGIRIMAN (ship) → Shopee
+// Saat order Shopee ditandai 'Kirim' di Gudang, kirim status pengiriman ke
+// Shopee (logistics/ship_order) supaya status di Seller Centre ikut berubah.
+// - Channel non-integrated (seller pakai kurir sendiri): kirim resi.
+// - Channel pickup: pakai alamat default + slot pertama (boleh kosong, Shopee
+//   yang menentukan waktu bila channel tidak menyediakan slot).
+// - Channel dropoff: belum didukung otomatis → minta diatur di Seller Centre.
+// ============================================================
+function shipmentPushDisabled() {
+  return String(process.env.SHOPEE_SHIP_PUSH || "1") === "0";
+}
+
+async function getShippingParameter(acc, accessToken, orderSn) {
+  const ts = Math.floor(Date.now() / 1000);
+  const path = "/api/v2/logistics/get_shipping_parameter";
+  const sign = await signShopee(acc.partner_id, acc.partner_key, path, ts, accessToken, acc.shop_id);
+  const p = new URLSearchParams({
+    partner_id: acc.partner_id, timestamp: String(ts), sign,
+    shop_id: acc.shop_id, access_token: accessToken, order_sn: String(orderSn),
+  });
+  const { body } = await fetchJson(`${SHOPEE_API_URL}${path}?${p}`);
+  if (body.error) return { error: String(body.error), message: body.message || "", response: null };
+  return { error: null, message: null, response: body.response || {} };
+}
+
+async function shipOrderRequest(acc, accessToken, orderSn, payload) {
+  const ts = Math.floor(Date.now() / 1000);
+  const path = "/api/v2/logistics/ship_order";
+  const sign = await signShopee(acc.partner_id, acc.partner_key, path, ts, accessToken, acc.shop_id);
+  const auth = new URLSearchParams({
+    partner_id: acc.partner_id, timestamp: String(ts), sign,
+    shop_id: acc.shop_id, access_token: accessToken,
+  });
+  const { res, body } = await fetchJson(`${SHOPEE_API_URL}${path}?${auth}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ order_sn: String(orderSn), ...payload }),
+  });
+  if (!res.ok) return { ok: false, error: "HTTP " + res.status, message: "" };
+  if (body.error) return { ok: false, error: String(body.error), message: body.message || "" };
+  return { ok: true, response: body.response || {} };
+}
+
+// Push pengiriman order Shopee. Dipanggil setelah record_warehouse_action('ship')
+// berhasil. Gagal push TIDAK membatalkan status 'Dikirim' lokal.
+export async function pushShipment(shopId, orderSn, resi) {
+  if (shipmentPushDisabled()) {
+    return { ok: false, error: "push pengiriman ke Shopee dimatikan (SHOPEE_SHIP_PUSH=0)" };
+  }
+  if (!shopId || !orderSn) return { ok: false, error: "order_sn/toko tidak tersedia" };
+
+  // Hanya toko 'connected' (konsisten dengan sync stok).
+  const accounts = await loadAccounts();
+  const acc = accounts.find((a) => a.shop_id === String(shopId));
+  if (!acc || !acc.partner_id) {
+    return { ok: false, error: "toko Shopee disconnected / akun tidak tersedia" };
+  }
+
+  const { access_token, refresh_token } = await ensureToken(acc);
+  if (!access_token) return { ok: false, error: "token Shopee tidak tersedia" };
+  let token = access_token;
+
+  let info = await getShippingParameter(acc, token, orderSn);
+  if (info.error && refresh_token && isAuthError(info.error + " " + (info.message || ""))) {
+    const r = await refreshToken(acc, acc.shop_id, refresh_token);
+    if (r.access_token) {
+      token = r.access_token;
+      info = await getShippingParameter(acc, token, orderSn);
+    }
+  }
+  if (info.error) return { ok: false, error: info.error, message: info.message };
+
+  const resp = info.response || {};
+  const needed = resp.info_needed || {};
+  let payload = {};
+  if (needed.non_integrated) {
+    // Seller pakai kurir sendiri: resi wajib (dari form 'Kirim' di Gudang).
+    if (!resi) return { ok: false, error: "resi wajib untuk channel non-integrated" };
+    payload = { non_integrated: { tracking_number: resi } };
+  } else if (needed.pickup) {
+    const pickup = resp.pickup || {};
+    const list = Array.isArray(pickup.address_list) ? pickup.address_list : [];
+    const addr =
+      list.find((a) => Array.isArray(a.address_flag) && a.address_flag.includes("default_address")) ||
+      list[0];
+    if (!addr || addr.address_id == null) {
+      return { ok: false, error: "tidak ada alamat pickup tersedia", needs_manual: true };
+    }
+    const slots = Array.isArray(pickup.time_slot_list) ? pickup.time_slot_list : [];
+    const slot = slots[0] || {};
+    payload = { pickup: { address_id: addr.address_id, pickup_time_id: slot.pickup_time_id || "" } };
+  } else if (needed.dropoff) {
+    return { ok: false, error: "channel dropoff belum didukung otomatis (atur di Seller Centre)", needs_manual: true };
+  } else {
+    return { ok: false, error: "info_needed tidak dikenali", needs_manual: true };
+  }
+
+  let ship = await shipOrderRequest(acc, token, orderSn, payload);
+  if (!ship.ok && refresh_token && isAuthError(ship.error + " " + (ship.message || ""))) {
+    const r = await refreshToken(acc, acc.shop_id, refresh_token);
+    if (r.access_token) {
+      token = r.access_token;
+      ship = await shipOrderRequest(acc, token, orderSn, payload);
+    }
+  }
+  if (!ship.ok) return { ok: false, error: ship.error, message: ship.message };
+  return { ok: true };
+}

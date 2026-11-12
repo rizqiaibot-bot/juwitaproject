@@ -15,8 +15,9 @@ import {
   PRODUCT_READ_MENUS,
   PRODUCT_PRICE_READ_MENUS,
   SHOPEE_ACTION_MENUS,
+  GENERAL_MENUS,
 } from "./permissions.js";
-import { connectShop, disconnectShop, pullOrders, pullProducts, syncStock, syncStockOne, syncPrice, syncPriceOne, reconcileStock, scheduleStockPush, scheduleStockReconcile } from "./shopee.js";
+import { connectShop, disconnectShop, pullOrders, pullProducts, syncStock, syncStockOne, syncPrice, syncPriceOne, reconcileStock, scheduleStockPush, scheduleStockReconcile, pushShipment } from "./shopee.js";
 import { nextOrderNumber, formatOrderId, lockOrderDay } from "./order-id.js";
 
 const PORT = Number(process.env.PORT || 3000);
@@ -319,6 +320,8 @@ const TABLE_READ_COLUMNS = {
 // ============================================================
 function checkMenuAccess(user, menu) {
   if (isOwnerUser(user)) return true;
+  // Menu general (gudang) otomatis dimiliki semua karyawan aktif.
+  if (GENERAL_MENUS.includes(menu)) return true;
   return userHasMenu(user, menu);
 }
 
@@ -1262,7 +1265,44 @@ async function handleOrdersPatch(req, res, orderId) {
       `SELECT record_warehouse_action($1,$2,$3,$4,$5) AS result`,
       [orderId, action, petugas, data.p_courier || null, data.p_resi || null]
     );
-    return sendJson(res, 200, { data: rows[0].result });
+    const result = rows[0].result || {};
+    // Aksi 'ship' pada order Shopee → kirim status pengiriman + resi ke Shopee
+    // (logistics/ship_order). Gagal push TIDAK membatalkan aksi lokal; hasilnya
+    // dikembalikan ke UI dan dicatat di activity_log.
+    let shopeeShip = null;
+    if (action === "ship" && result.status === "ok" && process.env.NODE_ENV !== "test") {
+      try {
+        const ord = await pool.query(
+          "SELECT orderid, channel, shop_id, courier, resi FROM orders WHERE orderid = $1",
+          [orderId]
+        );
+        const o = ord.rows[0];
+        if (o && String(o.channel || "").toLowerCase() === "shopee" && o.shop_id) {
+          const mp = await pool.query(
+            "SELECT mp_order_id FROM marketplace_orders WHERE platform = 'shopee' AND internal_order_id = $1 LIMIT 1",
+            [orderId]
+          );
+          const orderSn = mp.rows[0] && mp.rows[0].mp_order_id;
+          if (orderSn) {
+            const resi = o.resi && o.resi !== "-" ? String(o.resi) : "";
+            const push = await pushShipment(String(o.shop_id), String(orderSn), resi);
+            shopeeShip = push;
+            const meta = { orderid: orderId, order_sn: String(orderSn), courier: o.courier, resi };
+            if (!push.ok) meta.error = push.error || ""; 
+            if (!push.ok && push.message) meta.message = push.message;
+            await pool.query(
+              `INSERT INTO activity_log (event_type, direction, platform, status, triggered_by, action_source, metadata)
+               VALUES ('ORDER_SHIP','OUT','shopee',$1,$2,'manual',$3)`,
+              [push.ok ? "success" : "failed", petugas, JSON.stringify(meta)]
+            );
+          }
+        }
+      } catch (e) {
+        console.error("push pengiriman ke Shopee gagal:", e.message);
+        shopeeShip = { ok: false, error: "internal_error", message: e.message };
+      }
+    }
+    return sendJson(res, 200, { data: { ...result, shopee_ship: shopeeShip } });
   } catch (err) {
     console.error("orders PATCH failed:", err.message);
     return sendJson(res, 500, { error: "internal_error" });

@@ -4089,7 +4089,7 @@
             const deepGroup = pageMenuGroup(JUWITA_DEEP_PAGE);
             const avail = (JUWITA_DEEP_PAGE && deepGroup && getMenuPermissions(deepGroup))
                 ? JUWITA_DEEP_PAGE
-                : defaultPageForMenu(currentUser.menus[0]);
+                : defaultPageForMenu(currentUser.menus[0] || "gudang");
             showPage(avail);
             ensureOrdersPolling();
             // Pastikan data (produk POS, dll.) di-load SETELAH auth tersedia,
@@ -4757,15 +4757,20 @@
         // ============================================================
         // AUTH & MENU FILTERING
         // ============================================================
+        // Menu general = otomatis dimiliki SEMUA karyawan (sama dengan
+        // GENERAL_MENUS di juwita-api/src/permissions.js).
+        const GENERAL_MENUS = ["gudang"];
+
         function getMenuPermissions(menuGroup) {
             if (!currentUser) return false;
             if (isActiveOwner()) return true;
+            if (GENERAL_MENUS.includes(menuGroup)) return true;
             return currentUser.menus.includes(menuGroup);
         }
 
         function hasAnyMenu(menus) {
             if (!currentUser || !Array.isArray(currentUser.menus)) return false;
-            return menus.some(function (m) { return currentUser.menus.includes(m); });
+            return menus.some(function (m) { return GENERAL_MENUS.includes(m) || currentUser.menus.includes(m); });
         }
 
         function isActiveOwner() {
@@ -7519,6 +7524,14 @@
             renderWarehouseShipping();
             renderPenjualanTable();
             showToast(`${orderId} dikirim via ${o.courier}`);
+            // Hasil push pengiriman ke Shopee (hanya untuk order channel Shopee).
+            if (data && data.shopee_ship) {
+                if (data.shopee_ship.ok) {
+                    showToast(`Status kirim & resi sudah diteruskan ke Shopee ✓`);
+                } else {
+                    showToast(`Dikirim lokal, tapi gagal update Shopee: ${data.shopee_ship.message || data.shopee_ship.error || "cek Seller Centre"}`);
+                }
+            }
         }
 
         // ============================================================
