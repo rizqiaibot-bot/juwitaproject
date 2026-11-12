@@ -174,10 +174,12 @@ $s | ssh -i "$env:USERPROFILE\.ssh\juwita_vps" -o BatchMode=yes juwita@juwita.bi
 
 ## 4. Commit terakhir
 
+- `36333ac` — feat(gudang): menu gudang general untuk semua karyawan + push pengiriman ke Shopee saat Kirim
+- `2825035` — fix(pos): produk tidak berubah-ubah saat load - render setelah produk+orders+order_items siap
 - `cd0df0b` — chore: hapus Edge Function Supabase lama (deploy via VPS Biznet)
 - `9c0e325` — fix(shopee): stok Shopee 1 ikut sinkron + push langsung setelah import order
 
-`main == origin/main`. Pekerjaan barcode (2 Nov) **belum di-commit** kecuali `scripts/match-barcodes.mjs` bila sudah di-commit.
+`main == origin/main`.
 
 ---
 
@@ -191,4 +193,4 @@ $s | ssh -i "$env:USERPROFILE\.ssh\juwita_vps" -o BatchMode=yes juwita@juwita.bi
 - `juwita-api/workers/shopee-import-orders.mjs`: setelah import sukses, langsung `syncStock(null)`.
 - `juwita-api/scripts/reset-pos-stock.mjs`: reset stok POS, dry-run default, guard `--disconnect`.
 - `juwita-api/scripts/match-barcodes.mjs`: pencocokan barcode (baru, belum di-commit).
-- Unit test: `node --test test/permissions.test.mjs test/routes.test.mjs test/shopee-reconcile.test.mjs` → 71 lulus.
+- Unit test: `node --test test/permissions.test.mjs test/routes.test.mjs test/shopee-reconcile.test.mjs` → 84 lulus.
