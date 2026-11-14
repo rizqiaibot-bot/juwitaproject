@@ -1,11 +1,22 @@
 # PROJECT STATE — Juwita
 
-Terakhir diperbarui: **12 November 2026** (menu gudang general untuk semua karyawan + push pengiriman ke Shopee saat "Kirim").
+Terakhir diperbarui: **14 November 2026** (hapus halaman "Karyawan" dari HR — HR langsung ke Rekap Kehadiran).
 Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat sesi baru.
 
 ---
 
-## 0. PENGINGAT SESI TERAKHIR (12 Nov 2026)
+## 0. PENGINGAT SESI TERAKHIR (14 Nov 2026)
+
+**Hapus menu HR → Karyawan ("Manajemen Karyawan" = daftar nama karyawan):**
+- Dropdown HR (`index.html` + `marketplace.html`) sekarang: Rekap Kehadiran, Izin dan Cuti, Jadwal Kerja.
+- Halaman `page-karyawan` + `renderEmployees()` dihapus total (div, fungsi, 2 call site, branch showPage, entry menuMap).
+- `defaultPageForMenu("hr")` → `"rekap-kehadiran"` (karyawan HR langsung masuk Rekap Kehadiran).
+- Manajemen akun karyawan (buat akun/role/menu) TIDAK dihapus — tetap di Pengaturan → Manajemen Akun.
+- Toko Shopee masih `disconnected` (menunggu arahan user untuk Connect).
+
+---
+
+## 0a. PENGINGAT SESI SEBELUMNYA (12 Nov 2026)
 
 **1. Menu GUDANG = general (semua karyawan aktif):**
 - `permissions.js`: `GENERAL_MENUS = ["gudang"]`; `checkTableAccess` mengizinkan operasi apa pun yang daftar menunya memuat gudang (mis. read orders/order_items/produk/PO/stock_mutations/warehouse_*); operasi menu lain tetap menu-bound (stok update, retry mutasi, aksi Shopee TIDAK ikut general).
@@ -25,7 +36,7 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ---
 
-## 0a. PENGINGAT SESI SEBELUMNYA (11 Nov 2026)
+## 0b. PENGINGAT SESI SEBELUMNYA (11 Nov 2026)
 
 **Percepat load produk di POS (`index.html`):**
 - Grid produk sebelumnya menunggu SEMUA data (orders, order_items, gudang, harga) selesai baru dirender.
@@ -36,7 +47,7 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ---
 
-## 0b. PENGINGAT SESI SEBELUMNYA (9 Nov 2026)
+## 0c. PENGINGAT SESI SEBELUMNYA (9 Nov 2026)
 
 **UNDO import Google Sheet 7 Nov (atas permintaan user, "tertumpuk" di POS):**
 - **845 produk `SH-` (id 2308–3160) dihapus** dari DB — semua stok 0, nol referensi di semua tabel (sudah diaudit).
@@ -47,7 +58,7 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ---
 
-## 0c. PENGINGAT SESI SEBELUMNYA (7 Nov 2026)
+## 0d. PENGINGAT SESI SEBELUMNYA (7 Nov 2026)
 
 Yang dikerjakan & di-deploy di sesi terakhir (semua sudah commit + push, `main` bersih):
 

@@ -2214,7 +2214,6 @@
                 <li class="dropdown" data-menu-group="hr">
                     <a href="#"><i class="fas fa-users"></i> HR <i class="fas fa-chevron-down"></i></a>
                     <ul class="dropdown-menu">
-                        <li data-page="karyawan"><a href="#"><i class="fas fa-user-tie"></i> Karyawan</a></li>
                         <li data-page="rekap-kehadiran"><a href="#"><i class="fas fa-calendar-check"></i> Rekap Kehadiran</a></li>
                         <li data-page="cuti"><a href="#"><i class="fas fa-umbrella-beach"></i> Izin dan Cuti</a></li>
                         <li data-page="jadwal-kerja"><a href="#"><i class="fas fa-calendar-week"></i> Jadwal Kerja</a></li>
@@ -2824,16 +2823,6 @@
         </div>
 
         <!-- ===== HALAMAN KARYAWAN ===== -->
-        <div id="page-karyawan" class="page-content">
-            <div class="page-header">
-                <div>
-                    <h1>Manajemen Karyawan</h1>
-                    <div class="page-header-desc">Daftar staf, penugasan, dan status kehadiran divisi aktif</div>
-                </div>
-            </div>
-            <div class="emp-grid" id="employeeGrid"></div>
-        </div>
-
         <!-- ===== PLACEHOLDER HALAMAN LAINNYA ===== -->
         <div id="page-monitor-stok" class="page-content">
             <div class="page-header"><h1>Monitor Stok</h1><div class="page-header-desc">Pantau ketersediaan stok semua produk secara real-time</div></div>
@@ -4555,7 +4544,6 @@
             updatePosTodayStats();
             renderCatalogTable();
             renderMonitorStok();
-            renderEmployees();
             renderPricingTables();
             renderWarehouseReceiving();
             renderWarehousePicking();
@@ -6450,35 +6438,6 @@
                 console.warn("sync karyawan realtime error:", e && e.message);
             }
             return false;
-        }
-
-        async function renderEmployees() {
-            const grid = document.getElementById("employeeGrid");
-            if (!grid) return;
-            // Sumber nyata = app_users (sama dengan Pengaturan → Manajemen Akun).
-            let list = appEmployees;
-            if (!list.length) { await syncKaryawanRealtime(); list = appEmployees; }
-            if (!list.length) {
-                grid.innerHTML = '<div style="padding:20px;color:var(--text-muted);text-align:center;">Belum ada karyawan terdaftar</div>';
-                return;
-            }
-            grid.innerHTML = list.map((emp, idx) => {
-                const name = emp.full_name || emp.name || "?";
-                const initial = String(name).split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-                const roleTxt = emp.role_label || emp.role || "-";
-                const isOwner = String(emp.role || "").toLowerCase() === "owner";
-                const statusTxt = emp.status === "ACTIVE" ? "Aktif" : "Nonaktif";
-                const statusCls = emp.status === "ACTIVE" ? "badge-lunas" : "badge-belum";
-                return `<div class="emp-card">
-                            <div class="emp-seq">${idx + 1}</div>
-                            <div class="emp-avatar">${initial}</div>
-                            <div class="emp-info">
-                                <div class="emp-name">${escEmp(name)}</div>
-                                <div class="emp-role">${escEmp(roleTxt)}${isOwner ? ' · Owner' : ''}</div>
-                                <span class="emp-status ${statusCls}">${statusTxt}</span>
-                            </div>
-                        </div>`;
-            }).join('');
         }
 
         // ============================================================
@@ -10094,7 +10053,7 @@
                 penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "opname-gudang": "gudang", "riwayat-gudang": "gudang",
                 "harga-belanja": "pricing", "harga-jual": "pricing", "ubah-harga": "pricing", "diskon-promo": "pricing", "margin-keuntungan": "pricing", "pricing": "pricing",
                 akuntansi: "akuntansi",
-                karyawan: "hr", "rekap-kehadiran": "hr", cuti: "hr", "jadwal-kerja": "hr", penggajian: "hr", "slip-gaji": "hr",
+                "rekap-kehadiran": "hr", cuti: "hr", "jadwal-kerja": "hr", penggajian: "hr", "slip-gaji": "hr",
 
                 pengaturan: "pengaturan"
             };
@@ -10109,7 +10068,7 @@
                 persediaan: "monitor-stok",
                 pembelian: "data-pembelian",
                 gudang: "penerimaan",
-                hr: "karyawan"
+                hr: "rekap-kehadiran"
             };
             return defaults[menu] || menu || "pos";
         }
@@ -10147,7 +10106,6 @@
             if (pageId === "akuntansi") setTimeout(() => loadAccounting(), 10);
             if (pageId === "data-pembelian") setTimeout(() => loadPembelian(), 10);
             if (pageId === "penerimaan") setTimeout(async () => { if (!suppliersData.length) await loadPembelian(); renderPenerimaan(); }, 10);
-            if (pageId === "karyawan") setTimeout(() => renderEmployees(), 10);
             if (pageId === "rekap-kehadiran") setTimeout(() => syncKaryawanRealtime().then(() => renderRekapKehadiran()), 10);
             if (pageId === "jadwal-kerja") setTimeout(() => syncKaryawanRealtime().then(() => loadJadwalKerja()).then(() => renderJadwalKerja()), 10);
             if (pageId === "absensi") setTimeout(() => attendanceInit(), 10);
@@ -10178,7 +10136,6 @@
             renderProducts();
             renderPenjualanTable();
             renderCatalogTable();
-            renderEmployees();
             renderPosHistory();
             renderMonitorStok();
             renderPricingTables();
