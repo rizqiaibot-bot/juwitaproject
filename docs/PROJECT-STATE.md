@@ -12,6 +12,7 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 - Halaman `page-karyawan` + `renderEmployees()` dihapus total (div, fungsi, 2 call site, branch showPage, entry menuMap).
 - `defaultPageForMenu("hr")` → `"rekap-kehadiran"` (karyawan HR langsung masuk Rekap Kehadiran).
 - Manajemen akun karyawan (buat akun/role/menu) TIDAK dihapus — tetap di Pengaturan → Manajemen Akun.
+- **Menu Akuntansi**: dropdown "Dashboard Akuntansi" dihapus → nav item langsung "Akuntansi" yang membuka halaman akuntansi (seperti Pricing).
 - Toko Shopee masih `disconnected` (menunggu arahan user untuk Connect).
 
 ---
