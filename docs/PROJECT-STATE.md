@@ -186,6 +186,7 @@ $s | ssh -i "$env:USERPROFILE\.ssh\juwita_vps" -o BatchMode=yes juwita@juwita.bi
 
 ## 4. Commit terakhir
 
+- `90a3db7` — feat(akuntansi): hapus dropdown Dashboard Akuntansi - menu Akuntansi langsung buka halaman akuntansi
 - `56261d8` — feat(hr): hapus menu Karyawan dari HR - HR langsung ke Rekap Kehadiran
 - `36333ac` — feat(gudang): menu gudang general untuk semua karyawan + push pengiriman ke Shopee saat Kirim
 - `2825035` — fix(pos): produk tidak berubah-ubah saat load - render setelah produk+orders+order_items siap
