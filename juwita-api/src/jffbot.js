@@ -178,13 +178,22 @@ export async function submitPrompt(user, text) {
     throw httpError(409, "JFFBOT sedang mengerjakan permintaan " + info.by + ". Tunggu selesai, lalu coba lagi.");
   }
   await syncWorkspace();
-  const sessionId = await ensureSession();
+  let sessionId = await ensureSession();
   // Bila turn sebelumnya macet, interupsi dulu supaya prompt baru jalan.
   await interruptStalled(sessionId);
-  const res = await ocFetch("/api/session/" + sessionId + "/prompt", {
+  let res = await ocFetch("/api/session/" + sessionId + "/prompt", {
     method: "POST",
     body: JSON.stringify({ text }),
   });
+  if (res.status === 404) {
+    // Session terhapus — buat ulang lalu kirim lagi.
+    globalSessionId = null;
+    sessionId = await ensureSession();
+    res = await ocFetch("/api/session/" + sessionId + "/prompt", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    });
+  }
   if (!res.ok) {
     let detail = "";
     try {
@@ -208,10 +217,16 @@ export async function submitPrompt(user, text) {
 // Hanya pesan pengguna + JAWABAN AKHIR tiap giliran yang dikembalikan;
 // narasi antar-langkah (planning/thinking) disembunyikan supaya chat ringkas.
 export async function fetchMessages(limit = 100) {
-  const sessionId = await ensureSession();
+  let sessionId = await ensureSession();
   // Watchdog: eksekusi yang macet di-interupsi otomatis.
   await interruptStalled(sessionId);
-  const res = await ocFetch("/api/session/" + sessionId + "/message?limit=" + limit);
+  let res = await ocFetch("/api/session/" + sessionId + "/message?limit=" + limit);
+  if (res.status === 404) {
+    // Session terhapus (mis. dibersihkan manual) — buat ulang.
+    globalSessionId = null;
+    sessionId = await ensureSession();
+    res = await ocFetch("/api/session/" + sessionId + "/message?limit=" + limit);
+  }
   if (!res.ok) throw httpError(502, "Gagal membaca sesi OpenCode (" + res.status + ")");
   const body = await res.json();
   const raw = Array.isArray(body.data) ? body.data : Array.isArray(body) ? body : [];
