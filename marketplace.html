@@ -527,9 +527,14 @@
         </ul>
       </li>
 
-      <!-- MARKETPLACE (aktif di halaman ini) -->
-      <li class="nav-item active" data-marketplace-nav="1"><a href="marketplace.html"><i class="fas fa-store"></i> Marketplace</a></li>
-      <li class="nav-item" data-page="pengaturan" data-menu-group="pengaturan"><a href="index.html?page=pengaturan"><i class="fas fa-cog"></i> Pengaturan</a></li>
+      <!-- PENGATURAN -->
+      <li class="dropdown" data-menu-group="pengaturan">
+        <a href="#"><i class="fas fa-cog"></i> Pengaturan <i class="fas fa-chevron-down"></i></a>
+        <ul class="dropdown-menu">
+          <li data-page="pengaturan"><a href="index.html?page=pengaturan"><i class="fas fa-cog"></i> Pengaturan Sistem</a></li>
+          <li class="active" data-marketplace-nav="1"><a href="marketplace.html"><i class="fas fa-store"></i> Marketplace</a></li>
+        </ul>
+      </li>
     </ul>
 
     <div class="nav-actions">
