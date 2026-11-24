@@ -19,6 +19,7 @@ import {
 } from "./permissions.js";
 import { connectShop, disconnectShop, pullOrders, pullProducts, syncStock, syncStockOne, syncPrice, syncPriceOne, reconcileStock, scheduleStockPush, scheduleStockReconcile, pushShipment } from "./shopee.js";
 import { nextOrderNumber, formatOrderId, lockOrderDay } from "./order-id.js";
+import { fetchMessages, submitPrompt, changesStatus, approveDeploy, cancelChanges } from "./jffbot.js";
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -323,6 +324,12 @@ function checkMenuAccess(user, menu) {
   // Menu general (gudang) otomatis dimiliki semua karyawan aktif.
   if (GENERAL_MENUS.includes(menu)) return true;
   return userHasMenu(user, menu);
+}
+
+// Approve/batalkan perubahan JFFBOT: hanya owner atau role admin.
+function jffbotApprover(user) {
+  if (isOwnerUser(user)) return true;
+  return String(user.role || "").toLowerCase() === "admin";
 }
 
 function tableName(pathname) {
@@ -2298,6 +2305,70 @@ const server = http.createServer(async (req, res) => {
     const user = await requireAuth(req, res);
     if (!user) return;
     return handleShopeeAction(req, res, pathname.slice("/api/shopee/".length));
+  }
+  // ============================================================
+  // JFFBOT — chatbot pengembang (bridge ke OpenCode V2 di VPS).
+  // Semua aksi butuh menu "jffbot"; approve/cancel hanya owner/admin.
+  // ============================================================
+  if (pathname === "/api/jffbot/session") {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    if (!checkMenuAccess(user, "jffbot")) return sendJson(res, 403, { error: "forbidden" });
+    if (req.method === "GET") {
+      try {
+        return sendJson(res, 200, { data: await fetchMessages() });
+      } catch (err) {
+        return sendJson(res, err.status || 502, { error: err.message || "jffbot_error" });
+      }
+    }
+    if (req.method === "POST") {
+      try {
+        const { data, error } = await readJsonBody(req, 64 * 1024);
+        if (error) return sendJson(res, 400, { error });
+        const text = data && typeof data.text === "string" ? data.text.trim() : "";
+        if (!text) return sendJson(res, 400, { error: "teks_kosong" });
+        const result = await submitPrompt(req.user, text);
+        return sendJson(res, 200, { data: result });
+      } catch (err) {
+        return sendJson(res, err.status || 502, { error: err.message || "jffbot_error" });
+      }
+    }
+    return sendJson(res, 405, { error: "method_not_allowed" });
+  }
+  if (pathname === "/api/jffbot/status") {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    if (!checkMenuAccess(user, "jffbot")) return sendJson(res, 403, { error: "forbidden" });
+    try {
+      return sendJson(res, 200, { data: await changesStatus() });
+    } catch (err) {
+      return sendJson(res, err.status || 502, { error: err.message || "jffbot_error" });
+    }
+  }
+  if (pathname === "/api/jffbot/approve" && req.method === "POST") {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    if (!checkMenuAccess(user, "jffbot")) return sendJson(res, 403, { error: "forbidden" });
+    if (!jffbotApprover(user)) return sendJson(res, 403, { error: "hanya admin yang bisa deploy" });
+    try {
+      const { data, error } = await readJsonBody(req, 64 * 1024);
+      if (error) return sendJson(res, 400, { error });
+      const message = data && typeof data.message === "string" ? data.message.slice(0, 200) : "";
+      return sendJson(res, 200, { data: await approveDeploy(message) });
+    } catch (err) {
+      return sendJson(res, err.status || 500, { error: err.message || "jffbot_error" });
+    }
+  }
+  if (pathname === "/api/jffbot/cancel" && req.method === "POST") {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    if (!checkMenuAccess(user, "jffbot")) return sendJson(res, 403, { error: "forbidden" });
+    if (!jffbotApprover(user)) return sendJson(res, 403, { error: "hanya admin yang bisa membatalkan" });
+    try {
+      return sendJson(res, 200, { data: await cancelChanges() });
+    } catch (err) {
+      return sendJson(res, err.status || 500, { error: err.message || "jffbot_error" });
+    }
   }
   if (pathname.startsWith("/api/data/")) {
     const user = await requireAuth(req, res);

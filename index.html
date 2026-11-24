@@ -2205,6 +2205,9 @@
                 <!-- AKUNTANSI -->
                 <li class="nav-item" data-page="akuntansi" data-menu-group="akuntansi"><a href="#"><i class="fas fa-wallet"></i> Akuntansi</a></li>
 
+                <!-- JFFBOT -->
+                <li class="nav-item" data-page="jffbot" data-menu-group="jffbot"><a href="#"><i class="fas fa-robot"></i> JFFBOT</a></li>
+
                 <!-- HR -->
                 <li class="dropdown" data-menu-group="hr">
                     <a href="#"><i class="fas fa-users"></i> HR <i class="fas fa-chevron-down"></i></a>
@@ -3741,6 +3744,54 @@
             </div>
         </div>
 
+        <!-- ===== HALAMAN JFFBOT ===== -->
+        <div id="page-jffbot" class="page-content">
+            <style>
+                #jffbotChat { display:flex; flex-direction:column; gap:10px; padding:6px 2px; max-height:52vh; overflow-y:auto; }
+                .jff-msg { display:flex; flex-direction:column; max-width:86%; padding:10px 14px; border-radius:14px; font-size:0.85rem; line-height:1.45; white-space:pre-wrap; word-break:break-word; }
+                .jff-user { align-self:flex-end; background:var(--primary-gradient); color:#fff; border-bottom-right-radius:4px; }
+                .jff-bot { align-self:flex-start; background:var(--bg-primary); color:var(--text-primary); border:1px solid var(--border-color); border-bottom-left-radius:4px; }
+                .jff-meta { font-size:0.68rem; color:var(--text-muted); margin-top:4px; }
+                .jff-user .jff-meta { color:rgba(255,255,255,0.75); }
+                .jff-typing { display:inline-flex; gap:4px; padding:4px 2px; }
+                .jff-typing span { width:7px; height:7px; border-radius:50%; background:var(--primary); opacity:0.35; animation:jffBounce 1.2s infinite; }
+                .jff-typing span:nth-child(2) { animation-delay:0.15s; }
+                .jff-typing span:nth-child(3) { animation-delay:0.3s; }
+                @keyframes jffBounce { 0%,60%,100% { transform:translateY(0); opacity:0.35; } 30% { transform:translateY(-5px); opacity:1; } }
+                #jffbotInput { width:100%; min-height:64px; resize:vertical; border:1px solid var(--border-color); border-radius:var(--radius-md); background:var(--bg-primary); color:var(--text-primary); padding:10px 12px; font-size:0.85rem; font-family:inherit; box-sizing:border-box; }
+                .jff-diff { background:var(--bg-primary); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; font-family:ui-monospace,Consolas,monospace; font-size:0.72rem; color:var(--text-primary); white-space:pre-wrap; word-break:break-all; max-height:180px; overflow-y:auto; }
+            </style>
+            <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                <div>
+                    <h1>JFFBOT</h1>
+                    <div class="page-header-desc">Asisten pengembang Juwita One — minta fitur baru, ubah menu, atau perbaiki tampilan. Perubahan diterapkan setelah admin menyetujui.</div>
+                </div>
+                <span id="jffbotState" style="font-size:0.72rem;font-weight:700;padding:6px 12px;border-radius:999px;background:var(--bg-primary);border:1px solid var(--border-color);color:var(--text-muted);"><i class="fas fa-robot"></i> Siap</span>
+            </div>
+
+            <div class="form-card" style="max-width:100%;">
+                <div id="jffbotChanges" style="display:none;margin-bottom:14px;padding:12px 14px;border-radius:var(--radius-md);background:rgba(245,158,11,0.12);border:1px solid #f59e0b;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                        <div style="font-size:0.8rem;font-weight:700;color:#b45309;"><i class="fas fa-code-branch"></i> Ada perubahan yang belum dideploy</div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button type="button" class="checkout-btn" style="width:auto;padding:8px 14px;font-size:0.74rem;background:var(--success);" onclick="jffbotApprove()"><i class="fas fa-rocket"></i> Approve &amp; Deploy</button>
+                            <button type="button" class="checkout-btn" style="width:auto;padding:8px 14px;font-size:0.74rem;background:var(--danger);" onclick="jffbotCancel()"><i class="fas fa-undo"></i> Batalkan</button>
+                        </div>
+                    </div>
+                    <div id="jffbotDiff" class="jff-diff" style="margin-top:8px;"></div>
+                    <div id="jffbotApproveMsg" style="margin-top:8px;font-size:0.7rem;color:var(--text-muted);">Hanya admin/owner yang melihat tombol ini. Deploy berjalan otomatis setelah push ke GitHub.</div>
+                </div>
+
+                <div id="jffbotChat"><div style="text-align:center;color:var(--text-muted);font-size:0.8rem;padding:16px;">Memuat percakapan…</div></div>
+
+                <div style="display:flex;gap:8px;margin-top:12px;align-items:flex-end;">
+                    <textarea id="jffbotInput" placeholder="Contoh: Tambahkan menu laporan hutang di Akuntansi…" maxlength="2000"></textarea>
+                    <button type="button" class="checkout-btn" style="width:auto;padding:10px 18px;flex-shrink:0;" onclick="jffbotSend()" id="jffbotSendBtn"><i class="fas fa-paper-plane"></i> Kirim</button>
+                </div>
+                <div style="font-size:0.68rem;color:var(--text-muted);margin-top:6px;">JFFBOT membaca aturan proyek (AGENTS.md) dan kondisi terkini. Jangan minta perubahan stok/Shopee di sini.</div>
+            </div>
+        </div>
+
     </div><!-- /main-container -->
 
     <!-- ===== FOOTER ===== -->
@@ -4801,11 +4852,12 @@
                 "pricing": "[data-menu-group=\"pricing\"]",
                 "akuntansi": "[data-menu-group=\"akuntansi\"]",
                 "hr": "[data-menu-group=\"hr\"]",
-                "pengaturan": "[data-menu-group=\"pengaturan\"]"
+                "pengaturan": "[data-menu-group=\"pengaturan\"]",
+                "jffbot": "[data-menu-group=\"jffbot\"]"
             };
 
 
-            const allGroups = ["pos","penjualan","katalog","persediaan","pembelian","gudang","pricing","akuntansi","hr","pengaturan"];
+            const allGroups = ["pos","penjualan","katalog","persediaan","pembelian","gudang","pricing","akuntansi","hr","pengaturan","jffbot"];
             allGroups.forEach(group => {
                 const selector = menuMap[group];
                 if (!selector) return;
@@ -4882,8 +4934,8 @@
         // ============================================================
         // MANAJEMEN KARYAWAN (app_users) — HANYA OWNER/Super Admin
         // ============================================================
-        const APP_MENU_KEYS = ["pos", "penjualan", "katalog", "persediaan", "pembelian", "gudang", "pricing", "akuntansi", "hr", "pengaturan"];
-        const APP_MENU_LABELS = { pos: "POS", penjualan: "Penjualan", katalog: "Katalog", persediaan: "Persediaan", pembelian: "Pembelian", gudang: "Gudang", pricing: "Pricing", akuntansi: "Akuntansi", hr: "HR", pengaturan: "Pengaturan" };
+        const APP_MENU_KEYS = ["pos", "penjualan", "katalog", "persediaan", "pembelian", "gudang", "pricing", "akuntansi", "hr", "pengaturan", "jffbot"];
+        const APP_MENU_LABELS = { pos: "POS", penjualan: "Penjualan", katalog: "Katalog", persediaan: "Persediaan", pembelian: "Pembelian", gudang: "Gudang", pricing: "Pricing", akuntansi: "Akuntansi", hr: "HR", pengaturan: "Pengaturan", jffbot: "JFFBOT (Chatbot Pengembang)" };
         const APP_ROLES = [
             { value: "kasir", label: "Kasir" },
             { value: "gudang", label: "Gudang" },
@@ -10050,6 +10102,7 @@
                 akuntansi: "akuntansi",
                 "rekap-kehadiran": "hr", cuti: "hr", "jadwal-kerja": "hr", penggajian: "hr", "slip-gaji": "hr",
 
+                jffbot: "jffbot",
                 pengaturan: "pengaturan"
             };
             return menuMap[pageId] || "";
@@ -10120,6 +10173,136 @@
             if (pageId === "daftar-penjualan") ensureOrdersPolling();
             // Rekap Penjualan: muat otomatis saat halaman dibuka.
             if (pageId === "rekap-penjualan") setTimeout(() => renderRekapPenjualan(), 10);
+            // JFFBOT: polling percakapan hanya saat halaman aktif.
+            if (pageId === "jffbot") jffbotPollStart();
+            else jffbotPollStop();
+        }
+
+        // ============================================================
+        // JFFBOT — chatbot pengembang (bridge /api/jffbot ke OpenCode)
+        // ============================================================
+        let jffbotTimer = null;
+        let jffbotLastCount = -1;
+
+        function isJffbotApprover() {
+            if (isActiveOwner()) return true;
+            return !!(currentUser && String(currentUser.role || "").toLowerCase() === "admin");
+        }
+
+        function jffbotEsc(v) {
+            return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
+                return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+            });
+        }
+
+        async function jffbotRefresh() {
+            if (!currentUser || !getMenuPermissions("jffbot")) return;
+            const chatEl = document.getElementById("jffbotChat");
+            const stateEl = document.getElementById("jffbotState");
+            if (!chatEl) return;
+            const res = await apiFetch("/api/jffbot/session");
+            if (!res.ok) {
+                chatEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:0.8rem;padding:16px;">JFFBOT tidak tersedia: ' + jffbotEsc((res.data && (res.data.error || res.data.message)) || ("HTTP " + res.status)) + "</div>";
+                if (stateEl) stateEl.innerHTML = '<i class="fas fa-robot"></i> Offline';
+                return;
+            }
+            const data = (res.data && res.data.data) || {};
+            const messages = Array.isArray(data.messages) ? data.messages : [];
+            const running = !!data.running;
+            if (stateEl) {
+                if (running) stateEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengerjakan…';
+                else stateEl.innerHTML = '<i class="fas fa-robot"></i> Siap';
+            }
+            const sig = messages.length + (running ? 1 : 0);
+            if (sig === jffbotLastCount) { await jffbotRefreshStatus(); return; }
+            jffbotLastCount = sig;
+            if (messages.length === 0) {
+                chatEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:0.8rem;padding:16px;">Belum ada percakapan. Tulis permintaan di bawah, misalnya: "Tambahkan tombol ekspor CSV di halaman Penjualan".</div>';
+            } else {
+                let html = "";
+                for (const m of messages) {
+                    const meta = '<div class="jff-meta">' + jffbotEsc(m.role === "user" ? (currentUser && currentUser.name ? currentUser.name : "Saya") : "JFFBOT") + "</div>";
+                    if (m.role === "user") html += '<div class="jff-msg jff-user">' + jffbotEsc(m.text || "") + meta + "</div>";
+                    else html += '<div class="jff-msg jff-bot">' + jffbotEsc(m.text || (m.done ? "(selesai)" : "")) + meta + "</div>";
+                }
+                if (running) html += '<div class="jff-msg jff-bot"><div class="jff-typing"><span></span><span></span><span></span></div></div>';
+                chatEl.innerHTML = html;
+                chatEl.scrollTop = chatEl.scrollHeight;
+            }
+            await jffbotRefreshStatus();
+        }
+
+        async function jffbotRefreshStatus() {
+            const box = document.getElementById("jffbotChanges");
+            if (!box) return;
+            if (!isJffbotApprover()) { box.style.display = "none"; return; }
+            const res = await apiFetch("/api/jffbot/status");
+            const diffEl = document.getElementById("jffbotDiff");
+            if (!res.ok) return;
+            const data = (res.data && res.data.data) || {};
+            if (data.hasChanges) {
+                box.style.display = "block";
+                let txt = "";
+                if (data.aheadCount > 0) txt += "Commit siap push: " + data.aheadCount + "\n";
+                if (data.files && data.files.length) txt += "File berubah:\n" + data.files.join("\n");
+                if (data.summary) txt += "\n" + data.summary;
+                diffEl.textContent = txt.trim() || "(perubahan terdeteksi)";
+            } else {
+                box.style.display = "none";
+            }
+        }
+
+        async function jffbotSend() {
+            const input = document.getElementById("jffbotInput");
+            const btn = document.getElementById("jffbotSendBtn");
+            if (!input) return;
+            const text = (input.value || "").trim();
+            if (!text) return;
+            btn.disabled = true;
+            input.value = "";
+            showToast("Permintaan dikirim ke JFFBOT…");
+            const res = await apiFetch("/api/jffbot/session", { method: "POST", body: { text: text } });
+            btn.disabled = false;
+            if (!res.ok) {
+                showToast((res.data && (res.data.error || res.data.message)) || "Gagal mengirim permintaan");
+            }
+            jffbotLastCount = -1;
+            await jffbotRefresh();
+        }
+
+        async function jffbotApprove() {
+            if (!confirm("Deploy perubahan JFFBOT ke aplikasi live? Perubahan akan langsung diterapkan.")) return;
+            showToast("Mengirim ke GitHub & men-deploy…");
+            const res = await apiFetch("/api/jffbot/approve", { method: "POST", body: { message: "disetujui dari JFFBOT" } });
+            if (res.ok) {
+                showToast("Deploy berhasil! Perubahan live dalam 1-2 menit.");
+                await jffbotRefresh();
+            } else {
+                showToast((res.data && (res.data.error || res.data.message)) || "Deploy gagal");
+            }
+        }
+
+        async function jffbotCancel() {
+            if (!confirm("Batalkan perubahan JFFBOT? Semua perubahan yang belum dideploy akan dibuang.")) return;
+            showToast("Membatalkan perubahan…");
+            const res = await apiFetch("/api/jffbot/cancel", { method: "POST", body: {} });
+            if (res.ok) {
+                showToast("Perubahan dibatalkan.");
+                await jffbotRefresh();
+            } else {
+                showToast((res.data && (res.data.error || res.data.message)) || "Gagal membatalkan");
+            }
+        }
+
+        function jffbotPollStart() {
+            jffbotPollStop();
+            jffbotLastCount = -1;
+            jffbotRefresh();
+            jffbotTimer = setInterval(jffbotRefresh, 3000);
+        }
+
+        function jffbotPollStop() {
+            if (jffbotTimer) { clearInterval(jffbotTimer); jffbotTimer = null; }
         }
 
         // ============================================================

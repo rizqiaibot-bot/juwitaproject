@@ -17,6 +17,7 @@ export const MENU_TOKENS = Object.freeze([
   "akuntansi",
   "hr",
   "pengaturan",
+  "jffbot",
 ]);
 
 // Menu yang otomatis dimiliki SEMUA karyawan aktif tanpa perlu dicentang di

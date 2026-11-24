@@ -1,11 +1,48 @@
 # PROJECT STATE — Juwita
 
-Terakhir diperbarui: **14 November 2026** (hapus halaman "Karyawan" dari HR — HR langsung ke Rekap Kehadiran).
+Terakhir diperbarui: **24 November 2026** (fitur JFFBOT — chatbot pengembang via OpenCode, di-deploy).
+
 Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat sesi baru.
 
 ---
 
-## 0. PENGINGAT SESI TERAKHIR (14 Nov 2026)
+## 0. PENGINGAT SESI TERAKHIR (24 Nov 2026)
+
+**Fitur JFFBOT (chatbot pengembang berbasis OpenCode) — selesai & di-deploy:**
+
+- Menu **JFFBOT** di aplikasi (index.html) = chatbot yang bisa mengubah/menambah fitur/menu web Juwita lewat OpenCode V2 (model DeepSeek V4 Pro via Sumopod) yang berjalan permanen di VPS.
+- Komponen:
+  - VPS: service systemd `juwita-opencode.service` (OpenCode v2.4.1, `127.0.0.1:4096`), config `/home/juwita/.config/opencode/opencode.json` (provider sumopod; deny `git push/branch/checkout/reset/sudo/ssh/scp/rsync` + `external_directory`), instruksi tambahan `/home/juwita/.config/opencode/jffbot.md`.
+  - Workspace agent: clone `/home/juwita/juwita-one` (branch main; artefak lama di-exclude via `.git/info/exclude`).
+  - Bridge: `juwita-api/src/jffbot.js` (auth HTTP Basic dari `~/.config/opencode/service.json`), route `/api/jffbot/session|status|approve|cancel` di `server.js`.
+  - UI: halaman `page-jffbot` (chat + panel perubahan + tombol Approve/Batalkan).
+- Akses: token menu baru `jffbot` — centang di Pengaturan → Manajemen Akun. **Approve/Batalkan hanya owner atau role admin.**
+- Alur deploy: agent commit lokal → admin tekan **Approve & Deploy** → bridge `git push origin main` via SSH key `/home/juwita/.ssh/jffbot_github` (deploy key GitHub) → GitHub Actions rsync + restart otomatis.
+- Satu permintaan agent dalam satu waktu (busy flag 15 menit). Prompt ditolak bila workspace kotor (harus approve/cancel dulu).
+- **CATATAN**: deploy key GitHub `jffbot-vps` (write access) harus terpasang di repo `rizqiaibot-bot/juwitaproject`, kalau tidak Approve akan gagal push.
+
+---
+
+## 0a. PENGINGAT SESI SEBELUMNYA (23 Nov 2026)
+
+**1. Audit CSV "PRODUK & BARCODE.csv" (Downloads, 14 Nov) vs DB POS (read-only, selesai):**
+- CSV: 722 baris (423 dgn barcode, 299 tanpa). DB: 1.781 produk, 1.429 barcode unik.
+- Cocok: 60 via barcode + 3 via nama identik → **659 belum ada di POS** (362 dgn barcode, 297 tanpa).
+- Laporan: `Downloads\pos-belum-ada-dari-produk-barcode.csv`. Belum ada tindakan import.
+
+**2. Fitur baru (DRAFT, belum selesai, belum commit/deploy, migration BELUM diterapkan):**
+- Permintaan: Rekap Penjualan → Detail Transaksi (mode Harian) tampilkan **hasil akhir setelah biaya lain-lain Shopee**.
+- Sumber data (pilihan user): **tarik otomatis dari API Shopee `GetIncomeStatement`** (`/api/v2/finance/income/get_income_statement`) — "biaya lain-lain" = komisi+layanan+transaksi+penyesuaian+dll; "hasil akhir" = `total_escrow_amount`. Batas API: 15 hari per request.
+- Sudah dibuat (uncommitted): `juwita-api/migrations/011_shopee_order_income.sql` (tabel `shopee_order_incomes` + kolom `orders.biaya_lain`, `orders.hasil_akhir`) dan fungsi `pullIncomeStatements()` di `src/shopee.js` (hanya proses toko `connected`; aman saat disconnected).
+- BELUM dibuat: worker cron (income 15 hari rolling di shopee-pull-orders atau worker baru), skrip backfill riwayat lama (`--days N`), dan kolom "Hasil Akhir" di index.html (tabel detail + print).
+- Fitur baru bisa jalan **setelah toko di-Connect lagi** (token saat ini invalid).
+
+**3. PENTING — JANGAN Connect Shopee:**
+- Kedua toko masih `disconnected`. Connect saat stok POS masih 0 akan mengirim 0 ke listing (sold out). Tunggu perintah user.
+
+---
+
+## 0a. PENGINGAT SESI SEBELUMNYA (14 Nov 2026)
 
 **Hapus menu HR → Karyawan ("Manajemen Karyawan" = daftar nama karyawan):**
 - Dropdown HR (`index.html` + `marketplace.html`) sekarang: Rekap Kehadiran, Izin dan Cuti, Jadwal Kerja.
@@ -17,7 +54,7 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ---
 
-## 0a. PENGINGAT SESI SEBELUMNYA (12 Nov 2026)
+## 0b. PENGINGAT SESI SEBELUMNYA (12 Nov 2026)
 
 **1. Menu GUDANG = general (semua karyawan aktif):**
 - `permissions.js`: `GENERAL_MENUS = ["gudang"]`; `checkTableAccess` mengizinkan operasi apa pun yang daftar menunya memuat gudang (mis. read orders/order_items/produk/PO/stock_mutations/warehouse_*); operasi menu lain tetap menu-bound (stok update, retry mutasi, aksi Shopee TIDAK ikut general).
@@ -37,7 +74,7 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ---
 
-## 0b. PENGINGAT SESI SEBELUMNYA (11 Nov 2026)
+## 0c. PENGINGAT SESI SEBELUMNYA (11 Nov 2026)
 
 **Percepat load produk di POS (`index.html`):**
 - Grid produk sebelumnya menunggu SEMUA data (orders, order_items, gudang, harga) selesai baru dirender.
@@ -48,18 +85,18 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ---
 
-## 0c. PENGINGAT SESI SEBELUMNYA (9 Nov 2026)
+## 0d. PENGINGAT SESI SEBELUMNYA (9 Nov 2026)
 
 **UNDO import Google Sheet 7 Nov (atas permintaan user, "tertumpuk" di POS):**
 - **845 produk `SH-` (id 2308–3160) dihapus** dari DB — semua stok 0, nol referensi di semua tabel (sudah diaudit).
 - **47 barcode di produk lama dikosongkan** (2 H1 + 45 H3 dari sheet; sebelumnya memang kosong).
 - **10 produk `JFF-` (dibuat 8 Nov, ada stok 92 unit + mapping Shopee 2) TIDAK disentuh.**
 - Backup: `/tmp/juwita_products_backup_20261109_114230_undo.dump` + `/tmp/juwita_sh_products_20261109_114230_undo.csv` (di VPS). Skrip: `data/undo-sheet-import.sh` (belum di-commit).
-- Kondisi sekarang: **1.856 produk** total (1.232 dengan barcode, 624 tanpa). File `barcode-review-2026-11-07.csv` di Downloads masih berlaku untuk kandidat H3/H4 bila ingin dipasang lagi.
+- Kondisi sekarang (cek DB 19 Nov 2026): **1.706 produk** total (1.368 dengan barcode, 338 tanpa). File `barcode-review-2026-11-07.csv` di Downloads masih berlaku untuk kandidat H3/H4 bila ingin dipasang lagi.
 
 ---
 
-## 0d. PENGINGAT SESI SEBELUMNYA (7 Nov 2026)
+## 0e. PENGINGAT SESI SEBELUMNYA (7 Nov 2026)
 
 Yang dikerjakan & di-deploy di sesi terakhir (semua sudah commit + push, `main` bersih):
 
@@ -110,7 +147,7 @@ Commit terakhir: `a5b1fe3`. Deploy otomatis via GitHub Actions (push `main` → 
 
 > **Update 9 Nov 2026 (UNDO):** hasil import sheet 7 Nov sudah dibatalkan atas permintaan user ("tertumpuk" di POS):
 > - **845 produk `SH-` dihapus**; **47 barcode di produk lama dikosongkan** (2 H1 + 45 H3). 10 produk `JFF-` (8 Nov, manual + Shopee 2) tetap.
-> - Kondisi sekarang: **1.856 produk** total — **1.232 dengan barcode**, **624 tanpa barcode**.
+> - Kondisi sekarang (cek DB 19 Nov 2026): **1.706 produk** total — **1.368 dengan barcode**, **338 tanpa barcode**.
 > - Kalau suatu saat mau import lagi, skrip tetap ada: `juwita-api/scripts/import-new-products.mjs`; review kandidat lama di `Downloads\barcode-review-2026-11-07.csv`.
 
 <details>
@@ -134,7 +171,7 @@ Sudah dipasang **2 Nov 2026**: **33 produk / 22 barcode unik**
 - H2 = 12 produk (beda hanya kata promosi: FRESH, HALAL, ALL VARIAN, PENGIRIMAN CEPAT, ...)
 
 Sisa:
-- **624 produk tanpa barcode** (1.232 sudah punya).
+- **338 produk tanpa barcode** (1.368 sudah punya, cek DB 19 Nov 2026).
 - Kandidat belum dipasang (dari sheet 7 Nov): 18 H3 ragu (beda varian / barcode mencurigakan) + 38 H4 (ukuran/isi beda).
   Laporan: `C:\Users\rizqi\Downloads\barcode-review-2026-11-07.csv` (bisa hilang → generate ulang dengan skrip di bawah).
 - Sebagian besar produk tanpa barcode adalah **frozen food yang tidak ada di sheet** — sheet mayoritas katalog minimarket (YAKULT, AQUA, SASA, dll). Kemungkinan ada sheet/tab lain untuk frozen food.
