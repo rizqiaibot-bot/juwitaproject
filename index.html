@@ -3049,6 +3049,7 @@
                 <button type="button" class="pp-tab active" data-tab="belanja" onclick="setPricingTab('belanja')">Harga Belanja</button>
                 <button type="button" class="pp-tab" data-tab="jual" onclick="setPricingTab('jual')">Harga Jual</button>
                 <button type="button" class="pp-tab" data-tab="margin" onclick="setPricingTab('margin')">Margin</button>
+                <button type="button" class="pp-tab" data-tab="labarugi" onclick="setPricingTab('labarugi')">Laba Rugi</button>
             </div>
             <div id="pricingNotice" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:var(--radius-md);background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.4);color:#fca5a5;font-size:0.78rem;line-height:1.5;"></div>
             <input id="pricingSearch" class="filter-control" style="margin-bottom:12px;max-width:360px;width:100%;" placeholder="Cari produk (nama, SKU)..." oninput="pricingSearchChange(this)" />
@@ -3060,6 +3061,26 @@
                     <span id="pricingPageLabel" style="font-size:0.74rem;font-weight:700;color:var(--text-primary);">Halaman 1 dari 1</span>
                     <button class="aksi-btn" onclick="pricingNext()" style="padding:6px 14px;">Berikutnya <i class="fas fa-chevron-right"></i></button>
                 </div>
+            </div>
+
+            <!-- LABA RUGI -->
+            <div id="labaRugiPanel" style="display:none;">
+                <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+                    <button type="button" class="pp-tab" data-periode="hari" onclick="setLabaRugiPeriod('hari')">Hari Ini</button>
+                    <button type="button" class="pp-tab active" data-periode="bulan" onclick="setLabaRugiPeriod('bulan')">Bulan Ini</button>
+                    <button type="button" class="pp-tab" data-periode="semua" onclick="setLabaRugiPeriod('semua')">Semua</button>
+                </div>
+                <div class="stats-row">
+                    <div class="stat-item"><div><div class="stat-number" id="lrOmzet">Rp 0</div><div class="stat-label">Omzet</div></div><div class="stat-icon-wrapper"><i class="fas fa-money-bill-wave"></i></div></div>
+                    <div class="stat-item"><div><div class="stat-number" id="lrHpp">Rp 0</div><div class="stat-label">HPP / Modal</div></div><div class="stat-icon-wrapper"><i class="fas fa-boxes-stacked"></i></div></div>
+                    <div class="stat-item"><div><div class="stat-number" id="lrLaba">Rp 0</div><div class="stat-label">Laba Kotor</div></div><div class="stat-icon-wrapper"><i class="fas fa-coins"></i></div></div>
+                    <div class="stat-item"><div><div class="stat-number" id="lrMargin">0%</div><div class="stat-label">Margin</div></div><div class="stat-icon-wrapper"><i class="fas fa-percent"></i></div></div>
+                </div>
+                <div class="table-wrapper"><table>
+                    <thead><tr><th>CHANNEL</th><th>OMZET</th><th>HPP</th><th>LABA KOTOR</th><th>MARGIN</th></tr></thead>
+                    <tbody id="lrTableBody"></tbody>
+                </table></div>
+                <div style="font-size:0.72rem;color:var(--text-muted);margin-top:8px;"><i class="fas fa-info-circle"></i> Omzet dari total transaksi semua channel. HPP = modal produk terkini × qty terjual. Periode dihitung waktu WIB.</div>
             </div>
         </div>
 
@@ -6943,7 +6964,108 @@
             pricingTab = tab;
             pricingPage = 1;
             document.querySelectorAll("#pricingTabs .pp-tab").forEach(t => t.classList.toggle("active", t.getAttribute("data-tab") === tab));
+            const isLR = tab === "labarugi";
+            const panel = document.getElementById("labaRugiPanel");
+            const search = document.getElementById("pricingSearch");
+            const tableWrap = document.querySelector("#page-pricing > .table-wrapper");
+            const pager = document.getElementById("pricingPager");
+            if (panel) panel.style.display = isLR ? "" : "none";
+            if (search) search.style.display = isLR ? "none" : "";
+            if (tableWrap) tableWrap.style.display = isLR ? "none" : "";
+            if (pager) pager.style.display = isLR ? "none" : "";
+            if (isLR) { renderLabaRugi(); return; }
             renderPricingPage();
+        }
+
+        // ============================================================
+        // PRICING — TAB LABA RUGI (omzet vs HPP vs laba, per channel)
+        // ============================================================
+        let labaRugiPeriod = "bulan";
+        let labaRugiFetched = false;
+
+        function setLabaRugiPeriod(p) {
+            labaRugiPeriod = p;
+            document.querySelectorAll("#labaRugiPanel .pp-tab").forEach(function (t) {
+                t.classList.toggle("active", t.getAttribute("data-periode") === p);
+            });
+            renderLabaRugi();
+        }
+
+        function lrPeriodKey(dateStr) {
+            const d = String(dateStr || "");
+            const now = new Date(Date.now() + 7 * 3600 * 1000); // WIB
+            if (labaRugiPeriod === "hari") return d.slice(0, 10) === now.toISOString().slice(0, 10);
+            if (labaRugiPeriod === "bulan") return d.slice(0, 7) === now.toISOString().slice(0, 7);
+            return true;
+        }
+
+        async function renderLabaRugi() {
+            let ords = ordersData;
+            let items = orderItemsData;
+            if (!labaRugiFetched && (ords.length === 0 || items.length === 0)) {
+                labaRugiFetched = true;
+                const oRes = await fetchAllOrders();
+                const iRes = await fetchAllOrderItems();
+                if (oRes.data && oRes.data.length > 0) ords = oRes.data.map(mapOrderRowToView);
+                if (iRes.data && iRes.data.length > 0) items = iRes.data;
+            }
+            const byProduct = {};
+            products.forEach(function (p) { byProduct[p.id] = p; });
+            const byOrder = {};
+            items.forEach(function (it) {
+                if (!byOrder[it.orderid]) byOrder[it.orderid] = [];
+                byOrder[it.orderid].push(it);
+            });
+            const rows = {};
+            const addRow = function (key, omzet, hpp) {
+                if (!rows[key]) rows[key] = { omzet: 0, hpp: 0 };
+                rows[key].omzet += omzet;
+                rows[key].hpp += hpp;
+            };
+            let totalOmzet = 0;
+            let totalHpp = 0;
+            ords.forEach(function (o) {
+                if (!lrPeriodKey(o.date)) return;
+                const omzet = Number(o.total) || 0;
+                let hpp = 0;
+                (byOrder[o.orderId] || []).forEach(function (it) {
+                    const p = byProduct[it.product_id];
+                    hpp += (Number(it.qty) || 0) * (p ? (Number(p.modal) || 0) : 0);
+                });
+                totalOmzet += omzet;
+                totalHpp += hpp;
+                let key = o.channel === "Shopee"
+                    ? (String(o.shop_id) === "724153261" ? "Shopee 1" : String(o.shop_id) === "1214362884" ? "Shopee 2" : "Shopee")
+                    : (o.channel || "POS");
+                addRow(key, omzet, hpp);
+            });
+            const laba = totalOmzet - totalHpp;
+            const margin = totalOmzet > 0 ? (laba / totalOmzet * 100) : 0;
+            const rp = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
+            const omzetEl = document.getElementById("lrOmzet");
+            const hppEl = document.getElementById("lrHpp");
+            const labaEl = document.getElementById("lrLaba");
+            const marginEl = document.getElementById("lrMargin");
+            if (omzetEl) omzetEl.textContent = rp.format(totalOmzet);
+            if (hppEl) hppEl.textContent = rp.format(totalHpp);
+            if (labaEl) {
+                labaEl.textContent = (laba < 0 ? "-" : "") + rp.format(Math.abs(laba));
+                labaEl.style.color = laba >= 0 ? "var(--success)" : "var(--danger)";
+            }
+            if (marginEl) marginEl.textContent = margin.toFixed(1) + "%";
+            const body = document.getElementById("lrTableBody");
+            if (!body) return;
+            const keys = Object.keys(rows).sort(function (a, b) {
+                if (a === "POS") return -1;
+                if (b === "POS") return 1;
+                return a.localeCompare(b, "id-ID");
+            });
+            body.innerHTML = keys.map(function (k) {
+                const r = rows[k];
+                const l = r.omzet - r.hpp;
+                const m = r.omzet > 0 ? (l / r.omzet * 100) : 0;
+                return '<tr><td><strong>' + ppEscapeHtml(k) + '</strong></td><td>' + rp.format(r.omzet) + '</td><td>' + rp.format(r.hpp) + '</td><td>' + (l < 0 ? "-" : "") + rp.format(Math.abs(l)) + '</td><td>' + m.toFixed(1) + '%</td></tr>';
+            }).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">Belum ada transaksi pada periode ini.</td></tr>';
         }
 
         function pricingSearchChange(el) {
@@ -6956,6 +7078,7 @@
         function pricingNext() { const tp = Math.max(1, Math.ceil(pricingFiltered.length / PRICING_PAGE_SIZE)); if (pricingPage < tp) { pricingPage++; renderPricingPage(); } }
 
         function renderPricingPage() {
+            if (pricingTab === "labarugi") { renderLabaRugi(); return; }
             const thead = document.getElementById("pricingThead");
             const body = document.getElementById("pricingTableBody");
             if (!body) return;
