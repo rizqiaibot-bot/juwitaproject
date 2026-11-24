@@ -2169,14 +2169,6 @@
                     </ul>
                 </li>
 
-                <!-- PERSEDIAAN -->
-                <li class="dropdown" data-menu-group="persediaan">
-                    <a href="#"><i class="fas fa-boxes-stacked"></i> Persediaan <i class="fas fa-chevron-down"></i></a>
-                    <ul class="dropdown-menu">
-                        <li data-page="monitor-stok"><a href="#"><i class="fas fa-chart-simple"></i> Monitor Stok</a></li>
-                    </ul>
-                </li>
-
                 <!-- PEMBELIAN -->
                 <li class="dropdown" data-menu-group="pembelian">
                     <a href="#"><i class="fas fa-shopping-cart"></i> Pembelian <i class="fas fa-chevron-down"></i></a>
@@ -2193,8 +2185,7 @@
                         <li data-page="picking"><a href="#"><i class="fas fa-clipboard-list"></i> Picking</a></li>
                         <li data-page="packing"><a href="#"><i class="fas fa-boxes"></i> Packing</a></li>
                         <li data-page="pengiriman"><a href="#"><i class="fas fa-truck"></i> Pengiriman</a></li>
-                        <li data-page="opname-gudang"><a href="#"><i class="fas fa-clipboard-check"></i> Stock Opname</a></li>
-                        <li data-page="riwayat-gudang"><a href="#"><i class="fas fa-clock-rotate-left"></i> Riwayat Gudang</a></li>
+                        <li data-page="monitor-stok" data-require-menu="persediaan"><a href="#"><i class="fas fa-chart-simple"></i> Monitor Stok</a></li>
                     </ul>
                 </li>
 
@@ -3003,24 +2994,6 @@
             </div>
             <div class="opname-section-header"><h3>Sesi Opname Aktif</h3></div>
             <div id="opnameActiveList"></div>
-        </div>
-
-        <div id="page-riwayat-gudang" class="page-content">
-            <div class="page-header">
-                <div>
-                    <h1>Riwayat Gudang</h1>
-                    <div class="page-header-desc">Aktivitas picking, packing, pengiriman, opname, dan penerimaan (waktu Asia/Jakarta)</div>
-                </div>
-            </div>
-            <div class="filter-tabs" id="historyFilter">
-                <button class="filter-tab active" data-filter="all">Semua</button>
-                <button class="filter-tab" data-filter="pick">Picking</button>
-                <button class="filter-tab" data-filter="pack">Packing</button>
-                <button class="filter-tab" data-filter="ship">Pengiriman</button>
-                <button class="filter-tab" data-filter="opname">Opname</button>
-                <button class="filter-tab" data-filter="receive">Penerimaan</button>
-            </div>
-            <div class="table-wrapper"><table><thead><tr><th>TANGGAL / JAM (WIB)</th><th>AKTIVITAS</th><th>REFERENSI</th><th>PETUGAS</th><th>STATUS</th></tr></thead><tbody id="warehouseHistoryBody"></tbody></table></div>
         </div>
 
         <div id="page-harga-belanja" class="page-content">
@@ -4871,6 +4844,12 @@
                 els.forEach(el => {
                     el.style.display = hasAccess ? "" : "none";
                 });
+            });
+
+            // Item menu dengan syarat menu khusus (mis. Persediaan di dropdown Gudang).
+            document.querySelectorAll("[data-require-menu]").forEach(el => {
+                const req = el.getAttribute("data-require-menu");
+                el.style.display = getMenuPermissions(req) ? "" : "none";
             });
 
             const marketplaceNav = document.querySelectorAll("[data-marketplace-nav]");
@@ -7699,51 +7678,6 @@
             showToast(`Opname ${s.zone} selesai`);
         }
 
-        // ============================================================
-        // WAREHOUSE: RIWAYAT GUDANG
-        // Dibangun dari data existing (tidak ada tabel/duplikat baru).
-        // ============================================================
-        function renderWarehouseHistory(filter) {
-            const tbody = document.getElementById("warehouseHistoryBody");
-            if (!tbody) return;
-            const rows = [];
-
-            ordersData.forEach(o => {
-                if (o.picked_at) rows.push({ ts: o.picked_at, sort: new Date(o.picked_at).getTime(), type: 'pick', ref: o.orderId, act: 'Picking', petugas: o.picked_by || '-', status: 'Sudah Dipick' });
-                if (o.packed_at) rows.push({ ts: o.packed_at, sort: new Date(o.packed_at).getTime(), type: 'pack', ref: o.orderId, act: 'Packing', petugas: o.packed_by || '-', status: 'Sudah Dipacking' });
-                if (o.shipped_at) rows.push({ ts: o.shipped_at, sort: new Date(o.shipped_at).getTime(), type: 'ship', ref: o.orderId, act: 'Pengiriman', petugas: o.shipped_by || '-', status: 'Dikirim' });
-            });
-
-            warehouseOpname.forEach(s => {
-                if (s.created_at) rows.push({ ts: s.created_at, sort: new Date(s.created_at).getTime(), type: 'opname', ref: (s.zone || '-') + ' (mulai)', act: 'Stock Opname', petugas: s.officer || '-', status: s.status === 'closed' ? 'Selesai' : 'Berjalan' });
-                if (s.closed_at) rows.push({ ts: s.closed_at, sort: new Date(s.closed_at).getTime(), type: 'opname', ref: (s.zone || '-') + ' (selesai)', act: 'Stock Opname', petugas: s.officer || '-', status: 'Selesai' });
-            });
-
-            warehouseReceiving.forEach(r => {
-                const rts = r.created_at || null;
-                if (rts) rows.push({ ts: rts, sort: new Date(rts).getTime(), type: 'receive', ref: r.po_number || r.product_name || '-', act: 'Penerimaan', petugas: '-', status: r.product_name || '-' });
-            });
-
-            rows.sort((a, b) => (b.sort || 0) - (a.sort || 0));
-
-            const f = filter || 'all';
-            const filtered = f === 'all' ? rows : rows.filter(r => r.type === f);
-
-            if (!filtered.length) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">Tidak ada riwayat aktivitas</td></tr>';
-                return;
-            }
-
-            const actCls = { pick: 'badge-lunas', pack: 'badge-lunas', ship: 'badge-belum', opname: 'badge-belum', receive: 'badge-lunas' };
-            tbody.innerHTML = filtered.map(r => `<tr>
-                <td><strong>${fmtWIB(r.ts)}</strong><br><small style="color:var(--text-muted);">WIB</small></td>
-                <td>${r.act}</td>
-                <td><strong>${r.ref}</strong></td>
-                <td>${r.petugas}</td>
-                <td><span class="badge-status ${actCls[r.type] || 'badge-belum'}">${r.status}</span></td>
-            </tr>`).join('');
-        }
-
         // Catatan: perubahan products.stock sekarang dicatat otomatis oleh backend
         // (server.js handleDataWrite → recordProductStockMutation), sehingga tidak
         // ada lagi pencatatan mutation manual di frontend (hindari mutation ganda).
@@ -10102,7 +10036,7 @@
                 "daftar-produk": "katalog", "tambah-produk": "katalog",
                 "monitor-stok": "persediaan", "mutasi-stok": "persediaan",
                 "data-pembelian": "pembelian",
-                penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "opname-gudang": "gudang", "riwayat-gudang": "gudang",
+                penerimaan: "gudang", picking: "gudang", packing: "gudang", pengiriman: "gudang", "opname-gudang": "gudang",
                 "harga-belanja": "pricing", "harga-jual": "pricing", "ubah-harga": "pricing", "diskon-promo": "pricing", "margin-keuntungan": "pricing", "pricing": "pricing",
                 akuntansi: "akuntansi",
                 "rekap-kehadiran": "hr", cuti: "hr", "jadwal-kerja": "hr", penggajian: "hr", "slip-gaji": "hr",
@@ -10373,7 +10307,6 @@
             renderWarehouseShipping();
             renderWarehouseRacks();
             renderWarehouseOpnameList();
-            renderWarehouseHistory();
             renderRekapKehadiran();
 
             // Rekap penjualan: default tanggal hari ini
@@ -10390,15 +10323,6 @@
                     document.querySelectorAll("#pickingFilter .filter-tab").forEach(t => t.classList.remove("active"));
                     this.classList.add("active");
                     renderWarehousePicking(this.dataset.filter);
-                });
-            });
-
-            // Riwayat Gudang filter
-            document.querySelectorAll("#historyFilter .filter-tab").forEach(tab => {
-                tab.addEventListener("click", function() {
-                    document.querySelectorAll("#historyFilter .filter-tab").forEach(t => t.classList.remove("active"));
-                    this.classList.add("active");
-                    renderWarehouseHistory(this.dataset.filter);
                 });
             });
 

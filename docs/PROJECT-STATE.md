@@ -9,7 +9,9 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 ## 0. PENGINGAT SESI TERAKHIR (24 Nov 2026)
 
 **Perubahan menu (24 Nov 2026, sesi ini):**
-- **Mutasi Stok dihapus dari dropdown Persediaan** (index.html, nav item `data-page="mutasi-stok"`). Halaman `page-mutasi-stok` + fungsi-fungsinya TIDAK dihapus (masih ada di kode, tersembunyi) — tinggal pasang ulang `<li>` bila mau dikembalikan.
+- **Dropdown Persediaan digabung ke dropdown Gudang** (arahan user, dikerjakan JFFBOT lalu di-approve): item *Monitor Stok* kini di dalam dropdown Gudang dengan syarat menu persediaan (`data-require-menu="persediaan"`), berlaku di index.html & marketplace.html.
+- **Mutasi Stok dihapus dari menu** (arahan user, dikerjakan manual). Halaman `page-mutasi-stok` + fungsi-fungsinya TIDAK dihapus (masih di kode, tersembunyi).
+- JFFBOT juga menghapus *Riwayat Gudang* (nav + halaman + fungsi) dan *Stock Opname* (item nav) — keduanya sudah di-approve user. Halaman opname + fungsinya masih ada di kode.
 
 **Fitur JFFBOT (chatbot pengembang berbasis OpenCode) — selesai & di-deploy:**
 
