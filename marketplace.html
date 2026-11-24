@@ -489,14 +489,6 @@
           <li data-page="tambah-produk"><a href="index.html?page=tambah-produk"><i class="fas fa-plus-circle"></i> Tambah Produk</a></li>
         </ul>
       </li>
-      <!-- PERSEDIAAN -->
-      <li class="dropdown" data-menu-group="persediaan">
-        <a href="#"><i class="fas fa-boxes-stacked"></i> Persediaan <i class="fas fa-chevron-down"></i></a>
-        <ul class="dropdown-menu">
-          <li data-page="monitor-stok"><a href="index.html?page=monitor-stok"><i class="fas fa-chart-simple"></i> Monitor Stok</a></li>
-          <li data-page="mutasi-stok"><a href="index.html?page=mutasi-stok"><i class="fas fa-arrows-left-right"></i> Mutasi Stok</a></li>
-        </ul>
-      </li>
       <!-- PEMBELIAN -->
       <li class="dropdown" data-menu-group="pembelian">
         <a href="#"><i class="fas fa-shopping-cart"></i> Pembelian <i class="fas fa-chevron-down"></i></a>
@@ -511,7 +503,8 @@
           <li data-page="picking"><a href="index.html?page=picking"><i class="fas fa-clipboard-list"></i> Picking</a></li>
           <li data-page="packing"><a href="index.html?page=packing"><i class="fas fa-boxes"></i> Packing</a></li>
           <li data-page="pengiriman"><a href="index.html?page=pengiriman"><i class="fas fa-truck"></i> Pengiriman</a></li>
-          <li data-page="opname-gudang"><a href="index.html?page=opname-gudang"><i class="fas fa-clipboard-check"></i> Stock Opname</a></li>
+          <li data-page="monitor-stok" data-require-menu="persediaan"><a href="index.html?page=monitor-stok"><i class="fas fa-chart-simple"></i> Monitor Stok</a></li>
+          <li data-page="mutasi-stok" data-require-menu="persediaan"><a href="index.html?page=mutasi-stok"><i class="fas fa-arrows-left-right"></i> Mutasi Stok</a></li>
         </ul>
       </li>
       <!-- PRICING -->
@@ -728,6 +721,10 @@ function applyMarketplacePermissions() {
   document.querySelectorAll("#navMenu [data-menu-group]").forEach(function (el) {
     var menu = el.getAttribute("data-menu-group");
     el.style.display = hasMenu(menu) ? "" : "none";
+  });
+  document.querySelectorAll("#navMenu [data-require-menu]").forEach(function (el) {
+    var req = el.getAttribute("data-require-menu");
+    el.style.display = hasMenu(req) ? "" : "none";
   });
   document.querySelectorAll("[data-marketplace-nav]").forEach(function (el) {
     el.style.display = canReadMarketplace() ? "" : "none";

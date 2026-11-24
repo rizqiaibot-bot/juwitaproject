@@ -2169,15 +2169,6 @@
                     </ul>
                 </li>
 
-                <!-- PERSEDIAAN -->
-                <li class="dropdown" data-menu-group="persediaan">
-                    <a href="#"><i class="fas fa-boxes-stacked"></i> Persediaan <i class="fas fa-chevron-down"></i></a>
-                    <ul class="dropdown-menu">
-                        <li data-page="monitor-stok"><a href="#"><i class="fas fa-chart-simple"></i> Monitor Stok</a></li>
-                        <li data-page="mutasi-stok"><a href="#"><i class="fas fa-arrows-left-right"></i> Mutasi Stok</a></li>
-                    </ul>
-                </li>
-
                 <!-- PEMBELIAN -->
                 <li class="dropdown" data-menu-group="pembelian">
                     <a href="#"><i class="fas fa-shopping-cart"></i> Pembelian <i class="fas fa-chevron-down"></i></a>
@@ -2194,7 +2185,8 @@
                         <li data-page="picking"><a href="#"><i class="fas fa-clipboard-list"></i> Picking</a></li>
                         <li data-page="packing"><a href="#"><i class="fas fa-boxes"></i> Packing</a></li>
                         <li data-page="pengiriman"><a href="#"><i class="fas fa-truck"></i> Pengiriman</a></li>
-                        <li data-page="opname-gudang"><a href="#"><i class="fas fa-clipboard-check"></i> Stock Opname</a></li>
+                        <li data-page="monitor-stok" data-require-menu="persediaan"><a href="#"><i class="fas fa-chart-simple"></i> Monitor Stok</a></li>
+                        <li data-page="mutasi-stok" data-require-menu="persediaan"><a href="#"><i class="fas fa-arrows-left-right"></i> Mutasi Stok</a></li>
                     </ul>
                 </li>
 
@@ -4853,6 +4845,12 @@
                 els.forEach(el => {
                     el.style.display = hasAccess ? "" : "none";
                 });
+            });
+
+            // Item menu dengan syarat menu khusus (mis. Persediaan di dropdown Gudang).
+            document.querySelectorAll("[data-require-menu]").forEach(el => {
+                const req = el.getAttribute("data-require-menu");
+                el.style.display = getMenuPermissions(req) ? "" : "none";
             });
 
             const marketplaceNav = document.querySelectorAll("[data-marketplace-nav]");
