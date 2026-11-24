@@ -144,14 +144,18 @@ export async function syncWorkspace() {
 }
 
 // Usia eksekusi OpenCode yang sedang berjalan (ms) atau null bila idle.
+// Catatan: time.busy TIDAK dihapus saat sesi idle — bandingkan dengan
+// time.idle. Sesi sedang bekerja hanya bila busy > idle.
 async function sessionBusyAge(sessionId) {
   try {
     const infoRes = await ocFetch("/api/session/" + sessionId);
     if (!infoRes.ok) return null;
     const info = await infoRes.json();
-    const startedAt = info.data && info.data.time && info.data.time.busy;
-    if (typeof startedAt !== "number") return null;
-    return Date.now() - startedAt;
+    const t = info.data && info.data.time;
+    if (!t || typeof t.busy !== "number") return null;
+    const idle = typeof t.idle === "number" ? t.idle : 0;
+    if (t.busy <= idle) return null; // idle
+    return Date.now() - t.busy;
   } catch {
     return null;
   }
@@ -201,6 +205,8 @@ export async function submitPrompt(user, text) {
 }
 
 // --- Ambil pesan (dinormalisasi untuk UI) ---
+// Hanya pesan pengguna + JAWABAN AKHIR tiap giliran yang dikembalikan;
+// narasi antar-langkah (planning/thinking) disembunyikan supaya chat ringkas.
 export async function fetchMessages(limit = 100) {
   const sessionId = await ensureSession();
   // Watchdog: eksekusi yang macet di-interupsi otomatis.
@@ -208,17 +214,11 @@ export async function fetchMessages(limit = 100) {
   const res = await ocFetch("/api/session/" + sessionId + "/message?limit=" + limit);
   if (!res.ok) throw httpError(502, "Gagal membaca sesi OpenCode (" + res.status + ")");
   const body = await res.json();
-  const list = Array.isArray(body.data) ? body.data : Array.isArray(body) ? body : [];
-  const messages = [];
-  for (const m of list) {
+  const raw = Array.isArray(body.data) ? body.data : Array.isArray(body) ? body : [];
+  const items = [];
+  for (const m of raw) {
     if (m.type === "user" && typeof m.text === "string") {
-      messages.push({
-        id: m.id,
-        role: "user",
-        text: m.text,
-        createdAt: m.time ? m.time.created : null,
-        done: true,
-      });
+      items.push({ kind: "user", text: m.text, createdAt: m.time ? m.time.created : null });
     } else if (m.type === "assistant") {
       let text = "";
       if (Array.isArray(m.content)) {
@@ -227,10 +227,8 @@ export async function fetchMessages(limit = 100) {
         }
       }
       const done = !!(m.time && m.time.completed);
-      if (!text.trim() && !done && m.content && m.content.length === 0) continue; // placeholder kosong
-      messages.push({
-        id: m.id,
-        role: "assistant",
+      items.push({
+        kind: "assistant",
         text: text.trim(),
         createdAt: m.time ? m.time.created : null,
         done,
@@ -238,7 +236,38 @@ export async function fetchMessages(limit = 100) {
       });
     }
   }
-  messages.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  items.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  // Kelompokkan per giliran (dari pesan user sampai sebelum pesan user berikutnya).
+  const messages = [];
+  let pendingUser = null;
+  let turnAssistants = [];
+  const flushTurn = () => {
+    if (!pendingUser) return;
+    messages.push({ id: "u" + messages.length, role: "user", text: pendingUser.text, createdAt: pendingUser.createdAt, done: true });
+    const withText = turnAssistants.filter((a) => a.text);
+    const final = withText.length ? withText[withText.length - 1] : turnAssistants[turnAssistants.length - 1];
+    if (final) {
+      messages.push({
+        id: "a" + messages.length,
+        role: "assistant",
+        text: final.text,
+        createdAt: final.createdAt,
+        done: final.done,
+        finish: final.finish,
+      });
+    }
+    pendingUser = null;
+    turnAssistants = [];
+  };
+  for (const it of items) {
+    if (it.kind === "user") {
+      flushTurn();
+      pendingUser = it;
+    } else if (pendingUser) {
+      turnAssistants.push(it);
+    }
+  }
+  flushTurn();
   const last = messages[messages.length - 1];
   if (busy && last && last.role === "assistant" && last.done) clearBusy();
   const ocBusy = (await sessionBusyAge(sessionId)) !== null;

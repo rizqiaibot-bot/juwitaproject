@@ -10,7 +10,7 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 **Fitur JFFBOT (chatbot pengembang berbasis OpenCode) — selesai & di-deploy:**
 
-- Menu **JFFBOT** di aplikasi (index.html) = chatbot yang bisa mengubah/menambah fitur/menu web Juwita lewat OpenCode V2 (model DeepSeek V4 Pro via Sumopod) yang berjalan permanen di VPS.
+- Menu **JFFBOT** di aplikasi (index.html) = chatbot yang bisa mengubah/menambah fitur/menu web Juwita lewat OpenCode V2 (model **DeepSeek V4 Pro via api.deepseek.com langsung**, key di `~/.config/opencode/opencode.json`) yang berjalan permanen di VPS.
 - Komponen:
   - VPS: service systemd `juwita-opencode.service` (OpenCode v2.4.1, `127.0.0.1:4096`), config `/home/juwita/.config/opencode/opencode.json` (provider sumopod; deny `git push/branch/checkout/reset/sudo/ssh/scp/rsync` + `external_directory`), instruksi tambahan `/home/juwita/.config/opencode/jffbot.md`.
   - Workspace agent: clone `/home/juwita/juwita-one` (branch main; artefak lama di-exclude via `.git/info/exclude`).
