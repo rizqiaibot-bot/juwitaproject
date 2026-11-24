@@ -8,6 +8,9 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ## 0. PENGINGAT SESI TERAKHIR (24 Nov 2026)
 
+**Perubahan menu (24 Nov 2026, sesi ini):**
+- **Mutasi Stok dihapus dari dropdown Persediaan** (index.html, nav item `data-page="mutasi-stok"`). Halaman `page-mutasi-stok` + fungsi-fungsinya TIDAK dihapus (masih ada di kode, tersembunyi) — tinggal pasang ulang `<li>` bila mau dikembalikan.
+
 **Fitur JFFBOT (chatbot pengembang berbasis OpenCode) — selesai & di-deploy:**
 
 - Menu **JFFBOT** di aplikasi (index.html) = chatbot yang bisa mengubah/menambah fitur/menu web Juwita lewat OpenCode V2 (model **DeepSeek V4 Pro via api.deepseek.com langsung**, key di `~/.config/opencode/opencode.json`) yang berjalan permanen di VPS.
