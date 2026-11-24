@@ -2206,7 +2206,7 @@
                 <li class="nav-item" data-page="akuntansi" data-menu-group="akuntansi"><a href="#"><i class="fas fa-wallet"></i> Akuntansi</a></li>
 
                 <!-- JFFBOT -->
-                <li class="nav-item" data-page="jffbot" data-menu-group="jffbot"><a href="#"><i class="fas fa-robot"></i> JFFBOT</a></li>
+                <li class="nav-item" data-page="jffbot" data-menu-group="jffbot"><a href="#"><i class="fas fa-robot"></i> JFFBOT <span id="jffbotBadge" style="display:none;width:9px;height:9px;border-radius:50%;background:#f59e0b;margin-left:5px;vertical-align:middle;"></span></a></li>
 
                 <!-- HR -->
                 <li class="dropdown" data-menu-group="hr">
@@ -3772,11 +3772,12 @@
             <div class="form-card" style="max-width:100%;">
                 <div id="jffbotChanges" style="display:none;margin-bottom:14px;padding:12px 14px;border-radius:var(--radius-md);background:rgba(245,158,11,0.12);border:1px solid #f59e0b;">
                     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-                        <div style="font-size:0.8rem;font-weight:700;color:#b45309;"><i class="fas fa-code-branch"></i> Ada perubahan yang belum dideploy</div>
-                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <div style="font-size:0.8rem;font-weight:700;color:#b45309;"><i class="fas fa-code-branch"></i> <span id="jffbotChangesTitle">Ada perubahan yang belum dideploy</span></div>
+                        <div id="jffbotApprovalBtns" style="display:flex;gap:8px;flex-wrap:wrap;">
                             <button type="button" class="checkout-btn" style="width:auto;padding:8px 14px;font-size:0.74rem;background:var(--success);" onclick="jffbotApprove()"><i class="fas fa-rocket"></i> Approve &amp; Deploy</button>
                             <button type="button" class="checkout-btn" style="width:auto;padding:8px 14px;font-size:0.74rem;background:var(--danger);" onclick="jffbotCancel()"><i class="fas fa-undo"></i> Batalkan</button>
                         </div>
+                        <div id="jffbotWaitMsg" style="display:none;font-size:0.74rem;font-weight:700;color:#b45309;"><i class="fas fa-hourglass-half"></i> Menunggu admin menyetujui…</div>
                     </div>
                     <div id="jffbotDiff" class="jff-diff" style="margin-top:8px;"></div>
                     <div id="jffbotApproveMsg" style="margin-top:8px;font-size:0.7rem;color:var(--text-muted);">Hanya admin/owner yang melihat tombol ini. Deploy berjalan otomatis setelah push ke GitHub.</div>
@@ -10235,13 +10236,19 @@
         async function jffbotRefreshStatus() {
             const box = document.getElementById("jffbotChanges");
             if (!box) return;
-            if (!isJffbotApprover()) { box.style.display = "none"; return; }
+            const approver = isJffbotApprover();
+            const btns = document.getElementById("jffbotApprovalBtns");
+            const waitMsg = document.getElementById("jffbotWaitMsg");
+            const titleEl = document.getElementById("jffbotChangesTitle");
+            if (btns) btns.style.display = approver ? "" : "none";
+            if (waitMsg) waitMsg.style.display = approver ? "none" : "";
             const res = await apiFetch("/api/jffbot/status");
             const diffEl = document.getElementById("jffbotDiff");
             if (!res.ok) return;
             const data = (res.data && res.data.data) || {};
             if (data.hasChanges) {
                 box.style.display = "block";
+                if (titleEl) titleEl.textContent = approver ? "Ada perubahan yang belum dideploy" : "JFFBOT selesai mengerjakan — ada perubahan baru";
                 let txt = "";
                 if (data.aheadCount > 0) txt += "Commit siap push: " + data.aheadCount + "\n";
                 if (data.files && data.files.length) txt += "File berubah:\n" + data.files.join("\n");
@@ -10306,9 +10313,48 @@
         }
 
         // ============================================================
+        // JFFBOT — notifikasi global (dot di menu + toast saat selesai)
+        // ============================================================
+        let jffbotLastBusy = null;
+        let jffbotNotifTimer = null;
+
+        async function jffbotActivityTick() {
+            if (!currentUser || !getMenuPermissions("jffbot")) return;
+            const badge = document.getElementById("jffbotBadge");
+            if (!badge) return;
+            const res = await apiFetch("/api/jffbot/activity");
+            if (!res.ok) return;
+            const data = (res.data && res.data.data) || {};
+            const busyNow = !!data.busy;
+            if (busyNow) {
+                badge.style.background = "#3b82f6";
+                badge.style.display = "";
+            } else if (data.hasChanges) {
+                badge.style.background = "#f59e0b";
+                badge.style.display = "";
+            } else {
+                badge.style.display = "none";
+            }
+            const onJffbotPage = document.getElementById("page-jffbot") &&
+                document.getElementById("page-jffbot").classList.contains("active-page");
+            if (jffbotLastBusy && !busyNow && !onJffbotPage) {
+                showToast(data.hasChanges
+                    ? "JFFBOT selesai — ada perubahan menunggu " + (isJffbotApprover() ? "approve kamu (buka menu JFFBOT)" : "persetujuan admin") + "."
+                    : "JFFBOT selesai mengerjakan permintaan.");
+            }
+            jffbotLastBusy = busyNow;
+        }
+
+        // ============================================================
         // DOMContentLoaded
         // ============================================================
         document.addEventListener("DOMContentLoaded", function() {
+
+            // JFFBOT: notifikasi global (dot menu + toast). Ringan (25 detik).
+            if (!jffbotNotifTimer) {
+                jffbotNotifTimer = setInterval(jffbotActivityTick, 25000);
+                setTimeout(jffbotActivityTick, 4000);
+            }
 
             // --- INITIAL RENDER ---
             renderProducts();

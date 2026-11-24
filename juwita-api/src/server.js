@@ -19,7 +19,7 @@ import {
 } from "./permissions.js";
 import { connectShop, disconnectShop, pullOrders, pullProducts, syncStock, syncStockOne, syncPrice, syncPriceOne, reconcileStock, scheduleStockPush, scheduleStockReconcile, pushShipment } from "./shopee.js";
 import { nextOrderNumber, formatOrderId, lockOrderDay } from "./order-id.js";
-import { fetchMessages, submitPrompt, changesStatus, approveDeploy, cancelChanges } from "./jffbot.js";
+import { fetchMessages, submitPrompt, changesStatus, approveDeploy, cancelChanges, activity } from "./jffbot.js";
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -2334,6 +2334,16 @@ const server = http.createServer(async (req, res) => {
       }
     }
     return sendJson(res, 405, { error: "method_not_allowed" });
+  }
+  if (pathname === "/api/jffbot/activity") {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    if (!checkMenuAccess(user, "jffbot")) return sendJson(res, 403, { error: "forbidden" });
+    try {
+      return sendJson(res, 200, { data: await activity() });
+    } catch (err) {
+      return sendJson(res, err.status || 502, { error: err.message || "jffbot_error" });
+    }
   }
   if (pathname === "/api/jffbot/status") {
     const user = await requireAuth(req, res);

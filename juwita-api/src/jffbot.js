@@ -17,6 +17,9 @@ const OPENCODE_URL = process.env.JFFBOT_OPENCODE_URL || "http://127.0.0.1:4096";
 const WORKSPACE = process.env.JFFBOT_WORKSPACE || "/home/juwita/juwita-one";
 const GITHUB_KEY = process.env.JFFBOT_GITHUB_KEY || "/home/juwita/.ssh/jffbot_github";
 const BUSY_TIMEOUT_MS = 15 * 60 * 1000;
+// Eksekusi agent yang macet (mis. stream model terputus) dianggap gagal
+// setelah ini dan di-interupsi otomatis.
+const STALL_TIMEOUT_MS = 8 * 60 * 1000;
 
 // --- Auth OpenCode ---
 function servicePassword() {
@@ -59,6 +62,7 @@ async function ocFetch(path, init = {}) {
 // --- Session global (satu sesi JFFBOT untuk semua pengguna) ---
 let globalSessionId = null;
 let busy = null; // { by, startedAt, timer }
+let cachedChanges = null; // hasil changesStatus terakhir (untuk notifikasi ringan)
 
 function busyInfo() {
   if (!busy) return null;
@@ -139,6 +143,30 @@ export async function syncWorkspace() {
   }
 }
 
+// Usia eksekusi OpenCode yang sedang berjalan (ms) atau null bila idle.
+async function sessionBusyAge(sessionId) {
+  try {
+    const infoRes = await ocFetch("/api/session/" + sessionId);
+    if (!infoRes.ok) return null;
+    const info = await infoRes.json();
+    const startedAt = info.data && info.data.time && info.data.time.busy;
+    if (typeof startedAt !== "number") return null;
+    return Date.now() - startedAt;
+  } catch {
+    return null;
+  }
+}
+
+// Eksekusi OpenCode yang masih "busy" setelah STALL_TIMEOUT_MS dianggap
+// macet dan di-interupsi. Mengembalikan true bila interupsi dilakukan.
+async function interruptStalled(sessionId) {
+  const age = await sessionBusyAge(sessionId);
+  if (age === null || age < STALL_TIMEOUT_MS) return false;
+  await ocFetch("/api/session/" + sessionId + "/interrupt", { method: "POST" }).catch(() => {});
+  clearBusy();
+  return true;
+}
+
 // --- Kirim prompt ke agent ---
 export async function submitPrompt(user, text) {
   const info = busyInfo();
@@ -147,6 +175,8 @@ export async function submitPrompt(user, text) {
   }
   await syncWorkspace();
   const sessionId = await ensureSession();
+  // Bila turn sebelumnya macet, interupsi dulu supaya prompt baru jalan.
+  await interruptStalled(sessionId);
   const res = await ocFetch("/api/session/" + sessionId + "/prompt", {
     method: "POST",
     body: JSON.stringify({ text }),
@@ -166,12 +196,15 @@ export async function submitPrompt(user, text) {
     startedAt: Date.now(),
     timer: setTimeout(clearBusy, BUSY_TIMEOUT_MS),
   };
+  cachedChanges = { hasChanges: false, files: [], aheadCount: 0, summary: "", at: Date.now() };
   return { sessionId };
 }
 
 // --- Ambil pesan (dinormalisasi untuk UI) ---
 export async function fetchMessages(limit = 100) {
   const sessionId = await ensureSession();
+  // Watchdog: eksekusi yang macet di-interupsi otomatis.
+  await interruptStalled(sessionId);
   const res = await ocFetch("/api/session/" + sessionId + "/message?limit=" + limit);
   if (!res.ok) throw httpError(502, "Gagal membaca sesi OpenCode (" + res.status + ")");
   const body = await res.json();
@@ -208,7 +241,8 @@ export async function fetchMessages(limit = 100) {
   messages.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   const last = messages[messages.length - 1];
   if (busy && last && last.role === "assistant" && last.done) clearBusy();
-  const running = busyInfo() !== null;
+  const ocBusy = (await sessionBusyAge(sessionId)) !== null;
+  const running = busyInfo() !== null || ocBusy;
   return { sessionId, messages, running };
 }
 
@@ -224,11 +258,22 @@ export async function changesStatus() {
     .filter(Boolean);
   const aheadCount = Number(ahead.stdout.trim() || 0);
   const hasChanges = lines.length > 0 || aheadCount > 0;
-  return {
+  const result = {
     hasChanges,
     files: lines,
     aheadCount,
     summary: diffStat.stdout.trim(),
+  };
+  cachedChanges = Object.assign({ at: Date.now() }, result);
+  return result;
+}
+
+// --- Aktivitas ringan (untuk notifikasi global, tanpa git fetch) ---
+export async function activity() {
+  return {
+    busy: busyInfo(),
+    hasChanges: cachedChanges ? cachedChanges.hasChanges : null,
+    changedAt: cachedChanges ? cachedChanges.at : null,
   };
 }
 
@@ -254,6 +299,7 @@ export async function approveDeploy(message) {
   if (!push.ok) {
     throw httpError(500, "git push gagal: " + (push.stderr || push.stdout).slice(0, 400));
   }
+  cachedChanges = { hasChanges: false, files: [], aheadCount: 0, summary: "", at: Date.now() };
   return { pushed: true, output: push.stdout.trim() };
 }
 
@@ -264,5 +310,6 @@ export async function cancelChanges() {
   await runGit(["fetch", "origin"]).catch(() => {});
   const reset = await runGit(["reset", "--hard", "origin/main"]);
   if (!reset.ok) throw httpError(500, "git reset gagal: " + reset.stderr.slice(0, 300));
+  cachedChanges = { hasChanges: false, files: [], aheadCount: 0, summary: "", at: Date.now() };
   return { reverted: true };
 }
