@@ -8,7 +8,7 @@
 // /var/www/html yang live). Deploy hanya lewat approve → git push → GitHub
 // Actions (rsync otomatis), sehingga agent tidak pernah menyentuh situs live.
 // ============================================================
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -63,6 +63,31 @@ async function ocFetch(path, init = {}) {
 let globalSessionId = null;
 let busy = null; // { by, startedAt, timer }
 let cachedChanges = null; // hasil changesStatus terakhir (untuk notifikasi ringan)
+
+// --- Atribusi pengirim pesan (chat bersama: catat siapa kirim apa) ---
+const SENDERS_FILE = "/home/juwita/.jffbot-senders.json";
+const sendersMap = new Map();
+
+function loadSenders() {
+  try {
+    if (existsSync(SENDERS_FILE)) {
+      const parsed = JSON.parse(readFileSync(SENDERS_FILE, "utf8"));
+      for (const [k, v] of Object.entries(parsed || {})) sendersMap.set(k, String(v));
+    }
+  } catch {
+    // file belum ada / rusak — mulai kosong
+  }
+}
+
+function saveSenders() {
+  try {
+    writeFileSync(SENDERS_FILE, JSON.stringify(Object.fromEntries(sendersMap)));
+  } catch {
+    // gagal tulis tidak fatal
+  }
+}
+
+loadSenders();
 
 function busyInfo() {
   if (!busy) return null;
@@ -204,8 +229,20 @@ export async function submitPrompt(user, text) {
     }
     throw httpError(502, "OpenCode menolak permintaan (" + res.status + ")" + detail);
   }
+  // Catat ID pesan user yang dibuat + siapa pengirimnya (chat bersama).
+  const senderName = String(user.name || user.phone || "pengguna");
+  try {
+    const created = await res.json();
+    const msgId = created && created.data && created.data.id;
+    if (msgId) {
+      sendersMap.set(msgId, senderName);
+      saveSenders();
+    }
+  } catch {
+    // atribusi gagal tidak fatal
+  }
   busy = {
-    by: user.name || user.phone || "pengguna",
+    by: senderName,
     startedAt: Date.now(),
     timer: setTimeout(clearBusy, BUSY_TIMEOUT_MS),
   };
@@ -233,7 +270,13 @@ export async function fetchMessages(limit = 100) {
   const items = [];
   for (const m of raw) {
     if (m.type === "user" && typeof m.text === "string") {
-      items.push({ kind: "user", text: m.text, createdAt: m.time ? m.time.created : null });
+      items.push({
+        kind: "user",
+        id: m.id || null,
+        text: m.text,
+        sender: m.id ? sendersMap.get(m.id) || null : null,
+        createdAt: m.time ? m.time.created : null,
+      });
     } else if (m.type === "assistant") {
       let text = "";
       if (Array.isArray(m.content)) {
@@ -258,7 +301,14 @@ export async function fetchMessages(limit = 100) {
   let turnAssistants = [];
   const flushTurn = () => {
     if (!pendingUser) return;
-    messages.push({ id: "u" + messages.length, role: "user", text: pendingUser.text, createdAt: pendingUser.createdAt, done: true });
+    messages.push({
+      id: pendingUser.id || "u" + messages.length,
+      role: "user",
+      text: pendingUser.text,
+      sender: pendingUser.sender,
+      createdAt: pendingUser.createdAt,
+      done: true,
+    });
     const withText = turnAssistants.filter((a) => a.text);
     const final = withText.length ? withText[withText.length - 1] : turnAssistants[turnAssistants.length - 1];
     if (final) {

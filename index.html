@@ -3787,7 +3787,7 @@
                     <textarea id="jffbotInput" placeholder="Contoh: Tambahkan menu laporan hutang di Akuntansi…" maxlength="2000"></textarea>
                     <button type="button" class="checkout-btn" style="width:auto;padding:10px 18px;flex-shrink:0;" onclick="jffbotSend()" id="jffbotSendBtn"><i class="fas fa-paper-plane"></i> Kirim</button>
                 </div>
-                <div style="font-size:0.68rem;color:var(--text-muted);margin-top:6px;">JFFBOT membaca aturan proyek (AGENTS.md) dan kondisi terkini. Jangan minta perubahan stok/Shopee di sini.</div>
+                <div style="font-size:0.68rem;color:var(--text-muted);margin-top:6px;">JFFBOT membaca aturan proyek (AGENTS.md) dan kondisi terkini. Jangan minta perubahan stok/Shopee di sini. <strong>Chat ini bersama</strong> — semua pengguna dengan menu JFFBOT bisa melihat isi percakapan.</div>
             </div>
         </div>
 
@@ -10283,7 +10283,7 @@
             } else {
                 let html = "";
                 for (const m of messages) {
-                    const meta = '<div class="jff-meta">' + jffbotEsc(m.role === "user" ? (currentUser && currentUser.name ? currentUser.name : "Saya") : "JFFBOT") + "</div>";
+                    const meta = '<div class="jff-meta">' + jffbotEsc(m.role === "user" ? (m.sender || "Pengguna") : "JFFBOT") + "</div>";
                     if (m.role === "user") html += '<div class="jff-msg jff-user">' + jffbotEsc(m.text || "") + meta + "</div>";
                     else html += '<div class="jff-msg jff-bot">' + jffbotEsc(m.text || (m.done ? "(selesai)" : "")) + meta + "</div>";
                 }
