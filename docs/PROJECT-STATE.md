@@ -1,12 +1,45 @@
 # PROJECT STATE — Juwita
 
-Terakhir diperbarui: **24 November 2026** (fitur JFFBOT — chatbot pengembang via OpenCode, di-deploy).
+Terakhir diperbarui: **27 November 2026** (fitur Laba Rugi per item di Pricing — selesai, commit lokal; BELUM push/deploy, migration BELUM dijalankan).
 
 Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat sesi baru.
 
 ---
 
-## 0. PENGINGAT SESI TERAKHIR (24 Nov 2026)
+## 0. PENGINGAT SESI TERAKHIR (27 Nov 2026)
+
+**Fitur "Laba Rugi per Item" di menu Pricing (selesai & commit lokal; BELUM push/deploy, migration BELUM dijalankan):**
+
+- Permintaan user: tab Laba Rugi Pricing menampilkan laba/rugi per produk per channel setelah potongan platform (POS 0%, Shopee 1 19%, Shopee 2 19%). Istilah tampilan: **"Cost"** (= `products.modal`), bukan "HPP".
+- File fitur:
+  - `M index.html` — panel tab Laba Rugi: kartu pengaturan **Potongan Platform per Channel** (input %, simpan = `PUT /api/platform-cuts`), sub-tab channel POS/Shopee 1/Shopee 2, statistik (omzet/potongan/bersih/Cost/laba), kartu sorotan (paling untung, margin tipis, produk rugi), tabel per item (Produk, Qty, Harga Jual, Potongan, Cost, Laba/Unit, Margin, Harga Min, Laba Total, Status Untung/Impas/Rugi/Cost belum tersedia), info harga min.
+  - `M juwita-api/src/server.js` — `GET /api/platform-cuts` (baca: owner/pos/pricing; fallback default per channel bila tabel/baris belum ada) + `PUT /api/platform-cuts` (tulis: menu pricing; validasi 0–100; 503 `platform_cuts_table_missing` bila migration belum jalan).
+  - `A juwita-api/migrations/012_platform_cuts.sql` — tabel `platform_cuts` (channel PK, percent NUMERIC(5,2), CHECK 0–100) + GRANT juwita_app + seed idempotent (0/19/19). **BELUM dijalankan di production.**
+  - `A juwita-api/migrations/012_platform_cuts_rollback.sql` — rollback manual (DROP TABLE IF EXISTS), tidak otomatis.
+  - `M juwita-api/test/routes.test.mjs` — 5 test platform-cuts (default, parsial, izin baca/tulis, validasi).
+  - `A juwita-api/test/labarugi.test.mjs` — 10 test logika frontend (ekstrak fungsi dari index.html via vm).
+- **Aturan perhitungan (hasil perbaikan audit 27 Nov):**
+  - Channel: tab POS **hanya POS1/POS2**; Shopee 1/2 menurut `shop_id` (`724153261` / `1214362884`). WhatsApp, Juwita App, Tokopedia, Lazada, Shopee tanpa shop_id, dll. **TIDAK ikut** statistik mana pun (ringkasan maupun per item).
+  - Order dengan `paystatus = "Batal"` ATAU `wmsstatus = "Batal"` **dikecualikan** dari qty/omzet/potongan/bersih/Cost/laba. Status/data order tidak diubah.
+  - Periode memakai **tanggal WIB** via `fmtOrderDate` (Shopee UTC → dikonversi; POS1/POS2 jam lokal). Helper baru: `lrOrderWibDateKey`, `lrTodayWibKey`, `lrPeriodKey(o)`.
+  - Default potongan per channel diisi satu per satu — channel yang belum tersimpan tetap default (0/19/19); `from_defaults` hanya penanda "tidak ada baris sama sekali".
+  - Fetch pertama tab Laba Rugi menyimpan hasil ke `ordersData`/`orderItemsData` dan hanya mengambil yang belum termuat (tidak menunggu polling).
+  - Rumus: Potongan/unit = harga jual channel × cut% (SEKALI); Bersih = jual − potongan; Laba/unit = bersih − modal (modal null/0 → "Cost belum tersedia", tidak dihitung untung/rugi); Laba total = laba/unit × qty; Harga Min = ceil(modal ÷ (1 − cut%)).
+- Test lokal: `node --test test/permissions.test.mjs test/routes.test.mjs test/shopee-reconcile.test.mjs test/labarugi.test.mjs` → **99 lulus**; sintaks JS index.html OK.
+- **Tidak ada perubahan DB production.** Migration 012 dijalankan manual saat deploy (minta instruksi user); rollback hanya bila fitur dibatalkan.
+- Sudah commit lokal; BELUM push/deploy (sesuai aturan). Ringkasan omzet transaksi lama di tab Laba Rugi TETAP ada di atas analisis per item (ikut aturan channel/Batal/WIB yang sama).
+- **TIDAK termasuk fitur ini** (tidak ikut commit): `juwita-api/src/shopee.js` (draft JFFBOT) & `juwita-api/migrations/011_shopee_order_income.sql` (draft JFFBOT).
+
+---
+
+## 0a. PENGINGAT SESI SEBELUMNYA (25 Nov 2026)
+
+- **MENUNGGU KEPUTUSAN USER** — fitur "Biaya & Hasil Akhir Shopee" buatan JFFBOT di VPS masih menunggu **Approve & Deploy** atau **Batalkan** di panel JFFBOT. Draft lokal di PC (`juwita-api/src/shopee.js` modifikasi lama + `juwita-api/migrations/011_shopee_order_income.sql`) TIDAK boleh ikut commit apa pun sampai keputusan user.
+- Sudah live hari itu: `9c05bed` (tab Laba Rugi per channel), `0643b54` (nama pengirim asli chat JFFBOT), `8ca843e` (Mutasi Stok disembunyikan dari menu), `632c56d` (checkbox menu JFFBOT di form karyawan).
+
+---
+
+## 0b. PENGINGAT SESI SEBELUMNYA (24 Nov 2026)
 
 **Perubahan menu (24 Nov 2026, sesi ini):**
 - **Dropdown Persediaan digabung ke dropdown Gudang** (arahan user, dikerjakan JFFBOT lalu di-approve): item *Monitor Stok* kini di dalam dropdown Gudang dengan syarat menu persediaan (`data-require-menu="persediaan"`), berlaku di index.html & marketplace.html.
@@ -28,7 +61,7 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ---
 
-## 0a. PENGINGAT SESI SEBELUMNYA (23 Nov 2026)
+## 0c. PENGINGAT SESI SEBELUMNYA (23 Nov 2026)
 
 **1. Audit CSV "PRODUK & BARCODE.csv" (Downloads, 14 Nov) vs DB POS (read-only, selesai):**
 - CSV: 722 baris (423 dgn barcode, 299 tanpa). DB: 1.781 produk, 1.429 barcode unik.
@@ -47,7 +80,7 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ---
 
-## 0a. PENGINGAT SESI SEBELUMNYA (14 Nov 2026)
+## 0d. PENGINGAT SESI SEBELUMNYA (14 Nov 2026)
 
 **Hapus menu HR → Karyawan ("Manajemen Karyawan" = daftar nama karyawan):**
 - Dropdown HR (`index.html` + `marketplace.html`) sekarang: Rekap Kehadiran, Izin dan Cuti, Jadwal Kerja.
@@ -59,7 +92,7 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ---
 
-## 0b. PENGINGAT SESI SEBELUMNYA (12 Nov 2026)
+## 0e. PENGINGAT SESI SEBELUMNYA (12 Nov 2026)
 
 **1. Menu GUDANG = general (semua karyawan aktif):**
 - `permissions.js`: `GENERAL_MENUS = ["gudang"]`; `checkTableAccess` mengizinkan operasi apa pun yang daftar menunya memuat gudang (mis. read orders/order_items/produk/PO/stock_mutations/warehouse_*); operasi menu lain tetap menu-bound (stok update, retry mutasi, aksi Shopee TIDAK ikut general).
@@ -79,7 +112,7 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ---
 
-## 0c. PENGINGAT SESI SEBELUMNYA (11 Nov 2026)
+## 0f. PENGINGAT SESI SEBELUMNYA (11 Nov 2026)
 
 **Percepat load produk di POS (`index.html`):**
 - Grid produk sebelumnya menunggu SEMUA data (orders, order_items, gudang, harga) selesai baru dirender.
@@ -90,7 +123,7 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ---
 
-## 0d. PENGINGAT SESI SEBELUMNYA (9 Nov 2026)
+## 0g. PENGINGAT SESI SEBELUMNYA (9 Nov 2026)
 
 **UNDO import Google Sheet 7 Nov (atas permintaan user, "tertumpuk" di POS):**
 - **845 produk `SH-` (id 2308–3160) dihapus** dari DB — semua stok 0, nol referensi di semua tabel (sudah diaudit).
@@ -101,7 +134,7 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
 
 ---
 
-## 0e. PENGINGAT SESI SEBELUMNYA (7 Nov 2026)
+## 0h. PENGINGAT SESI SEBELUMNYA (7 Nov 2026)
 
 Yang dikerjakan & di-deploy di sesi terakhir (semua sudah commit + push, `main` bersih):
 

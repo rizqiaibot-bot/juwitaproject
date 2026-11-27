@@ -297,6 +297,91 @@ async function handleProductPricesPut(req, res) {
   }
 }
 
+// ============================================================
+// POTONGAN PLATFORM PER CHANNEL (analisis Laba Rugi per item)
+// Nilai default dipakai bila tabel platform_cuts belum dibuat
+// (migration 012 belum dijalankan). Nilai hanya memengaruhi
+// perhitungan analisis; TIDAK mengubah harga/stok/transaksi.
+// ============================================================
+const PLATFORM_CUT_DEFAULTS = Object.freeze({
+  pos: 0,
+  "shopee:724153261": 19,
+  "shopee:1214362884": 19,
+});
+
+async function handlePlatformCuts(req, res) {
+  try {
+    const { rows } = await pool.query(
+      "SELECT channel, percent FROM platform_cuts"
+    );
+    // Default per channel selalu diisi lebih dulu; baris yang tersimpan
+    // menimpa channel masing-masing. Channel yang belum ada di tabel TETAP
+    // memakai default (from_defaults tidak diartikan "semua tersimpan").
+    const data = {};
+    for (const ch of PRODUCT_PRICE_CHANNELS) data[ch] = PLATFORM_CUT_DEFAULTS[ch];
+    let stored = 0;
+    for (const r of rows) {
+      if (!PRODUCT_PRICE_CHANNELS.includes(r.channel)) continue;
+      const n = Number(r.percent);
+      if (!Number.isFinite(n) || n < 0 || n > 100) continue;
+      data[r.channel] = n;
+      stored++;
+    }
+    return sendJson(res, 200, { data, from_defaults: stored === 0 });
+  } catch (err) {
+    // Tabel belum ada (migration belum dijalankan): kembalikan default
+    // agar tampilan Laba Rugi tetap berfungsi.
+    if (err && err.code === "42P01") {
+      return sendJson(res, 200, {
+        data: { ...PLATFORM_CUT_DEFAULTS },
+        from_defaults: true,
+      });
+    }
+    console.error("platform-cuts query failed:", err.message);
+    return sendJson(res, 500, { error: "internal_error" });
+  }
+}
+
+async function handlePlatformCutsPut(req, res) {
+  const { error, data } = await readJsonBody(req, 16 * 1024);
+  if (error || data == null || typeof data !== "object" || Array.isArray(data)) {
+    return sendJson(res, 400, { error: "invalid_request" });
+  }
+  const cuts = (data.cuts && typeof data.cuts === "object" && !Array.isArray(data.cuts))
+    ? data.cuts
+    : data;
+
+  const entries = [];
+  for (const ch of PRODUCT_PRICE_CHANNELS) {
+    const raw = cuts[ch];
+    const n = typeof raw === "number" ? raw : Number(raw);
+    if (!Number.isFinite(n) || n < 0 || n > 100) {
+      return sendJson(res, 400, { error: "invalid_percent" });
+    }
+    entries.push({ channel: ch, percent: Math.round(n * 100) / 100 });
+  }
+
+  try {
+    await pool.query(
+      `INSERT INTO platform_cuts (channel, percent)
+       SELECT * FROM unnest($1::text[], $2::numeric[])
+       ON CONFLICT (channel)
+       DO UPDATE SET percent = EXCLUDED.percent, updated_at = now()`,
+      [entries.map((e) => e.channel), entries.map((e) => e.percent)]
+    );
+    const saved = {};
+    entries.forEach((e) => { saved[e.channel] = e.percent; });
+    return sendJson(res, 200, { ok: true, data: saved });
+  } catch (err) {
+    if (err && err.code === "42P01") {
+      console.error("platform-cuts table missing:", err.message);
+      return sendJson(res, 503, { error: "platform_cuts_table_missing" });
+    }
+    console.error("platform-cuts upsert failed:", err.message);
+    return sendJson(res, 500, { error: "internal_error" });
+  }
+}
+
 // --- Data API generik (whitelist tabel) ---
 const DATA_TABLES = new Set([
   "products", "orders", "order_items", "karyawan",
@@ -2218,6 +2303,20 @@ const server = http.createServer(async (req, res) => {
     if (!user) return;
     if (!checkMenuAccess(user, "pricing")) return sendJson(res, 403, { error: "forbidden" });
     return handleProductPricesPut(req, res);
+  }
+  if (req.method === "GET" && pathname === "/api/platform-cuts") {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    if (!isOwnerUser(user) && !userHasAnyMenu(user, PRODUCT_PRICE_READ_MENUS)) {
+      return sendJson(res, 403, { error: "forbidden" });
+    }
+    return handlePlatformCuts(req, res);
+  }
+  if (req.method === "PUT" && pathname === "/api/platform-cuts") {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    if (!checkMenuAccess(user, "pricing")) return sendJson(res, 403, { error: "forbidden" });
+    return handlePlatformCutsPut(req, res);
   }
   if (req.method === "POST" && pathname === "/api/orders") {
     const user = await requireAuth(req, res);

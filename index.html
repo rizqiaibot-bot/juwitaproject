@@ -3065,22 +3065,78 @@
 
             <!-- LABA RUGI -->
             <div id="labaRugiPanel" style="display:none;">
-                <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+                <style>
+                    #labaRugiPanel .stat-item { cursor: default; }
+                    #labaRugiPanel .stat-item:hover { transform: none; box-shadow: var(--card-shadow); border-color: var(--border-color); }
+                    #lrItemStats .stat-item { padding: 16px 18px; }
+                    #lrItemStats .stat-number { font-size: 1.1rem; }
+                    .lr-hl-card { flex:1; min-width:230px; background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-lg); padding:14px 16px; box-shadow:var(--card-shadow); }
+                    .lr-hl-title { font-size:0.7rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:6px; }
+                    .lr-hl-value { font-size:0.88rem; font-weight:700; color:var(--text-primary); line-height:1.45; }
+                    .lr-hl-sub { font-size:0.72rem; color:var(--text-secondary); margin-top:3px; }
+                </style>
+
+                <!-- PENGATURAN POTONGAN PLATFORM -->
+                <div class="form-card" style="margin-bottom:16px;">
+                    <h3 style="margin:0 0 4px;"><i class="fas fa-percent" style="color:var(--primary);"></i> Potongan Platform per Channel</h3>
+                    <p style="font-size:0.68rem;color:var(--text-muted);margin:0 0 12px;">Persentase potongan untuk analisis Laba Rugi. POS / offline tanpa potongan. Nilai tersimpan di database dan dapat diubah kapan saja tanpa mengubah kode program.</p>
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;">
+                        <div class="form-group" style="min-width:150px;"><label>POS / Offline (%)</label><input type="number" id="cutInput-pos" class="form-control" min="0" max="100" step="0.5" inputmode="decimal" disabled /></div>
+                        <div class="form-group" style="min-width:150px;"><label>Shopee 1 (%)</label><input type="number" id="cutInput-shopee:724153261" class="form-control" min="0" max="100" step="0.5" inputmode="decimal" disabled /></div>
+                        <div class="form-group" style="min-width:150px;"><label>Shopee 2 (%)</label><input type="number" id="cutInput-shopee:1214362884" class="form-control" min="0" max="100" step="0.5" inputmode="decimal" disabled /></div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px;">
+                        <button class="checkout-btn" id="cutSaveBtn" onclick="savePlatformCuts()" style="display:none;"><i class="fas fa-save"></i> Simpan Potongan</button>
+                        <p style="font-size:0.68rem;color:var(--text-muted);margin:0;">Hanya memengaruhi analisis. Tidak mengubah harga jual, stok, order, maupun pembelian.</p>
+                    </div>
+                </div>
+
+                <!-- RINGKASAN OMZET (TRANSAKSI) -->
+                <div id="labaRugiPeriodTabs" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
                     <button type="button" class="pp-tab" data-periode="hari" onclick="setLabaRugiPeriod('hari')">Hari Ini</button>
                     <button type="button" class="pp-tab active" data-periode="bulan" onclick="setLabaRugiPeriod('bulan')">Bulan Ini</button>
                     <button type="button" class="pp-tab" data-periode="semua" onclick="setLabaRugiPeriod('semua')">Semua</button>
                 </div>
                 <div class="stats-row">
                     <div class="stat-item"><div><div class="stat-number" id="lrOmzet">Rp 0</div><div class="stat-label">Omzet</div></div><div class="stat-icon-wrapper"><i class="fas fa-money-bill-wave"></i></div></div>
-                    <div class="stat-item"><div><div class="stat-number" id="lrHpp">Rp 0</div><div class="stat-label">HPP / Modal</div></div><div class="stat-icon-wrapper"><i class="fas fa-boxes-stacked"></i></div></div>
+                    <div class="stat-item"><div><div class="stat-number" id="lrHpp">Rp 0</div><div class="stat-label">Cost / Modal</div></div><div class="stat-icon-wrapper"><i class="fas fa-boxes-stacked"></i></div></div>
                     <div class="stat-item"><div><div class="stat-number" id="lrLaba">Rp 0</div><div class="stat-label">Laba Kotor</div></div><div class="stat-icon-wrapper"><i class="fas fa-coins"></i></div></div>
                     <div class="stat-item"><div><div class="stat-number" id="lrMargin">0%</div><div class="stat-label">Margin</div></div><div class="stat-icon-wrapper"><i class="fas fa-percent"></i></div></div>
                 </div>
                 <div class="table-wrapper"><table>
-                    <thead><tr><th>CHANNEL</th><th>OMZET</th><th>HPP</th><th>LABA KOTOR</th><th>MARGIN</th></tr></thead>
+                    <thead><tr><th>CHANNEL</th><th>OMZET</th><th>COST</th><th>LABA KOTOR</th><th>MARGIN</th></tr></thead>
                     <tbody id="lrTableBody"></tbody>
                 </table></div>
-                <div style="font-size:0.72rem;color:var(--text-muted);margin-top:8px;"><i class="fas fa-info-circle"></i> Omzet dari total transaksi semua channel. HPP = modal produk terkini × qty terjual. Periode dihitung waktu WIB.</div>
+                <div style="font-size:0.72rem;color:var(--text-muted);margin-top:8px;"><i class="fas fa-info-circle"></i> Omzet dari total transaksi semua channel. Cost = modal produk terkini × qty terjual. Periode dihitung waktu WIB.</div>
+
+                <!-- ANALISIS LABA RUGI PER ITEM -->
+                <div style="margin-top:24px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                        <h3 style="margin:0;">Laba Rugi per Item</h3>
+                        <div id="labaRugiChannelTabs" style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button type="button" class="pp-tab active" data-lrchannel="pos" onclick="setLabaRugiChannel('pos')">POS</button>
+                            <button type="button" class="pp-tab" data-lrchannel="shopee:724153261" onclick="setLabaRugiChannel('shopee:724153261')">Shopee 1</button>
+                            <button type="button" class="pp-tab" data-lrchannel="shopee:1214362884" onclick="setLabaRugiChannel('shopee:1214362884')">Shopee 2</button>
+                        </div>
+                    </div>
+                    <div class="stats-row" id="lrItemStats" style="margin-bottom:16px;">
+                        <div class="stat-item"><div><div class="stat-number" id="lrItemOmzet">Rp 0</div><div class="stat-label">Total Omzet</div></div><div class="stat-icon-wrapper"><i class="fas fa-money-bill-wave"></i></div></div>
+                        <div class="stat-item"><div><div class="stat-number" id="lrItemPotongan">Rp 0</div><div class="stat-label">Total Potongan</div></div><div class="stat-icon-wrapper"><i class="fas fa-scissors"></i></div></div>
+                        <div class="stat-item"><div><div class="stat-number" id="lrItemBersih">Rp 0</div><div class="stat-label">Penghasilan Bersih</div></div><div class="stat-icon-wrapper"><i class="fas fa-wallet"></i></div></div>
+                        <div class="stat-item"><div><div class="stat-number" id="lrItemHpp">Rp 0</div><div class="stat-label">Total Cost</div></div><div class="stat-icon-wrapper"><i class="fas fa-boxes-stacked"></i></div></div>
+                        <div class="stat-item"><div><div class="stat-number" id="lrItemLaba">Rp 0</div><div class="stat-label">Laba / Rugi</div></div><div class="stat-icon-wrapper"><i class="fas fa-coins"></i></div></div>
+                    </div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+                        <div class="lr-hl-card"><div class="lr-hl-title"><i class="fas fa-crown" style="color:var(--warning);"></i> Paling Menguntungkan</div><div class="lr-hl-value" id="lrBestProduct">—</div></div>
+                        <div class="lr-hl-card"><div class="lr-hl-title"><i class="fas fa-scale-balanced" style="color:var(--primary);"></i> Margin Paling Tipis</div><div class="lr-hl-value" id="lrThinnestMargin">—</div></div>
+                        <div class="lr-hl-card"><div class="lr-hl-title"><i class="fas fa-triangle-exclamation" style="color:var(--danger);"></i> Produk Rugi</div><div class="lr-hl-value" id="lrLossProducts">—</div></div>
+                    </div>
+                    <div class="table-wrapper"><table>
+                        <thead><tr><th>PRODUK</th><th>QTY</th><th>HARGA JUAL</th><th>POTONGAN</th><th>COST</th><th>LABA/UNIT</th><th>MARGIN</th><th>HARGA MIN</th><th>LABA TOTAL</th><th>STATUS</th></tr></thead>
+                        <tbody id="lrItemTableBody"></tbody>
+                    </table></div>
+                    <div id="lrItemInfo" style="font-size:0.72rem;color:var(--text-muted);margin-top:8px;"></div>
+                </div>
             </div>
         </div>
 
@@ -6978,36 +7034,151 @@
         }
 
         // ============================================================
-        // PRICING — TAB LABA RUGI (omzet vs HPP vs laba, per channel)
+        // PRICING — TAB LABA RUGI (omzet vs cost vs laba, per channel)
         // ============================================================
         let labaRugiPeriod = "bulan";
         let labaRugiFetched = false;
 
+        // --- Analisis Laba Rugi per item + potongan platform ---
+        const LR_CHANNELS = [
+            { key: "pos", label: "POS" },
+            { key: "shopee:724153261", label: "Shopee 1" },
+            { key: "shopee:1214362884", label: "Shopee 2" }
+        ];
+        let labaRugiChannel = "pos";
+        let platformCuts = { "pos": 0, "shopee:724153261": 19, "shopee:1214362884": 19 };
+        let platformCutsFetched = false;
+
+        // Potongan platform per channel (default: POS 0%, Shopee 19%).
+        function platformCutPercent(channel) {
+            const v = Number(platformCuts[channel]);
+            return Number.isFinite(v) ? v : (channel === "pos" ? 0 : 19);
+        }
+
+        function fillPlatformCutInputs() {
+            const canEdit = canEditPricing();
+            LR_CHANNELS.forEach(function (c) {
+                const input = document.getElementById("cutInput-" + c.key);
+                if (!input) return;
+                input.value = String(platformCutPercent(c.key));
+                input.disabled = !canEdit;
+            });
+            const btn = document.getElementById("cutSaveBtn");
+            if (btn) btn.style.display = canEdit ? "" : "none";
+        }
+
+        async function fetchPlatformCuts() {
+            try {
+                const res = await apiFetch("/api/platform-cuts");
+                if (res.ok && res.data && res.data.data) {
+                    LR_CHANNELS.forEach(function (c) {
+                        const v = Number(res.data.data[c.key]);
+                        if (Number.isFinite(v)) platformCuts[c.key] = v;
+                    });
+                }
+            } catch (err) {
+                console.warn("platform-cuts tidak tersedia:", (err && err.message) || err);
+            } finally {
+                platformCutsFetched = true;
+                fillPlatformCutInputs();
+            }
+        }
+
+        async function savePlatformCuts() {
+            if (!canEditPricing()) { showToast("Anda tidak punya izin edit Pricing"); return; }
+            const vals = {};
+            for (const c of LR_CHANNELS) {
+                const input = document.getElementById("cutInput-" + c.key);
+                const raw = input ? String(input.value).trim() : "";
+                if (raw === "") { showToast(c.label + ": persentase wajib diisi"); return; }
+                const n = Number(raw);
+                if (!Number.isFinite(n) || n < 0 || n > 100) { showToast(c.label + ": persentase harus 0–100"); return; }
+                vals[c.key] = Math.round(n * 100) / 100;
+            }
+            const btn = document.getElementById("cutSaveBtn");
+            if (btn) btn.disabled = true;
+            try {
+                const res = await apiFetch("/api/platform-cuts", { method: "PUT", body: { cuts: vals } });
+                if (!res.ok) {
+                    const errMsg = (res.data && res.data.error) ? res.data.error : ("HTTP " + res.status);
+                    if (errMsg === "platform_cuts_table_missing") {
+                        throw new Error("Tabel platform_cuts belum ada di database. Jalankan migration 012_platform_cuts.sql.");
+                    }
+                    throw new Error(errMsg);
+                }
+                platformCuts = Object.assign({}, vals);
+                showToast("Potongan platform tersimpan");
+                fillPlatformCutInputs();
+                renderLabaRugi();
+            } catch (err) {
+                const msg = (err && err.message) ? err.message : "Gagal menyimpan potongan";
+                showToast("Gagal menyimpan: " + msg);
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        function setLabaRugiChannel(channel) {
+            labaRugiChannel = channel;
+            document.querySelectorAll("#labaRugiChannelTabs .pp-tab").forEach(function (t) {
+                t.classList.toggle("active", t.getAttribute("data-lrchannel") === channel);
+            });
+            renderLabaRugi();
+        }
+
         function setLabaRugiPeriod(p) {
             labaRugiPeriod = p;
-            document.querySelectorAll("#labaRugiPanel .pp-tab").forEach(function (t) {
+            document.querySelectorAll("#labaRugiPeriodTabs .pp-tab").forEach(function (t) {
                 t.classList.toggle("active", t.getAttribute("data-periode") === p);
             });
             renderLabaRugi();
         }
 
-        function lrPeriodKey(dateStr) {
-            const d = String(dateStr || "");
-            const now = new Date(Date.now() + 7 * 3600 * 1000); // WIB
-            if (labaRugiPeriod === "hari") return d.slice(0, 10) === now.toISOString().slice(0, 10);
-            if (labaRugiPeriod === "bulan") return d.slice(0, 7) === now.toISOString().slice(0, 7);
+        // Tanggal order dalam WIB (Asia/Jakarta) memakai helper yang sudah ada
+        // (fmtOrderDate): order Shopee disimpan UTC → dikonversi ke WIB;
+        // order POS1/POS2 sudah jam lokal → dipakai apa adanya.
+        function lrOrderWibDateKey(o) {
+            const s = fmtOrderDate(o);
+            if (!s) return "";
+            return String(s).slice(0, 10);
+        }
+
+        // Tanggal "hari ini" dalam WIB, format YYYY-MM-DD.
+        function lrTodayWibKey() {
+            const p = wibNowParts();
+            return (p.year || "") + "-" + (p.month || "00") + "-" + (p.day || "00");
+        }
+
+        function lrPeriodKey(o) {
+            const key = lrOrderWibDateKey(o);
+            if (!key) return false;
+            if (labaRugiPeriod === "hari") return key === lrTodayWibKey();
+            if (labaRugiPeriod === "bulan") return key.slice(0, 7) === lrTodayWibKey().slice(0, 7);
             return true;
         }
 
         async function renderLabaRugi() {
+            if (!platformCutsFetched) await fetchPlatformCuts();
             let ords = ordersData;
             let items = orderItemsData;
+            // Fetch pertama: ambil yang belum termuat dan SIMPAN KEMBALI ke
+            // global agar tab Laba Rugi langsung penuh tanpa menunggu polling.
             if (!labaRugiFetched && (ords.length === 0 || items.length === 0)) {
                 labaRugiFetched = true;
-                const oRes = await fetchAllOrders();
-                const iRes = await fetchAllOrderItems();
-                if (oRes.data && oRes.data.length > 0) ords = oRes.data.map(mapOrderRowToView);
-                if (iRes.data && iRes.data.length > 0) items = iRes.data;
+                if (ords.length === 0) {
+                    const oRes = await fetchAllOrders();
+                    if (oRes.data && oRes.data.length > 0) {
+                        ords = oRes.data.map(mapOrderRowToView);
+                        ordersData = ords;
+                    }
+                }
+                if (items.length === 0) {
+                    const iRes = await fetchAllOrderItems();
+                    if (iRes.data && iRes.data.length > 0) {
+                        items = iRes.data;
+                        orderItemsData = items;
+                    }
+                }
             }
             const byProduct = {};
             products.forEach(function (p) { byProduct[p.id] = p; });
@@ -7025,7 +7196,10 @@
             let totalOmzet = 0;
             let totalHpp = 0;
             ords.forEach(function (o) {
-                if (!lrPeriodKey(o.date)) return;
+                if (lrExcludedOrder(o)) return;
+                const chKey = lrOrderChannelKey(o);
+                if (!chKey) return; // channel selain POS/Shopee 1/Shopee 2 tidak ikut
+                if (!lrPeriodKey(o)) return;
                 const omzet = Number(o.total) || 0;
                 let hpp = 0;
                 (byOrder[o.orderId] || []).forEach(function (it) {
@@ -7034,9 +7208,9 @@
                 });
                 totalOmzet += omzet;
                 totalHpp += hpp;
-                let key = o.channel === "Shopee"
-                    ? (String(o.shop_id) === "724153261" ? "Shopee 1" : String(o.shop_id) === "1214362884" ? "Shopee 2" : "Shopee")
-                    : (o.channel || "POS");
+                const key = chKey === "pos" ? "POS"
+                    : chKey === "shopee:724153261" ? "Shopee 1"
+                    : "Shopee 2";
                 addRow(key, omzet, hpp);
             });
             const laba = totalOmzet - totalHpp;
@@ -7054,18 +7228,211 @@
             }
             if (marginEl) marginEl.textContent = margin.toFixed(1) + "%";
             const body = document.getElementById("lrTableBody");
-            if (!body) return;
             const keys = Object.keys(rows).sort(function (a, b) {
                 if (a === "POS") return -1;
                 if (b === "POS") return 1;
                 return a.localeCompare(b, "id-ID");
             });
-            body.innerHTML = keys.map(function (k) {
-                const r = rows[k];
-                const l = r.omzet - r.hpp;
-                const m = r.omzet > 0 ? (l / r.omzet * 100) : 0;
-                return '<tr><td><strong>' + ppEscapeHtml(k) + '</strong></td><td>' + rp.format(r.omzet) + '</td><td>' + rp.format(r.hpp) + '</td><td>' + (l < 0 ? "-" : "") + rp.format(Math.abs(l)) + '</td><td>' + m.toFixed(1) + '%</td></tr>';
-            }).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">Belum ada transaksi pada periode ini.</td></tr>';
+            if (body) {
+                body.innerHTML = keys.map(function (k) {
+                    const r = rows[k];
+                    const l = r.omzet - r.hpp;
+                    const m = r.omzet > 0 ? (l / r.omzet * 100) : 0;
+                    return '<tr><td><strong>' + ppEscapeHtml(k) + '</strong></td><td>' + rp.format(r.omzet) + '</td><td>' + rp.format(r.hpp) + '</td><td>' + (l < 0 ? "-" : "") + rp.format(Math.abs(l)) + '</td><td>' + m.toFixed(1) + '%</td></tr>';
+                }).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">Belum ada transaksi pada periode ini.</td></tr>';
+            }
+            renderLabaRugiItems(ords, items);
+        }
+
+        // ============================================================
+        // LABA RUGI PER ITEM — harga jual channel × (1 − potongan) − Cost.
+        // Potongan dihitung SATU kali per unit. Qty dari order_items pada
+        // periode & channel aktif. Cost = products.modal (null/0 = belum ada).
+        // ============================================================
+        function lrOrderChannelKey(o) {
+            if (o.channel === "POS1" || o.channel === "POS2") return "pos";
+            if (o.channel === "Shopee") {
+                const s = String(o.shop_id || "");
+                if (s === "724153261") return "shopee:724153261";
+                if (s === "1214362884") return "shopee:1214362884";
+                return null; // Shopee tanpa shop_id tidak dihitung
+            }
+            // Channel lain (WhatsApp, Juwita App, Tokopedia, Lazada, dll.)
+            // TIDAK ikut perhitungan Laba Rugi.
+            return null;
+        }
+
+        // Order batal (paystatus/wmsstatus "Batal") TIDAK ikut Laba Rugi.
+        // Hanya memengaruhi perhitungan — status/data order tidak diubah.
+        function lrExcludedOrder(o) {
+            return !!o && (String(o.payStatus || "") === "Batal" || String(o.wmsStatus || "") === "Batal");
+        }
+
+        function renderLabaRugiItems(ords, items) {
+            const tableBody = document.getElementById("lrItemTableBody");
+            if (!tableBody) return;
+            const channel = labaRugiChannel;
+            const chDef = LR_CHANNELS.find(c => c.key === channel) || LR_CHANNELS[0];
+            const cutPct = platformCutPercent(channel);
+            const cutRatio = cutPct / 100;
+            const netRatio = 1 - cutRatio;
+
+            // Qty terjual per produk pada channel & periode aktif.
+            const orderById = {};
+            ords.forEach(function (o) { orderById[o.orderId] = o; });
+            const qtyByProduct = {};
+            items.forEach(function (it) {
+                const o = orderById[it.orderid];
+                if (!o) return;
+                if (lrExcludedOrder(o)) return;
+                if (!lrPeriodKey(o)) return;
+                if (lrOrderChannelKey(o) !== channel) return;
+                const pid = it.product_id;
+                if (pid == null || pid === "") return;
+                qtyByProduct[String(pid)] = (qtyByProduct[String(pid)] || 0) + (Number(it.qty) || 0);
+            });
+
+            const rp = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
+            const fmtRp = function (n) { return rp.format(n); };
+            const fmtSigned = function (n) { return (n < 0 ? "-" : "") + rp.format(Math.abs(n)); };
+            const fmtNum = function (n) { return Math.round(n).toLocaleString("id-ID"); };
+
+            const rows = [];
+            let skippedNoPrice = 0;
+            products.forEach(function (p) {
+                const jual = productChannelPrice(p.id, channel);
+                if (jual == null) { skippedNoPrice++; return; }
+                const modalNum = Number(p.modal);
+                const hasHpp = Number.isFinite(modalNum) && modalNum > 0;
+                const potongan = jual * cutRatio;
+                const bersih = jual - potongan;
+                const labaUnit = hasHpp ? (bersih - modalNum) : null;
+                const marginPct = (hasHpp && bersih > 0) ? (labaUnit / bersih * 100) : null;
+                const hargaMin = (hasHpp && netRatio > 0) ? Math.ceil(modalNum / netRatio) : null;
+                const qty = qtyByProduct[String(p.id)] || 0;
+                const labaTotal = (labaUnit != null) ? labaUnit * qty : null;
+                rows.push({
+                    p: p, jual: jual, potongan: potongan, bersih: bersih,
+                    hasHpp: hasHpp, modal: hasHpp ? modalNum : 0,
+                    labaUnit: labaUnit, marginPct: marginPct, hargaMin: hargaMin,
+                    qty: qty, labaTotal: labaTotal
+                });
+            });
+
+            // Total hanya dari item yang terjual pada periode (qty > 0).
+            let totOmzet = 0, totPotongan = 0, totBersih = 0, totHpp = 0, totLaba = 0;
+            let soldNoHpp = 0, soldQty = 0;
+            rows.forEach(function (r) {
+                if (r.qty <= 0) return;
+                totOmzet += r.jual * r.qty;
+                totPotongan += r.potongan * r.qty;
+                totBersih += r.bersih * r.qty;
+                soldQty += r.qty;
+                if (r.hasHpp) {
+                    totHpp += r.modal * r.qty;
+                    totLaba += r.labaUnit * r.qty;
+                } else {
+                    soldNoHpp++;
+                }
+            });
+
+            const setStat = function (id, text, color) {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.textContent = text;
+                el.style.color = color || "";
+            };
+            setStat("lrItemOmzet", fmtRp(totOmzet));
+            setStat("lrItemPotongan", fmtRp(totPotongan));
+            setStat("lrItemBersih", fmtRp(totBersih));
+            setStat("lrItemHpp", fmtRp(totHpp));
+            setStat("lrItemLaba", fmtSigned(totLaba), totLaba >= 0 ? "var(--success)" : "var(--danger)");
+
+            // Urutan: produk dengan Cost diurut laba/unit tertinggi dulu,
+            // lalu produk tanpa Cost (abjad).
+            const withHpp = rows.filter(r => r.hasHpp).sort(function (a, b) { return b.labaUnit - a.labaUnit; });
+            const noHpp = rows.filter(r => !r.hasHpp).sort(function (a, b) {
+                return String(a.p.name || "").localeCompare(String(b.p.name || ""), "id-ID");
+            });
+            const ordered = withHpp.concat(noHpp);
+
+            // Sorotan: paling untung / margin tipis / rugi.
+            let best = null;
+            withHpp.forEach(function (r) { if (!best || r.labaUnit > best.labaUnit) best = r; });
+            const bestEl = document.getElementById("lrBestProduct");
+            if (bestEl) {
+                bestEl.innerHTML = best
+                    ? '<strong>' + ppEscapeHtml(best.p.name) + '</strong><div class="lr-hl-sub">Laba per unit: ' + fmtSigned(best.labaUnit) + (best.marginPct != null ? ' · Margin ' + best.marginPct.toFixed(1) + '%' : '') + '</div>'
+                    : '<span style="color:var(--text-muted);">—</span>';
+            }
+            const thinnest = withHpp.filter(function (r) { return r.labaUnit >= 0; }).sort(function (a, b) { return a.labaUnit - b.labaUnit; })[0] || null;
+            const thinEl = document.getElementById("lrThinnestMargin");
+            if (thinEl) {
+                thinEl.innerHTML = thinnest
+                    ? '<strong>' + ppEscapeHtml(thinnest.p.name) + '</strong><div class="lr-hl-sub">Laba per unit: ' + fmtSigned(thinnest.labaUnit) + ' · Margin ' + (thinnest.marginPct != null ? thinnest.marginPct.toFixed(1) + '%' : '—') + '</div>'
+                    : '<span style="color:var(--text-muted);">—</span>';
+            }
+            const losses = withHpp.filter(function (r) { return r.labaUnit < 0; }).sort(function (a, b) { return a.labaUnit - b.labaUnit; });
+            const lossEl = document.getElementById("lrLossProducts");
+            if (lossEl) {
+                if (losses.length === 0) {
+                    lossEl.innerHTML = '<span style="color:var(--text-muted);">Tidak ada</span>';
+                } else {
+                    const names = losses.slice(0, 5).map(function (r) {
+                        return ppEscapeHtml(r.p.name) + ' (' + fmtSigned(r.labaUnit) + ')';
+                    }).join('<br>');
+                    lossEl.innerHTML = names + (losses.length > 5 ? '<div class="lr-hl-sub">+ ' + (losses.length - 5) + ' produk lain</div>' : '');
+                }
+            }
+
+            // Tabel per item.
+            tableBody.innerHTML = ordered.map(function (r) {
+                const p = r.p;
+                let statusHtml, labaUnitHtml, marginHtml, minHtml, labaTotalHtml, hppHtml;
+                if (!r.hasHpp) {
+                    statusHtml = '<span class="badge-status badge-belum">Cost belum tersedia</span>';
+                    labaUnitHtml = '<span style="color:var(--text-muted);">—</span>';
+                    marginHtml = '<span style="color:var(--text-muted);">—</span>';
+                    minHtml = '<span style="color:var(--text-muted);">—</span>';
+                    labaTotalHtml = '<span style="color:var(--text-muted);">—</span>';
+                    hppHtml = '<span style="color:var(--text-muted);">—</span>';
+                } else {
+                    const lu = r.labaUnit;
+                    statusHtml = lu > 0
+                        ? '<span class="badge-status badge-lunas">Untung</span>'
+                        : lu === 0
+                            ? '<span class="badge-status badge-belum">Impas</span>'
+                            : '<span class="badge-status badge-batal">Rugi</span>';
+                    labaUnitHtml = fmtSigned(lu);
+                    marginHtml = (r.marginPct == null) ? '<span style="color:var(--text-muted);">—</span>' : r.marginPct.toFixed(1) + '%';
+                    minHtml = (r.hargaMin == null) ? '<span style="color:var(--text-muted);">—</span>' : ('Rp ' + fmtNum(r.hargaMin));
+                    labaTotalHtml = fmtSigned(r.labaTotal);
+                    hppHtml = 'Rp ' + fmtNum(r.modal);
+                }
+                return '<tr>' +
+                    '<td><strong>' + ppEscapeHtml(p.name) + '</strong>' + (p.sku ? ' <span style="color:var(--text-muted);font-size:0.7rem;">· ' + ppEscapeHtml(p.sku) + '</span>' : '') + '</td>' +
+                    '<td>' + r.qty + '</td>' +
+                    '<td>Rp ' + fmtNum(r.jual) + '</td>' +
+                    '<td>Rp ' + fmtNum(r.potongan) + '</td>' +
+                    '<td>' + hppHtml + '</td>' +
+                    '<td>' + labaUnitHtml + '</td>' +
+                    '<td>' + marginHtml + '</td>' +
+                    '<td>' + minHtml + '</td>' +
+                    '<td>' + labaTotalHtml + '</td>' +
+                    '<td>' + statusHtml + '</td>' +
+                    '</tr>';
+            }).join('') || '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--text-muted);">Belum ada produk dengan harga ' + ppEscapeHtml(chDef.label) + '.</td></tr>';
+
+            const infoEl = document.getElementById("lrItemInfo");
+            if (infoEl) {
+                let html = '<i class="fas fa-info-circle"></i> Channel <strong>' + ppEscapeHtml(chDef.label) + '</strong> · potongan platform ' + cutPct + '%. ' +
+                    'Laba/unit = harga jual − potongan − Cost; Laba total = laba/unit × qty terjual. ' +
+                    'Harga min = harga impas agar tidak rugi (Cost ÷ ' + netRatio.toFixed(2) + ')' + (cutPct <= 0 ? ' — sama dengan Cost' : '') + '.';
+                if (skippedNoPrice > 0) html += ' ' + skippedNoPrice + ' produk tanpa harga channel ini dilewati.';
+                if (soldNoHpp > 0) html += ' <strong>' + soldNoHpp + ' produk terjual tanpa Cost</strong> — Cost-nya tidak dihitung.';
+                if (totOmzet > 0) html += ' Total qty terjual: ' + fmtNum(soldQty) + ' unit.';
+                infoEl.innerHTML = html;
+            }
         }
 
         function pricingSearchChange(el) {

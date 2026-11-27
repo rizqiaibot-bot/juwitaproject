@@ -133,6 +133,14 @@ class FakePool {
     if (sql.includes("FROM product_prices")) {
       return { rows: [] };
     }
+    if (sql.startsWith("INSERT INTO platform_cuts")) {
+      captured.platformCuts = params;
+      return { rows: [] };
+    }
+    if (sql.includes("FROM platform_cuts")) {
+      const rows = Array.isArray(fakeState.platformCutsRows) ? fakeState.platformCutsRows : [];
+      return { rows: rows.map((r) => ({ ...r })) };
+    }
     if (sql.includes("SELECT record_warehouse_action(")) {
       captured.warehouseRpc = params;
       return { rows: [{ result: { status: "ok", wmsstatus: params[1] === "pick" ? "Dipick" : "Siap Kirim" } }] };
@@ -481,6 +489,70 @@ test("PUT harga per channel tanpa menu Pricing ditolak", async () => {
   assert.equal((await call("/api/product-prices", "PUT", "hr-id", body)).status, 403);
   assert.equal((await call("/api/product-prices", "PUT", "katalog-id", body)).status, 403);
   assert.equal((await call("/api/product-prices", "PUT", "owner-id", body)).status, 200);
+});
+
+test("platform-cuts: default POS 0% / Shopee 19% bila tabel belum ada", async () => {
+  const r = await call("/api/platform-cuts", "GET", "pricing-id");
+  assert.equal(r.status, 200);
+  assert.equal(r.data.from_defaults, true);
+  assert.equal(r.data.data.pos, 0);
+  assert.equal(r.data.data["shopee:724153261"], 19);
+  assert.equal(r.data.data["shopee:1214362884"], 19);
+});
+
+test("platform-cuts: channel yang belum tersimpan tetap memakai default", async () => {
+  // Tabel berisi hanya Shopee 1 (25%). POS & Shopee 2 harus tetap default.
+  fakeState.platformCutsRows = [{ channel: "shopee:724153261", percent: "25.00" }];
+  try {
+    const r = await call("/api/platform-cuts", "GET", "pricing-id");
+    assert.equal(r.status, 200);
+    assert.equal(r.data.from_defaults, false);
+    assert.equal(r.data.data.pos, 0);
+    assert.equal(r.data.data["shopee:724153261"], 25);
+    assert.equal(r.data.data["shopee:1214362884"], 19);
+  } finally {
+    fakeState.platformCutsRows = null;
+  }
+});
+
+test("platform-cuts: baca hanya untuk owner/pos/pricing", async () => {
+  assert.equal((await call("/api/platform-cuts", "GET", "katalog-id")).status, 403);
+  assert.equal((await call("/api/platform-cuts", "GET", "hr-id")).status, 403);
+  assert.equal((await call("/api/platform-cuts", "GET", "gudang-id")).status, 403);
+  assert.equal((await call("/api/platform-cuts", "GET", "pos-id")).status, 200);
+  assert.equal((await call("/api/platform-cuts", "GET", "owner-id")).status, 200);
+});
+
+test("platform-cuts: PUT hanya menu Pricing", async () => {
+  const body = { cuts: { pos: 0, "shopee:724153261": 19, "shopee:1214362884": 19 } };
+  assert.equal((await call("/api/platform-cuts", "PUT", "pos-id", body)).status, 403);
+  assert.equal((await call("/api/platform-cuts", "PUT", "katalog-id", body)).status, 403);
+  assert.equal((await call("/api/platform-cuts", "PUT", "hr-id", body)).status, 403);
+});
+
+test("platform-cuts: simpan nilai dan validasi 0-100", async () => {
+  const ok = await call("/api/platform-cuts", "PUT", "pricing-id", {
+    cuts: { pos: 0, "shopee:724153261": 19.5, "shopee:1214362884": 25 },
+  });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.data.data["shopee:724153261"], 19.5);
+  assert.equal(ok.data.data["shopee:1214362884"], 25);
+
+  const badHigh = await call("/api/platform-cuts", "PUT", "pricing-id", {
+    cuts: { pos: 0, "shopee:724153261": 101, "shopee:1214362884": 19 },
+  });
+  assert.equal(badHigh.status, 400);
+  assert.equal(badHigh.data.error, "invalid_percent");
+
+  const badLow = await call("/api/platform-cuts", "PUT", "pricing-id", {
+    cuts: { pos: -1, "shopee:724153261": 19, "shopee:1214362884": 19 },
+  });
+  assert.equal(badLow.status, 400);
+
+  const ownerOk = await call("/api/platform-cuts", "PUT", "owner-id", {
+    cuts: { pos: 0, "shopee:724153261": 19, "shopee:1214362884": 19 },
+  });
+  assert.equal(ownerOk.status, 200);
 });
 
 test("Katalog tidak boleh PATCH harga produk lama", async () => {
