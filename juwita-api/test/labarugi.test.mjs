@@ -4,7 +4,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 // ============================================================
-// TEST LOGIKA FRONTEND LABA RUGI PER ITEM (index.html)
+// TEST LOGIKA FRONTEND LABA RUGI (index.html)
 // Fungsi-fungsi DIEKSTRAK dari kode asli index.html lalu dijalankan
 // dalam sandbox vm — bukan salinan logika. Jika index.html berubah
 // dan test gagal, berarti ada regresi pada fitur Laba Rugi.
@@ -121,6 +121,8 @@ const EXTRACTED = [
   extractBlock("function platformCutPercent("),
   extractBlock("function productChannelPrice("),
   extractBlock("function ppEscapeHtml("),
+  extractBlock("function buildLabaRugiMarginRows("),
+  extractBlock("function lrMarginCategoryStats("),
   extractBlock("function renderLabaRugiItems("),
   extractBlock("function renderLabaRugi("),
   extractBlock("function mapOrderRowToView("),
@@ -252,123 +254,212 @@ test("platformCutPercent: default per channel dan nilai tersimpan", () => {
   assert.equal(sb.platformCutPercent("shopee:1214362884"), 19); // tetap default
 });
 
-// ---------- PIPELINE PER ITEM (qty, batal, channel lain, rumus) ----------
+// ---------- ANALISIS MARGIN (KATALOG, tanpa transaksi/koneksi Shopee) ----------
 
-test("renderLabaRugiItems Shopee 1 19%: batal & channel lain tidak ikut; rumus sesuai spesifikasi", () => {
-  const sb = buildSandbox();
-  sb.products = [
-    { id: 1, name: "Bakso", sku: "BK", modal: 35000 },
-    { id: 3, name: "TanpaCost", sku: null, modal: 0 },
-  ];
-  sb.productPrices = {
-    "1": { pos: 50000, "shopee:724153261": 50000, "shopee:1214362884": 48000 },
-    "3": { pos: 30000, "shopee:724153261": 30000, "shopee:1214362884": 30000 },
-  };
-  sb.labaRugiChannel = "shopee:724153261";
-  sb.labaRugiPeriod = "semua";
-  sb.platformCuts["shopee:724153261"] = 19;
-
-  const ords = [
-    { orderId: "O1", date: "2026-11-27 10:00", channel: "Shopee", shop_id: "724153261", payStatus: "Lunas", wmsStatus: "Selesai" },
-    { orderId: "O2", date: "2026-11-27 10:00", channel: "Shopee", shop_id: "724153261", payStatus: "Batal", wmsStatus: "Selesai" },
-    { orderId: "O3", date: "2026-11-27 10:00", channel: "Shopee", shop_id: "724153261", payStatus: "Lunas", wmsStatus: "Batal" },
-    { orderId: "O4", date: "2026-11-27 10:00", channel: "WhatsApp", shop_id: null, payStatus: "Lunas", wmsStatus: "Selesai" },
-    { orderId: "O5", date: "2026-11-27 10:00", channel: "POS1", shop_id: null, payStatus: "Lunas", wmsStatus: "Selesai" },
-  ];
-  const items = [
-    { orderid: "O1", product_id: 1, qty: 10 },
-    { orderid: "O1", product_id: 3, qty: 1 },
-    { orderid: "O2", product_id: 1, qty: 100 }, // batal → TIDAK ikut
-    { orderid: "O3", product_id: 1, qty: 100 }, // batal → TIDAK ikut
-    { orderid: "O4", product_id: 1, qty: 50 },  // WhatsApp → TIDAK ikut
-    { orderid: "O5", product_id: 1, qty: 7 },   // POS1 di tab Shopee 1 → TIDAK ikut
-  ];
-  sb.renderLabaRugiItems(ords, items);
-
-  const el = sb.getElements();
-  // Omzet = 50000×10 + 30000×1 = 530.000
-  assert.equal(el.lrItemOmzet.textContent, RP.format(530000));
-  // Potongan = 9500×10 + 5700×1 = 100.700 (dihitung SEKALI)
-  assert.equal(el.lrItemPotongan.textContent, RP.format(100700));
-  // Bersih = 40500×10 + 24300×1 = 429.300
-  assert.equal(el.lrItemBersih.textContent, RP.format(429300));
-  // Cost = 35000×10 = 350.000 (tanpa-cost tidak ikut)
-  assert.equal(el.lrItemHpp.textContent, RP.format(350000));
-  // Laba = 5500×10 = 55.000
-  assert.equal(el.lrItemLaba.textContent, RP.format(55000));
-
-  const html = el.lrItemTableBody.innerHTML;
-  assert.ok(html.includes(">10<"), "qty bakso = 10");
-  assert.ok(!html.includes(">260<"), "qty batal/channel lain TIDAK ikut");
-  assert.ok(html.includes("Cost belum tersedia"), "produk tanpa cost ditandai");
-  assert.ok(html.includes("Untung"), "status untung tampil");
-  assert.ok(html.includes("43.210"), "harga min bakso = ceil(35000/0.81)");
-});
-
-test("renderLabaRugiItems POS: hanya POS1/POS2, potongan 0%, laba rugi benar", () => {
+test("buildLabaRugiMarginRows Shopee 1 19%: katalog penuh, rumus per unit benar, potongan dihitung sekali", () => {
   const sb = buildSandbox();
   sb.products = [
     { id: 1, name: "Bakso", sku: "BK", modal: 35000 },
     { id: 2, name: "Tepung", sku: "TP", modal: 8265 },
+    { id: 3, name: "TanpaCost", sku: null, modal: 0 },
+    { id: 4, name: "TanpaHarga", sku: null, modal: 10000 },
   ];
   sb.productPrices = {
-    "1": { pos: 50000, "shopee:724153261": 50000, "shopee:1214362884": 50000 },
-    "2": { pos: 8000, "shopee:724153261": 10000, "shopee:1214362884": 10000 },
+    "1": { pos: 50000, "shopee:724153261": 50000, "shopee:1214362884": 48000 },
+    "2": { pos: 8000, "shopee:724153261": 8000, "shopee:1214362884": 8000 },
+    "3": { pos: 30000, "shopee:724153261": 30000, "shopee:1214362884": 30000 },
   };
-  sb.labaRugiChannel = "pos";
-  sb.labaRugiPeriod = "semua";
-  sb.platformCuts.pos = 0;
+  sb.platformCuts["shopee:724153261"] = 19;
 
-  const ords = [
-    { orderId: "P1", date: "2026-11-27 10:00", channel: "POS1", payStatus: "Lunas", wmsStatus: "Selesai" },
-    { orderId: "P2", date: "2026-11-27 10:00", channel: "POS2", payStatus: "Lunas", wmsStatus: "Selesai" },
-    { orderId: "P3", date: "2026-11-27 10:00", channel: "WhatsApp", payStatus: "Lunas", wmsStatus: "Selesai" },
-    { orderId: "P4", date: "2026-11-27 10:00", channel: "Tokopedia", payStatus: "Lunas", wmsStatus: "Selesai" },
-  ];
-  const items = [
-    { orderid: "P1", product_id: 1, qty: 1 },
-    { orderid: "P2", product_id: 2, qty: 2 },
-    { orderid: "P3", product_id: 1, qty: 100 }, // WhatsApp → TIDAK ikut
-    { orderid: "P4", product_id: 2, qty: 200 }, // Tokopedia → TIDAK ikut
-  ];
-  sb.renderLabaRugiItems(ords, items);
+  const built = sb.buildLabaRugiMarginRows("shopee:724153261");
 
-  const el = sb.getElements();
-  // Omzet = 50000×1 + 8000×2 = 66.000
-  assert.equal(el.lrItemOmzet.textContent, RP.format(66000));
-  assert.equal(el.lrItemPotongan.textContent, RP.format(0));
-  assert.equal(el.lrItemBersih.textContent, RP.format(66000));
-  // Cost = 35000×1 + 8265×2 = 51.530
-  assert.equal(el.lrItemHpp.textContent, RP.format(51530));
-  // Laba = (50000-35000) + (8000-8265)×2 = 15000 - 530 = 14.470
-  assert.equal(el.lrItemLaba.textContent, RP.format(14470));
-  const html = el.lrItemTableBody.innerHTML;
-  assert.ok(html.includes("Rugi"), "teping rugi di POS");
-  assert.ok(html.includes("Untung"), "bakso untung di POS");
+  // TanpaHarga (id 4) tidak punya harga channel → dilewati, tidak ikut analisis.
+  assert.equal(built.rows.length, 3);
+  assert.equal(built.skippedNoPrice, 1);
+
+  const bakso = built.rows.find(r => r.p.id === 1);
+  const tepung = built.rows.find(r => r.p.id === 2);
+  const tanpaCost = built.rows.find(r => r.p.id === 3);
+
+  // Bakso: jual 50000, potongan 9500 (SEKALI), bersih 40500, laba 5500.
+  assert.equal(bakso.jual, 50000);
+  assert.equal(bakso.potongan, 9500);
+  assert.equal(bakso.bersih, 40500);
+  assert.equal(bakso.labaUnit, 5500);
+  // Margin = laba/unit ÷ harga jual × 100 = 5500/50000 = 11%.
+  assert.equal(bakso.marginPct, 11);
+  // Harga min = ceil(35000 / 0.81) = 43210.
+  assert.equal(bakso.hargaMin, 43210);
+
+  // Tepung: 8000 − 1520 = 6480; 6480 − 8265 = −1785 (rugi).
+  assert.equal(tepung.potongan, 1520);
+  assert.equal(tepung.labaUnit, -1785);
+  assert.ok(tepung.marginPct < 0);
+  assert.equal(tepung.hargaMin, 10204);
+
+  // Cost null/0 → tidak dihitung untung/rugi.
+  assert.equal(tanpaCost.hasHpp, false);
+  assert.equal(tanpaCost.labaUnit, null);
+  assert.equal(tanpaCost.marginPct, null);
+  assert.equal(tanpaCost.hargaMin, null);
 });
 
-test("renderLabaRugiItems Shopee 2 19%: harga channel sendiri, tidak memakai harga Shopee 1", () => {
+test("lrMarginCategoryStats: untung/impas/rugi hanya dari produk dengan harga jual DAN Cost valid", () => {
+  const sb = buildSandbox();
+  const rows = [
+    { hasHpp: true, labaUnit: 5500 },   // untung
+    { hasHpp: true, labaUnit: -1785 },  // rugi
+    { hasHpp: true, labaUnit: 0 },      // impas
+    { hasHpp: false, labaUnit: null },  // cost belum tersedia → tidak ikut kategori
+  ];
+  const stats = sb.lrMarginCategoryStats(rows);
+  assert.equal(stats.dianalisis, 4);
+  assert.equal(stats.untung, 1);
+  assert.equal(stats.impas, 1);
+  assert.equal(stats.rugi, 1);
+  assert.equal(stats.noHpp, 1);
+});
+
+test("renderLabaRugiItems Shopee 1: analisis katalog tetap jalan tanpa transaksi (disconnect/tidak ada order)", () => {
+  const sb = buildSandbox();
+  sb.products = [
+    { id: 1, name: "Bakso", sku: "BK", modal: 35000 },
+    { id: 2, name: "Tepung", sku: "TP", modal: 8265 },
+    { id: 3, name: "TanpaCost", sku: null, modal: 0 },
+    { id: 4, name: "TanpaHarga", sku: null, modal: 10000 },
+  ];
+  sb.productPrices = {
+    "1": { pos: 50000, "shopee:724153261": 50000, "shopee:1214362884": 48000 },
+    "2": { pos: 8000, "shopee:724153261": 8000, "shopee:1214362884": 8000 },
+    "3": { pos: 30000, "shopee:724153261": 30000, "shopee:1214362884": 30000 },
+  };
+  sb.labaRugiChannel = "shopee:724153261";
+  sb.platformCuts["shopee:724153261"] = 19;
+  // TIDAK ada orders/order_items sama sekali — analisis harus tetap penuh.
+
+  sb.renderLabaRugiItems();
+
+  const el = sb.getElements();
+  // Kategori dari katalog: 3 dianalisis, 1 untung, 0 impas, 1 rugi, 1 tanpa cost.
+  assert.equal(el.lrItemDianalisis.textContent, "3");
+  assert.equal(el.lrItemUntung.textContent, "1");
+  assert.equal(el.lrItemImpas.textContent, "0");
+  assert.equal(el.lrItemRugi.textContent, "1");
+  assert.equal(el.lrItemNoHpp.textContent, "1");
+
+  const html = el.lrItemTableBody.innerHTML;
+  assert.ok(html.includes("Bakso"), "produk katalog tampil");
+  assert.ok(html.includes("Untung"), "status untung tampil");
+  assert.ok(html.includes("Rugi"), "status rugi tampil");
+  assert.ok(html.includes("Cost belum tersedia"), "produk tanpa cost ditandai");
+  assert.ok(html.includes("43.210"), "harga min bakso = ceil(35000/0.81)");
+  assert.ok(!html.includes("TanpaHarga"), "produk tanpa harga channel tidak ikut");
+
+  // Kartu sorotan dari katalog.
+  assert.ok(el.lrBestProduct.innerHTML.includes("Bakso"), "paling untung = Bakso");
+  assert.ok(el.lrThinnestMargin.innerHTML.includes("Bakso"), "satu-satunya margin positif = Bakso");
+  assert.ok(el.lrLossProducts.innerHTML.includes("1 produk rugi"), "jumlah produk rugi dihitung");
+  assert.ok(el.lrLossProducts.innerHTML.includes("Tepung"), "produk rugi terdaftar");
+});
+
+test("renderLabaRugiItems POS 0%: impas terpisah dari untung/rugi; margin tipis = margin positif terendah", () => {
+  const sb = buildSandbox();
+  sb.products = [
+    { id: 1, name: "Impas", sku: null, modal: 50000 },
+    { id: 2, name: "Untung", sku: null, modal: 40000 },
+    { id: 3, name: "Rugi", sku: null, modal: 8265 },
+  ];
+  sb.productPrices = {
+    "1": { pos: 50000 },
+    "2": { pos: 50000 },
+    "3": { pos: 8000 },
+  };
+  sb.labaRugiChannel = "pos";
+  sb.platformCuts.pos = 0;
+
+  sb.renderLabaRugiItems();
+
+  const el = sb.getElements();
+  assert.equal(el.lrItemDianalisis.textContent, "3");
+  assert.equal(el.lrItemUntung.textContent, "1");
+  assert.equal(el.lrItemImpas.textContent, "1");
+  assert.equal(el.lrItemRugi.textContent, "1");
+  assert.equal(el.lrItemNoHpp.textContent, "0");
+
+  const html = el.lrItemTableBody.innerHTML;
+  assert.ok(html.includes("Impas"), "status impas tampil (laba/unit tepat 0)");
+  // Potongan 0%: potongan tidak dihitung dua kali, harga min = cost (50000).
+  assert.ok(html.includes("50.000"), "harga min impas = cost");
+
+  // Margin tipis: hanya margin POSITIF terendah (produk Impas margin 0% dikecualikan).
+  assert.ok(el.lrThinnestMargin.innerHTML.includes("Untung"), "margin tipis bukan produk impas");
+  assert.ok(el.lrLossProducts.innerHTML.includes("Rugi"), "produk rugi terdaftar");
+});
+
+test("renderLabaRugiItems Shopee 2 19%: memakai harga channel sendiri, bukan harga Shopee 1", () => {
   const sb = buildSandbox();
   sb.products = [{ id: 1, name: "Bakso", sku: "BK", modal: 35000 }];
   sb.productPrices = {
     "1": { pos: 50000, "shopee:724153261": 50000, "shopee:1214362884": 48000 },
   };
   sb.labaRugiChannel = "shopee:1214362884";
-  sb.labaRugiPeriod = "semua";
   sb.platformCuts["shopee:1214362884"] = 19;
 
-  const ords = [
-    { orderId: "S1", date: "2026-11-27 10:00", channel: "Shopee", shop_id: "1214362884", payStatus: "Lunas", wmsStatus: "Selesai" },
-  ];
-  const items = [{ orderid: "S1", product_id: 1, qty: 2 }];
-  sb.renderLabaRugiItems(ords, items);
+  sb.renderLabaRugiItems();
 
   const el = sb.getElements();
-  // Potongan = 48000×19% = 9120; bersih 38880; laba/unit 3880; total 7760.
-  assert.equal(el.lrItemOmzet.textContent, RP.format(96000));
-  assert.equal(el.lrItemPotongan.textContent, RP.format(18240));
-  assert.equal(el.lrItemBersih.textContent, RP.format(77760));
-  assert.equal(el.lrItemLaba.textContent, RP.format(7760));
+  const html = el.lrItemTableBody.innerHTML;
+  // Potongan = 48000×19% = 9120; bersih 38880; laba/unit 3880.
+  assert.ok(html.includes("9.120"), "potongan memakai harga Shopee 2 (48000×19%)");
+  assert.ok(html.includes("3.880"), "laba/unit = 3880");
+  assert.ok(html.includes("43.210"), "harga min = ceil(35000/0.81)");
+});
+
+// ---------- LABA RUGI AKTUAL (transaksi) ----------
+
+test("renderLabaRugi aktual: tanpa transaksi → Rp 0 + pesan analisis margin tetap tersedia", async () => {
+  const sb = buildSandbox();
+  sb.platformCutsFetched = true;
+  sb.labaRugiFetched = true;
+  sb.products = [];
+  sb.ordersData = [];
+  sb.orderItemsData = [];
+
+  await sb.renderLabaRugi();
+
+  const el = sb.getElements();
+  assert.equal(el.lrOmzet.textContent, RP.format(0));
+  assert.equal(el.lrHpp.textContent, RP.format(0));
+  assert.equal(el.lrLaba.textContent, RP.format(0));
+  assert.equal(el.lrMargin.textContent, "0.0%");
+  assert.ok(el.lrTableBody.innerHTML.includes("Belum ada transaksi"), "tabel aktual menyatakan belum ada transaksi");
+  assert.equal(el.lrEmptyActual.style.display, "", "pesan belum ada transaksi TAMPAK");
+  // Pesan statis div #lrEmptyActual ada di HTML sumber.
+  assert.ok(
+    HTML.includes("Belum ada transaksi pada periode ini. Analisis margin produk tetap tersedia berdasarkan harga jual dan Cost."),
+    "pesan HTML menyebut analisis margin tetap tersedia"
+  );
+});
+
+test("renderLabaRugi aktual: dengan transaksi → angka terisi dan pesan kosong disembunyikan", async () => {
+  const sb = buildSandbox();
+  sb.platformCutsFetched = true;
+  sb.labaRugiFetched = true;
+  sb.products = [{ id: 1, name: "Bakso", modal: 30000 }];
+  sb.ordersData = [
+    { orderId: "A1", date: "2026-11-27 10:00", channel: "POS1", total: 100000, payStatus: "Lunas", wmsStatus: "Selesai" },
+  ];
+  sb.orderItemsData = [{ orderid: "A1", product_id: 1, qty: 1 }];
+
+  await sb.renderLabaRugi();
+
+  const el = sb.getElements();
+  assert.equal(el.lrOmzet.textContent, RP.format(100000));
+  assert.equal(el.lrHpp.textContent, RP.format(30000));
+  assert.equal(el.lrLaba.textContent, RP.format(70000));
+  assert.equal(el.lrMargin.textContent, "70.0%");
+  assert.equal(el.lrEmptyActual.style.display, "none", "pesan kosong disembunyikan");
+  assert.ok(el.lrTableBody.innerHTML.includes("POS"), "baris channel POS tampil");
 });
 
 // ---------- FETCH PERTAMA ----------

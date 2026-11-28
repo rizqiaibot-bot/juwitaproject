@@ -1,12 +1,31 @@
 # PROJECT STATE — Juwita
 
-Terakhir diperbarui: **28 November 2026** (fitur Laba Rugi per item di Pricing — **SUDAH deploy & migration 012 dijalankan di production**).
+Terakhir diperbarui: **28 November 2026** (sesi 2: penyempurnaan Laba Rugi — pemisahan Analisis Margin vs Laba Rugi Aktual; **BELUM commit/push/deploy**).
 
 Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat sesi baru.
 
 ---
 
-## 0. PENGINGAT SESI TERAKHIR (28 Nov 2026)
+## 0. PENGINGAT SESI TERAKHIR (28 Nov 2026, sesi 2 — belum commit/deploy)
+
+**Penyempurnaan fitur Laba Rugi: pemisahan ANALISIS MARGIN (katalog) vs LABA RUGI AKTUAL (transaksi). Status: selesai dikerjakan lokal, 103 test lulus, BELUM commit/push/deploy (sesuai instruksi user: jangan commit/push/deploy/restart/migration).**
+
+- Hanya 2 file berubah: `index.html` + `juwita-api/test/labarugi.test.mjs`. Draft JFFBOT (`src/shopee.js`, `migrations/011_...`) tetap TIDAK disentuh.
+- Tab Laba Rugi sekarang dua bagian jelas:
+  1. **LABA RUGI AKTUAL** (keterangan: hasil penjualan aktual berdasarkan transaksi periode terpilih): tab periode, statistik Omzet/Cost/Laba Kotor/Margin, tabel per channel. Bila tidak ada transaksi → semua Rp 0 + pesan `lrEmptyActual`: "Belum ada transaksi pada periode ini. Analisis margin produk tetap tersedia berdasarkan harga jual dan Cost."
+  2. **ANALISIS MARGIN PER ITEM** (keterangan: simulasi potensi keuntungan dari harga jual, potongan platform, Cost; tanpa transaksi/koneksi Shopee): tab channel POS/Shopee 1/Shopee 2, statistik katalog (Produk Dianalisis, Untung, Impas, Rugi, Cost Belum Tersedia), 3 kartu sorotan, tabel per item TANPA kolom Qty/Laba Total.
+- Analisis margin dihitung dari **seluruh katalog** (products + product_prices + products.modal + platform_cuts) — TIDAK memakai order/order_items sama sekali, jadi tetap jalan saat Shopee disconnect & sebelum ada transaksi.
+- Rumus: Potongan/unit = jual × cut% (SEKALI); Bersih = jual − potongan; Laba/unit = bersih − Cost; **Margin% = laba/unit ÷ harga jual × 100** (selaras tab Margin yang sudah ada); Harga min = ceil(Cost ÷ (1 − cut%)).
+- Kategori kartu sorotan dari katalog channel aktif: Paling Menguntungkan = laba/unit positif tertinggi; Margin Tipis = margin positif terendah (impas/rugi dikecualikan); Produk Rugi = laba/unit < 0 (hanya produk dengan harga jual DAN Cost valid; kartu menampilkan jumlah).
+- Produk tanpa harga channel (null/0) dilewati; Cost null/0 → "Cost belum tersedia", tidak masuk untung/impas/rugi; Impas = laba/unit tepat 0.
+- Helper baru di index.html: `buildLabaRugiMarginRows(channel)`, `lrMarginCategoryStats(rows)`; `renderLabaRugiItems()` kini tanpa argumen transaksi.
+- Test: `node --test test/permissions.test.mjs test/routes.test.mjs test/shopee-reconcile.test.mjs test/labarugi.test.mjs` → **103 lulus**. Sintaks JS index.html OK.
+- Belum ada perubahan server/DB. Tidak menyentuh koneksi Shopee, stok, harga, order.
+- Menunggu instruksi user (review → commit/deploy bila disetujui). Screenshot tab Laba Rugi perlu dicek user di browser (perlu login).
+
+---
+
+## 0a. PENGINGAT SESI SEBELUMNYA (28 Nov 2026, sesi 1)
 
 **Fitur "Laba Rugi per Item" di menu Pricing (SELESAI — sudah deploy + migration):**
 
