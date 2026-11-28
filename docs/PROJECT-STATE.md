@@ -1,20 +1,25 @@
 # PROJECT STATE — Juwita
 
-Terakhir diperbarui: **27 November 2026** (fitur Laba Rugi per item di Pricing — selesai, commit lokal; BELUM push/deploy, migration BELUM dijalankan).
+Terakhir diperbarui: **28 November 2026** (fitur Laba Rugi per item di Pricing — **SUDAH deploy & migration 012 dijalankan di production**).
 
 Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat sesi baru.
 
 ---
 
-## 0. PENGINGAT SESI TERAKHIR (27 Nov 2026)
+## 0. PENGINGAT SESI TERAKHIR (28 Nov 2026)
 
-**Fitur "Laba Rugi per Item" di menu Pricing (selesai & commit lokal; BELUM push/deploy, migration BELUM dijalankan):**
+**Fitur "Laba Rugi per Item" di menu Pricing (SELESAI — sudah deploy + migration):**
+
+- Deploy 28 Nov 2026: push `6a91074` ke main → GitHub Actions rsync + restart `juwita-api.service` (aktif, health OK).
+- Migration `012_platform_cuts.sql` sudah dijalankan di VPS (28 Nov 2026, idempotent): tabel `platform_cuts` ada, seed `pos` 0% / Shopee 1 19% / Shopee 2 19% terverifikasi di DB.
+- Route terverifikasi live: `GET /api/platform-cuts` → 401 tanpa login (bukan 404).
+- Sisa pengujian: user cek langsung di browser (menu Pricing → tab Laba Rugi) — simpan % potongan dan analisis per item.
 
 - Permintaan user: tab Laba Rugi Pricing menampilkan laba/rugi per produk per channel setelah potongan platform (POS 0%, Shopee 1 19%, Shopee 2 19%). Istilah tampilan: **"Cost"** (= `products.modal`), bukan "HPP".
 - File fitur:
   - `M index.html` — panel tab Laba Rugi: kartu pengaturan **Potongan Platform per Channel** (input %, simpan = `PUT /api/platform-cuts`), sub-tab channel POS/Shopee 1/Shopee 2, statistik (omzet/potongan/bersih/Cost/laba), kartu sorotan (paling untung, margin tipis, produk rugi), tabel per item (Produk, Qty, Harga Jual, Potongan, Cost, Laba/Unit, Margin, Harga Min, Laba Total, Status Untung/Impas/Rugi/Cost belum tersedia), info harga min.
   - `M juwita-api/src/server.js` — `GET /api/platform-cuts` (baca: owner/pos/pricing; fallback default per channel bila tabel/baris belum ada) + `PUT /api/platform-cuts` (tulis: menu pricing; validasi 0–100; 503 `platform_cuts_table_missing` bila migration belum jalan).
-  - `A juwita-api/migrations/012_platform_cuts.sql` — tabel `platform_cuts` (channel PK, percent NUMERIC(5,2), CHECK 0–100) + GRANT juwita_app + seed idempotent (0/19/19). **BELUM dijalankan di production.**
+  - `A juwita-api/migrations/012_platform_cuts.sql` — tabel `platform_cuts` (channel PK, percent NUMERIC(5,2), CHECK 0–100) + GRANT juwita_app + seed idempotent (0/19/19). **Sudah dijalankan di production (28 Nov 2026).**
   - `A juwita-api/migrations/012_platform_cuts_rollback.sql` — rollback manual (DROP TABLE IF EXISTS), tidak otomatis.
   - `M juwita-api/test/routes.test.mjs` — 5 test platform-cuts (default, parsial, izin baca/tulis, validasi).
   - `A juwita-api/test/labarugi.test.mjs` — 10 test logika frontend (ekstrak fungsi dari index.html via vm).
@@ -26,8 +31,8 @@ Baca file ini dulu sebelum mengerjakan apa pun supaya konteks tidak hilang saat 
   - Fetch pertama tab Laba Rugi menyimpan hasil ke `ordersData`/`orderItemsData` dan hanya mengambil yang belum termuat (tidak menunggu polling).
   - Rumus: Potongan/unit = harga jual channel × cut% (SEKALI); Bersih = jual − potongan; Laba/unit = bersih − modal (modal null/0 → "Cost belum tersedia", tidak dihitung untung/rugi); Laba total = laba/unit × qty; Harga Min = ceil(modal ÷ (1 − cut%)).
 - Test lokal: `node --test test/permissions.test.mjs test/routes.test.mjs test/shopee-reconcile.test.mjs test/labarugi.test.mjs` → **99 lulus**; sintaks JS index.html OK.
-- **Tidak ada perubahan DB production.** Migration 012 dijalankan manual saat deploy (minta instruksi user); rollback hanya bila fitur dibatalkan.
-- Sudah commit lokal; BELUM push/deploy (sesuai aturan). Ringkasan omzet transaksi lama di tab Laba Rugi TETAP ada di atas analisis per item (ikut aturan channel/Batal/WIB yang sama).
+- **Tidak ada perubahan DB production sebelumnya; migration 012 dijalankan manual saat deploy (28 Nov 2026).** Rollback hanya bila fitur dibatalkan.
+- **Sudah deploy 28 Nov 2026** (push `6a91074`). Ringkasan omzet transaksi lama di tab Laba Rugi TETAP ada di atas analisis per item (ikut aturan channel/Batal/WIB yang sama).
 - **TIDAK termasuk fitur ini** (tidak ikut commit): `juwita-api/src/shopee.js` (draft JFFBOT) & `juwita-api/migrations/011_shopee_order_income.sql` (draft JFFBOT).
 
 ---
@@ -261,6 +266,7 @@ $s | ssh -i "$env:USERPROFILE\.ssh\juwita_vps" -o BatchMode=yes juwita@juwita.bi
 
 ## 4. Commit terakhir
 
+- `6a91074` — feat(pricing): add per-item profit and loss analysis
 - `90a3db7` — feat(akuntansi): hapus dropdown Dashboard Akuntansi - menu Akuntansi langsung buka halaman akuntansi
 - `56261d8` — feat(hr): hapus menu Karyawan dari HR - HR langsung ke Rekap Kehadiran
 - `36333ac` — feat(gudang): menu gudang general untuk semua karyawan + push pengiriman ke Shopee saat Kirim
